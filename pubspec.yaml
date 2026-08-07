@@ -1,7 +1,7 @@
 name: mcp_hub
 description: Local MCP hub — manage MCP repos, toggle servers, configure Cursor and Codex.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.0+0
 
 environment:
   sdk: ^3.12.0
