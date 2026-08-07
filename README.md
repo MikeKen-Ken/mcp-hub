@@ -16,7 +16,8 @@
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
 - **WebDAV 同步**：跨电脑同步 MCP 清单（坚果云等）；账号密码仅存本机
-- **Skill 同步**：分别同步 Cursor / Codex 的 Skill 文件夹（WebDAV 拉取后复制到本机目录）
+- **Agent 配置同步**：通过 WebDAV 同步 Skill、Command 和 Rule 文件夹
+- **分层管理界面**：首页只展示功能入口；本地 MCP 收纳在「客户端 MCP」二级菜单中
 
 内置端点默认：`http://127.0.0.1:18766/mcp`（需桌面端运行；Web 预览无法真正起服务）
 
@@ -25,7 +26,7 @@
 1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
-4. 在首页分别「同步 Cursor / Codex Skill」（从 WebDAV 文件夹部署到本机）
+4. 在「Agent 配置同步」中按类型同步本机配置
 
 同步：仓库 URL、command/args 等。  
 不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
@@ -41,6 +42,16 @@
 | 部署 Codex | `~/.codex/skills/` |
 
 每个 Skill 是一个含 `SKILL.md` 的子文件夹。同步为合并复制（覆盖同名，不删除目标多余项；跳过 `.` 开头目录）。
+
+### Command / Rule 目录约定
+
+| 类型 | WebDAV | 本机部署 |
+|------|--------|----------|
+| Cursor Command | `{remotePath}/commands/cursor/` | `~/.cursor/commands/` |
+| Cursor Rule | `{remotePath}/rules/cursor/` | `~/.cursor/rules/` |
+| Codex Rule | `{remotePath}/rules/codex/` | `~/.codex/rules/` |
+
+Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 目录对等的入口，因此界面中不提供 Codex Command 同步。
 
 ## 发布 / 更新
 
@@ -68,7 +79,8 @@ flutter test
 |------|------|
 | `~/.mcp-hub/catalog.json` | MCP 清单（开关、transport、command/url） |
 | `~/.mcp-hub/servers/` | 各 MCP 仓库 checkout |
-| `~/.mcp-hub/skills/` | Skill WebDAV 本地缓存（再部署到 Cursor/Codex） |
+| `~/.mcp-hub/skills/` | Skill WebDAV 本地缓存（兼容已有目录） |
+| `~/.mcp-hub/agent-resources/` | Command / Rule WebDAV 本地缓存 |
 
 仓库内的 `servers/` 目录预留给「开发时作为 git submodule 镜像」；运行时默认写用户目录，避免打包后的安装目录不可写。
 
@@ -76,4 +88,4 @@ flutter test
 
 - 从 Hub 仓库 `.gitmodules` 批量同步
 - 健康检查 / 日志面板
-- Skill 自动拉取（跟随 WebDAV poll）
+- Agent 配置自动拉取（跟随 WebDAV poll）

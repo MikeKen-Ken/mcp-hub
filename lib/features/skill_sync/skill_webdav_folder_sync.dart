@@ -25,9 +25,18 @@ class SkillWebDavFolderSync {
 
   /// `{remotePath}/skills/{cursor|codex}`
   String remoteSkillsDir(WebDavConfig config, String targetWireName) {
+    return remoteResourceDir(config, 'skills', targetWireName);
+  }
+
+  /// `{remotePath}/{skills|commands|rules}/{cursor|codex}`
+  String remoteResourceDir(
+    WebDavConfig config,
+    String resourceWireName,
+    String targetWireName,
+  ) {
     final base = config.remotePath.trim().replaceAll(RegExp(r'/+$'), '');
     final root = base.isEmpty ? '/McpHub' : base;
-    return '$root/skills/$targetWireName';
+    return '$root/$resourceWireName/$targetWireName';
   }
 
   /// 将远端目录镜像到本地（先清空本地目录再下载）。
