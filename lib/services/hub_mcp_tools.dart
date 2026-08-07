@@ -1,6 +1,7 @@
 import 'package:mcp_dart/mcp_dart.dart';
 
 import '../controllers/hub_controller.dart';
+import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
 import 'hub_mcp_constants.dart';
 import 'hub_mcp_results.dart';
@@ -271,6 +272,84 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           'status': hub.webDavSync.status.name,
           'message': hub.lastMessage,
           'lastError': hub.webDavSync.lastError,
+        });
+      } catch (error) {
+        return mcpErrorResult('$error');
+      }
+    },
+  );
+
+  server.registerTool(
+    'sync_skills',
+    description:
+        '从 WebDAV 拉取 Skill 文件夹并复制到 Cursor/Codex 目录；'
+        'direction=push 则上传本机 Skill 到 WebDAV',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'target': JsonSchema.string(
+          description: 'all | cursor | codex，默认 all',
+        ),
+        'direction': JsonSchema.string(
+          description: 'pull（默认）或 push',
+        ),
+      },
+    ),
+    annotations: const ToolAnnotations(
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    ),
+    callback: (args, extra) async {
+      final targetRaw =
+          mcpTrimmedString(args['target'])?.toLowerCase() ?? 'all';
+      final direction =
+          mcpTrimmedString(args['direction'])?.toLowerCase() ?? 'pull';
+      final isPush = direction == 'push';
+
+      Future<SkillSyncResult> runOne(SkillTarget target) {
+        return isPush
+            ? hub.pushSkillsToWebDav(target)
+            : hub.syncSkillsFromWebDav(target);
+      }
+
+      try {
+        if (targetRaw == 'cursor') {
+          final r = await runOne(SkillTarget.cursor);
+          return mcpJsonResult({
+            'ok': r.ok,
+            'message': r.message,
+            'pulledFiles': r.pulledFiles,
+            'pushedFiles': r.pushedFiles,
+            'deployedFiles': r.deployedFiles,
+            'packageCount': r.packageCount,
+          });
+        }
+        if (targetRaw == 'codex') {
+          final r = await runOne(SkillTarget.codex);
+          return mcpJsonResult({
+            'ok': r.ok,
+            'message': r.message,
+            'pulledFiles': r.pulledFiles,
+            'pushedFiles': r.pushedFiles,
+            'deployedFiles': r.deployedFiles,
+            'packageCount': r.packageCount,
+          });
+        }
+        if (isPush) {
+          final cursor = await runOne(SkillTarget.cursor);
+          final codex = await runOne(SkillTarget.codex);
+          return mcpJsonResult({
+            'ok': cursor.ok && codex.ok,
+            'message': '${cursor.message}；${codex.message}',
+          });
+        }
+        final r = await hub.syncAllSkillsFromWebDav();
+        return mcpJsonResult({
+          'ok': r.ok,
+          'message': r.message,
+          'pulledFiles': r.pulledFiles,
+          'deployedFiles': r.deployedFiles,
+          'packageCount': r.packageCount,
         });
       } catch (error) {
         return mcpErrorResult('$error');

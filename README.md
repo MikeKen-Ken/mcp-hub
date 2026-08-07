@@ -16,6 +16,7 @@
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
 - **WebDAV 同步**：跨电脑同步 MCP 清单（坚果云等）；账号密码仅存本机
+- **Skill 同步**：分别同步 Cursor / Codex 的 Skill 文件夹（WebDAV 拉取后复制到本机目录）
 
 内置端点默认：`http://127.0.0.1:18766/mcp`（需桌面端运行；Web 预览无法真正起服务）
 
@@ -24,9 +25,22 @@
 1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
+4. 在首页分别「同步 Cursor / Codex Skill」（从 WebDAV 文件夹部署到本机）
 
 同步：仓库 URL、command/args 等。  
 不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
+
+### Skill 目录约定
+
+| 角色 | 路径 |
+|------|------|
+| WebDAV Cursor | `{remotePath}/skills/cursor/` |
+| WebDAV Codex | `{remotePath}/skills/codex/` |
+| 本机缓存 | `~/.mcp-hub/skills/{cursor\|codex}/` |
+| 部署 Cursor | `~/.cursor/skills/` |
+| 部署 Codex | `~/.codex/skills/` |
+
+每个 Skill 是一个含 `SKILL.md` 的子文件夹。同步为合并复制（覆盖同名，不删除目标多余项；跳过 `.` 开头目录）。
 
 ## 发布 / 更新
 
@@ -54,12 +68,12 @@ flutter test
 |------|------|
 | `~/.mcp-hub/catalog.json` | MCP 清单（开关、transport、command/url） |
 | `~/.mcp-hub/servers/` | 各 MCP 仓库 checkout |
+| `~/.mcp-hub/skills/` | Skill WebDAV 本地缓存（再部署到 Cursor/Codex） |
 
 仓库内的 `servers/` 目录预留给「开发时作为 git submodule 镜像」；运行时默认写用户目录，避免打包后的安装目录不可写。
 
 ## 后续
 
-- Skill 等其它 Agent 配置的统一管理
 - 从 Hub 仓库 `.gitmodules` 批量同步
 - 健康检查 / 日志面板
-- 多机清单同步
+- Skill 自动拉取（跟随 WebDAV poll）

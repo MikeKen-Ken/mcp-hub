@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
+import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
@@ -121,6 +122,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _ClientConfigCard(hub: hub),
                 const SizedBox(height: 12),
+                _SkillSyncCard(hub: hub),
+                const SizedBox(height: 12),
                 _WebDavStatusCard(hub: hub),
                 const SizedBox(height: 16),
                 Text(
@@ -211,6 +214,133 @@ class _WebDavStatusCard extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _SkillSyncCard extends StatelessWidget {
+  const _SkillSyncCard({required this.hub});
+
+  final HubController hub;
+
+  Future<void> _run(
+    BuildContext context,
+    Future<SkillSyncResult> Function() action,
+  ) async {
+    final result = await action();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final supported = hub.isDesktopSupported;
+    final webDavReady =
+        hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
+    final busy = hub.skillSync.status == SkillSyncStatus.syncing;
+    final statusText = switch (hub.skillSync.status) {
+      SkillSyncStatus.idle => '空闲',
+      SkillSyncStatus.syncing => '同步中…',
+      SkillSyncStatus.success => '成功',
+      SkillSyncStatus.error => '失败',
+    };
+    final when = hub.skillSync.lastSyncedAt == null
+        ? '尚未同步'
+        : '上次：${hub.skillSync.lastSyncedAt!.toLocal()}';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: const Text('Skill 同步'),
+              subtitle: Text(
+                supported
+                    ? (webDavReady
+                        ? '$statusText · $when\n'
+                            '从 WebDAV 拉取文件夹后复制到 Cursor / Codex'
+                        : '需先启用 WebDAV；远端目录为 '
+                            '{remote}/skills/cursor 与 .../codex')
+                    : '当前平台不支持 Skill 目录同步',
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              () => hub.syncSkillsFromWebDav(
+                                SkillTarget.cursor,
+                              ),
+                            ),
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    label: const Text('同步 Cursor'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              () => hub.syncSkillsFromWebDav(
+                                SkillTarget.codex,
+                              ),
+                            ),
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    label: const Text('同步 Codex'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              () => hub.pushSkillsToWebDav(SkillTarget.cursor),
+                            ),
+                    child: const Text('上传 Cursor'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              () => hub.pushSkillsToWebDav(SkillTarget.codex),
+                            ),
+                    child: const Text('上传 Codex'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              'Cursor: ${McpPaths.cursorSkillsPath}\n'
+              'Codex: ${McpPaths.codexSkillsPath}\n'
+              '缓存: ${McpPaths.skillsCacheRoot}',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ],
+        ),
       ),
     );
   }

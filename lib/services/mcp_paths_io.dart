@@ -27,6 +27,20 @@ abstract final class McpPaths {
 
   static String get syncBasePath => p.join(hubDataRoot, 'sync_base.json');
 
+  /// WebDAV 拉取后的 Skill 本地缓存根目录。
+  static String get skillsCacheRoot => p.join(hubDataRoot, 'skills');
+
+  static String get cursorSkillsCachePath => p.join(skillsCacheRoot, 'cursor');
+
+  static String get codexSkillsCachePath => p.join(skillsCacheRoot, 'codex');
+
+  /// Cursor 个人 Skill 目录（勿写入 skills-cursor，那是内置目录）。
+  static String get cursorSkillsPath =>
+      p.join(_userProfile, '.cursor', 'skills');
+
+  /// Codex Skill 目录。
+  static String get codexSkillsPath => p.join(_userProfile, '.codex', 'skills');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../app_brand.dart';
+import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
 import '../services/hub_mcp_constants.dart';
@@ -39,6 +40,10 @@ class HubController extends ChangeNotifier {
       applyDocument: _applySyncDocument,
     );
     webDavSync.addListener(_onWebDavChanged);
+    skillSync = SkillSyncService(
+      loadConfig: () async => webDavConfig,
+    );
+    skillSync.addListener(_onSkillSyncChanged);
   }
 
   final McpCatalogStore _catalogStore;
@@ -49,6 +54,7 @@ class HubController extends ChangeNotifier {
 
   late final HubMcpHost hubMcpHost;
   late final WebDavSyncService webDavSync;
+  late final SkillSyncService skillSync;
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
@@ -74,6 +80,8 @@ class HubController extends ChangeNotifier {
   }
 
   void _onWebDavChanged() => notifyListeners();
+
+  void _onSkillSyncChanged() => notifyListeners();
 
   Future<void> load() async {
     _loading = true;
@@ -428,6 +436,35 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<SkillSyncResult> syncSkillsFromWebDav(SkillTarget target) async {
+    final result = await skillSync.syncFromWebDav(target);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> pushSkillsToWebDav(SkillTarget target) async {
+    final result = await skillSync.pushToWebDav(target);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> syncAllSkillsFromWebDav() async {
+    final cursor = await skillSync.syncFromWebDav(SkillTarget.cursor);
+    final codex = await skillSync.syncFromWebDav(SkillTarget.codex);
+    final message = '${cursor.message}；${codex.message}';
+    _lastMessage = message;
+    notifyListeners();
+    return SkillSyncResult(
+      ok: cursor.ok && codex.ok,
+      message: message,
+      pulledFiles: cursor.pulledFiles + codex.pulledFiles,
+      deployedFiles: cursor.deployedFiles + codex.deployedFiles,
+      packageCount: cursor.packageCount + codex.packageCount,
+    );
+  }
+
   Future<void> _persist({bool scheduleRemote = true}) async {
     await _catalogStore.save(_servers);
     if (scheduleRemote) webDavSync.schedulePush();
@@ -443,8 +480,10 @@ class HubController extends ChangeNotifier {
   void dispose() {
     hubMcpHost.removeListener(_onHostChanged);
     webDavSync.removeListener(_onWebDavChanged);
+    skillSync.removeListener(_onSkillSyncChanged);
     hubMcpHost.dispose();
     webDavSync.dispose();
+    skillSync.dispose();
     _processManager.stopAll();
     super.dispose();
   }
