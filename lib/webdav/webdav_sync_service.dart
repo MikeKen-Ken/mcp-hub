@@ -62,7 +62,7 @@ class WebDavSyncService extends ChangeNotifier {
 
   String _catalogPath(WebDavConfig config) {
     final base = config.remotePath.trim().replaceAll(RegExp(r'/+$'), '');
-    final root = base.isEmpty ? '/McpHub' : base;
+    final root = base.isEmpty ? WebDavConfig.defaultRemotePath : base;
     return '$root/catalog.json';
   }
 

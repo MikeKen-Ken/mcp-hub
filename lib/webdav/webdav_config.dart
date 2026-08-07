@@ -10,6 +10,7 @@ class WebDavConfig {
   static const minPushDebounceSeconds = 5;
   static const maxPushDebounceSeconds = 60;
   static const defaultPushDebounceSeconds = 15;
+  static const defaultRemotePath = '/AgentHub';
 
   const WebDavConfig({
     required this.enabled,
@@ -94,7 +95,7 @@ class WebDavConfig {
       serverUrl: json['serverUrl'] as String? ?? '',
       username: json['username'] as String? ?? '',
       password: json['password'] as String? ?? '',
-      remotePath: json['remotePath'] as String? ?? '/McpHub',
+      remotePath: json['remotePath'] as String? ?? defaultRemotePath,
       autoSync: json['autoSync'] as bool? ?? true,
       autoPull: json['autoPull'] as bool? ?? true,
       pollIntervalSeconds: clampPollIntervalSeconds(
@@ -111,7 +112,7 @@ class WebDavConfig {
     serverUrl: '',
     username: '',
     password: '',
-    remotePath: '/McpHub',
+    remotePath: defaultRemotePath,
     autoSync: true,
     autoPull: true,
     pollIntervalSeconds: defaultPollIntervalSeconds,

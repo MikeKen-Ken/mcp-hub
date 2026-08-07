@@ -61,7 +61,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
       username: _userController.text.trim(),
       password: _passController.text,
       remotePath: _pathController.text.trim().isEmpty
-          ? '/McpHub'
+          ? WebDavConfig.defaultRemotePath
           : _pathController.text.trim(),
       autoSync: _autoSync,
       autoPull: _autoPull,
@@ -178,7 +178,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                 controller: _pathController,
                 decoration: const InputDecoration(
                   labelText: '远端目录',
-                  hintText: '/McpHub',
+                  hintText: WebDavConfig.defaultRemotePath,
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -238,11 +238,12 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ],
               const SizedBox(height: 12),
               Text(
-                '同步内容：MCP 清单（仓库 URL、command/args 等）；'
+                '同步内容：MCP 清单（仓库 URL、command/args 等），'
+                '在「客户端 MCP」右上角可同步/上传；'
                 'Skill / Command / Rule 文件夹在 {远端}/{skills|commands|rules}/{客户端}/，'
                 '在「Agent 配置同步」按资源一键同步或上传。\n'
                 '不同步：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
-                '换电脑后：配置好同一 WebDAV → 拉取 MCP → 同步 Agent 配置 → 再按需 clone / 一键写入客户端。',
+                '换电脑后：配置好同一 WebDAV → 在客户端 MCP 同步清单 → 同步 Agent 配置 → 再按需 clone / 一键写入客户端。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

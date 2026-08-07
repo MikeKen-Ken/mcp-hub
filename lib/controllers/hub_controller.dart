@@ -430,12 +430,53 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get isWebDavReady =>
+      webDavConfig.enabled && webDavConfig.isConfigured;
+
+  bool get isWebDavSyncing =>
+      webDavSync.status == CatalogSyncStatus.syncing;
+
   Future<void> syncWebDavNow() async {
+    if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.syncNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? 'WebDAV 同步完成'
         : (webDavSync.lastError ?? '同步失败');
     notifyListeners();
+  }
+
+  /// 从 WebDAV 拉取并合并 MCP 清单到本机。
+  Future<void> pullWebDavNow() async {
+    if (!_ensureWebDavReadyForManualSync()) return;
+    await webDavSync.pullNow();
+    _lastMessage = webDavSync.status == CatalogSyncStatus.success
+        ? '已从 WebDAV 同步 MCP 清单'
+        : (webDavSync.lastError ?? '同步失败');
+    notifyListeners();
+  }
+
+  /// 把本机 MCP 清单上传到 WebDAV。
+  Future<void> pushWebDavNow() async {
+    if (!_ensureWebDavReadyForManualSync()) return;
+    await webDavSync.pushNow();
+    _lastMessage = webDavSync.status == CatalogSyncStatus.success
+        ? '已上传 MCP 清单到 WebDAV'
+        : (webDavSync.lastError ?? '上传失败');
+    notifyListeners();
+  }
+
+  bool _ensureWebDavReadyForManualSync() {
+    if (!isWebDavReady) {
+      _lastMessage = '请先启用并配置 WebDAV';
+      notifyListeners();
+      return false;
+    }
+    if (isWebDavSyncing) {
+      _lastMessage = '同步进行中，请稍候';
+      notifyListeners();
+      return false;
+    }
+    return true;
   }
 
   Future<SkillSyncResult> syncSkillsFromWebDav(SkillTarget target) async {

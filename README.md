@@ -23,7 +23,7 @@
 
 ### WebDAV 换机流程
 
-1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
+1. 旧电脑启用 WebDAV，远端目录例如 `/AgentHub`
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
 4. 在「Agent 配置同步」中按资源类型一键同步/上传（覆盖该资源支持的全部客户端）

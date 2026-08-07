@@ -35,7 +35,7 @@ class SkillWebDavFolderSync {
     String targetWireName,
   ) {
     final base = config.remotePath.trim().replaceAll(RegExp(r'/+$'), '');
-    final root = base.isEmpty ? '/McpHub' : base;
+    final root = base.isEmpty ? WebDavConfig.defaultRemotePath : base;
     return '$root/$resourceWireName/$targetWireName';
   }
 
