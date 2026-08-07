@@ -1,0 +1,209 @@
+name: Push Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: push-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.44.0"
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      build_number: ${{ steps.get_version.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # 每次 Push Build 发布都对应一个新版本号：
+      # - 若 pubspec 已高于最新正式 Release，沿用 pubspec（手动抬版本）
+      # - 否则在 max(pubspec, latest) 上自动 +patch，避免一直覆盖同一 tag
+      - name: Resolve next release version
+        id: get_version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          PUBSPEC_VERSION=$(sed -n 's/^version: \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' pubspec.yaml)
+          if [ -z "$PUBSPEC_VERSION" ]; then
+            echo "无法从 pubspec.yaml 解析 version" >&2
+            exit 1
+          fi
+
+          LATEST_TAG="$(
+            gh release list --repo "${{ github.repository }}" --exclude-drafts --limit 30 \
+              --json tagName,isPrerelease \
+              --jq '[.[] | select(.isPrerelease | not) | .tagName] | .[0] // empty'
+          )"
+          LATEST_VERSION="${LATEST_TAG#v}"
+
+          version_max() {
+            printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1
+          }
+
+          bump_patch() {
+            local major minor patch
+            IFS=. read -r major minor patch <<< "$1"
+            echo "${major}.${minor}.$((patch + 1))"
+          }
+
+          if [ -z "$LATEST_VERSION" ]; then
+            BASE="$PUBSPEC_VERSION"
+          else
+            BASE="$(version_max "$PUBSPEC_VERSION" "$LATEST_VERSION")"
+          fi
+
+          if [ -n "$LATEST_VERSION" ] && [ "$BASE" = "$LATEST_VERSION" ]; then
+            VERSION="$(bump_patch "$BASE")"
+            echo "pubspec=$PUBSPEC_VERSION latest=$LATEST_VERSION → 自动升 patch 为 $VERSION"
+          else
+            VERSION="$BASE"
+            echo "pubspec=$PUBSPEC_VERSION latest=${LATEST_VERSION:-无} → 使用已抬升版本 $VERSION"
+          fi
+
+          BUILD_NUMBER=${{ github.run_number }}
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "发布版本: $VERSION+$BUILD_NUMBER"
+
+  build_windows:
+    needs: version
+    runs-on: windows-2022
+
+    steps:
+      - name: Fix long file paths
+        run: git config --system core.longpaths true
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Compile for Windows
+        run: >
+          flutter build windows
+          --build-name=${{ needs.version.outputs.version }}
+          --build-number=${{ needs.version.outputs.build_number }}
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-release
+          path: build/windows/x64/runner/Release/
+          retention-days: 30
+
+  build_linux:
+    needs: version
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build libayatana-appindicator3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Compile linux
+        run: >
+          flutter build linux
+          --build-name=${{ needs.version.outputs.version }}
+          --build-number=${{ needs.version.outputs.build_number }}
+
+      - name: Create tar.gz archive
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf ../../../../../McpHub-${{ needs.version.outputs.version }}-linux-x86-64.tar.gz *
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-release
+          path: McpHub-${{ needs.version.outputs.version }}-linux-x86-64.tar.gz
+          retention-days: 30
+
+  upload_release:
+    needs: [version, build_windows, build_linux]
+    if: ${{ needs.build_windows.result == 'success' && needs.build_linux.result == 'success' }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-release
+          path: windows-release
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: linux-release
+          path: linux-release
+
+      - name: Zip Windows build for release
+        run: |
+          cd windows-release
+          zip -r ../McpHub-${{ needs.version.outputs.version }}-windows-x86-64.zip .
+
+      # 正式发布（非 draft），便于客户端软件内更新通过公开 API 发现
+      - name: Upload to GitHub Release
+        uses: ./.github/actions/publish-release-asset
+        with:
+          tag: v${{ needs.version.outputs.version }}
+          draft: "false"
+          assets: |
+            McpHub-${{ needs.version.outputs.version }}-windows-x86-64.zip#McpHub-${{ needs.version.outputs.version }}-windows-x86-64.zip
+            linux-release/McpHub-${{ needs.version.outputs.version }}-linux-x86-64.tar.gz#McpHub-${{ needs.version.outputs.version }}-linux-x86-64.tar.gz
+
+  # 发布成功后写回 pubspec，避免仓库版本长期落后于 GitHub Release
+  sync_pubspec_version:
+    needs: [version, upload_release]
+    if: ${{ needs.upload_release.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync pubspec.yaml to released version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^version: .*/version: ${VERSION}+0/" pubspec.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          if git diff --staged --quiet; then
+            echo "pubspec 已是 ${VERSION}+0，无需提交"
+            exit 0
+          fi
+          git commit -m "配置：同步发布版本为 ${VERSION} [skip ci]"
+          git push origin HEAD:main

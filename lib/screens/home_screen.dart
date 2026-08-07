@@ -1,15 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controllers/hub_controller.dart';
+import '../features/app_update/app_update_screen.dart';
 import '../models/mcp_transport.dart';
+import '../services/hub_mcp_constants.dart';
+import '../services/hub_mcp_host.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
 import '../services/mcp_process_manager.dart';
+import '../webdav/webdav_sync_service.dart';
 import 'add_server_screen.dart';
+import 'webdav_settings_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(maybePromptAppUpdate(context));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +40,64 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('MCP Hub'),
         actions: [
+          IconButton(
+            tooltip: '立即同步 WebDAV',
+            onPressed: () async {
+              await hub.syncWebDavNow();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(hub.lastMessage ?? '同步完成')),
+              );
+            },
+            icon: Icon(
+              switch (hub.webDavSync.status) {
+                CatalogSyncStatus.syncing => Icons.cloud_sync,
+                CatalogSyncStatus.error => Icons.cloud_off,
+                CatalogSyncStatus.success => Icons.cloud_done,
+                CatalogSyncStatus.idle => Icons.cloud_outlined,
+              },
+            ),
+          ),
+          IconButton(
+            tooltip: 'WebDAV 设置',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const WebDavSettingsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.settings_outlined),
+          ),
+          IconButton(
+            tooltip: '检查软件更新',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AppUpdateScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.upgrade),
+          ),
+          IconButton(
+            tooltip: '全部 git pull',
+            onPressed: () async {
+              try {
+                await hub.updateAllServers();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$error')),
+                );
+              }
+            },
+            icon: const Icon(Icons.system_update_alt),
+          ),
           IconButton(
             tooltip: '刷新客户端配置状态',
             onPressed: hub.refreshClientStatus,
@@ -41,6 +120,8 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               children: [
                 _ClientConfigCard(hub: hub),
+                const SizedBox(height: 12),
+                _WebDavStatusCard(hub: hub),
                 const SizedBox(height: 16),
                 Text(
                   '本地 MCP',
@@ -48,7 +129,8 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '开关控制是否写入 Cursor / Codex；HTTP 型可在此启停进程。',
+                  '内置 hubMCP 始终存在，可用 AI 添加仓库/开关/写配置。'
+                  '其它开关控制是否写入 Cursor / Codex。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
@@ -77,6 +159,59 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _WebDavStatusCard extends StatelessWidget {
+  const _WebDavStatusCard({required this.hub});
+
+  final HubController hub;
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = hub.webDavConfig;
+    final sync = hub.webDavSync;
+    final statusText = !cfg.enabled
+        ? '未启用'
+        : switch (sync.status) {
+            CatalogSyncStatus.idle => '空闲',
+            CatalogSyncStatus.syncing => '同步中…',
+            CatalogSyncStatus.success => '成功',
+            CatalogSyncStatus.error => '失败',
+          };
+    final when = sync.lastSyncedAt == null
+        ? '尚未同步'
+        : '上次：${sync.lastSyncedAt!.toLocal()}';
+
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.cloud_outlined),
+        title: const Text('WebDAV 配置同步'),
+        subtitle: Text(
+          cfg.enabled
+              ? '$statusText · $when'
+              : '换电脑时可同步 MCP 清单；点右侧齿轮配置',
+        ),
+        trailing: IconButton(
+          tooltip: '设置',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const WebDavSettingsScreen(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.chevron_right),
+        ),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const WebDavSettingsScreen(),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -168,15 +303,25 @@ class _ServerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final hub = context.watch<HubController>();
     final server = hub.servers.firstWhere((s) => s.id == serverId);
+    final isHub = server.builtIn || server.id == HubMcpConstants.serverKey;
     final proc = hub.processState(server.id);
     final transportLabel =
         server.transport == McpTransport.http ? 'HTTP' : 'stdio';
-    final procLabel = switch (proc.status) {
-      McpProcessStatus.stopped => '已停止',
-      McpProcessStatus.starting => '启动中',
-      McpProcessStatus.running => '运行中${proc.pid == null ? '' : ' · ${proc.pid}'}',
-      McpProcessStatus.error => '错误',
-    };
+    final hostStatus = hub.hubMcpHost.status;
+    final procLabel = isHub
+        ? switch (hostStatus) {
+            HubMcpStatus.stopped => '已停止',
+            HubMcpStatus.starting => '启动中',
+            HubMcpStatus.running => '运行中',
+            HubMcpStatus.error => '错误',
+          }
+        : switch (proc.status) {
+            McpProcessStatus.stopped => '已停止',
+            McpProcessStatus.starting => '启动中',
+            McpProcessStatus.running =>
+              '运行中${proc.pid == null ? '' : ' · ${proc.pid}'}',
+            McpProcessStatus.error => '错误',
+          };
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -185,11 +330,35 @@ class _ServerTile extends StatelessWidget {
         child: Column(
           children: [
             SwitchListTile(
-              title: Text(server.name),
-              subtitle: Text('$transportLabel · ${server.id}'),
+              title: Row(
+                children: [
+                  Expanded(child: Text(server.name)),
+                  if (isHub)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Chip(
+                        label: const Text('内置'),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        labelStyle: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                ],
+              ),
+              subtitle: Text(
+                isHub
+                    ? '$transportLabel · ${server.id} · ${hub.hubEndpointUrl}'
+                    : '$transportLabel · ${server.id}',
+              ),
               value: server.enabled,
               onChanged: (v) => hub.setEnabled(server.id, v),
             ),
+            if (server.notes != null)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.info_outline, size: 20),
+                title: Text(server.notes!),
+              ),
             if (server.repoUrl != null)
               ListTile(
                 dense: true,
@@ -204,7 +373,11 @@ class _ServerTile extends StatelessWidget {
                 dense: true,
                 leading: const Icon(Icons.link, size: 20),
                 title: Text(server.url ?? '(未设置 URL)'),
-                subtitle: Text(procLabel),
+                subtitle: Text(
+                  isHub && hub.hubMcpHost.lastError != null
+                      ? '$procLabel · ${hub.hubMcpHost.lastError}'
+                      : procLabel,
+                ),
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -237,29 +410,58 @@ class _ServerTile extends StatelessWidget {
               ),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('移除 MCP？'),
-                      content: Text('仅从 Hub 目录移除条目，不会删除本地 clone。\n${server.name}'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('移除'),
-                        ),
-                      ],
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  if (!isHub && server.localPath != null)
+                    TextButton.icon(
+                      onPressed: () async {
+                        try {
+                          await hub.updateServer(server.id);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(hub.lastMessage ?? '已更新'),
+                            ),
+                          );
+                        } catch (error) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$error')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.cloud_download_outlined),
+                      label: const Text('更新'),
                     ),
-                  );
-                  if (ok == true) await hub.removeServer(server.id);
-                },
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('移除'),
+                  if (!isHub)
+                    TextButton.icon(
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('移除 MCP？'),
+                            content: Text(
+                              '仅从 Hub 目录移除条目，不会删除本地 clone。\n${server.name}',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('取消'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('移除'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok == true) await hub.removeServer(server.id);
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('移除'),
+                    ),
+                ],
               ),
             ),
           ],

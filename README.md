@@ -6,13 +6,38 @@
 
 ## 能做什么（MVP）
 
-- 粘贴 Git URL，clone 到 `~/.mcp-hub/servers/<id>`
+- **内置 `hubMCP`**：始终存在；AI 可用工具添加仓库、开关、一键配置 Cursor/Codex
+- 粘贴 Git URL，clone 到 `~/.mcp-hub/servers/<id>`（名称可留空，自动取仓库名）
 - 列表开关：控制是否写入客户端配置
 - 支持 **stdio**（客户端按需拉起）与 **HTTP**（Hub 可启停进程）
 - 一键合并写入：
   - Cursor: `%USERPROFILE%\.cursor\mcp.json`
   - Codex: `%USERPROFILE%\.codex\config.toml`（并确保 `features.rmcp_client = true`）
 - 不覆盖你已有的其他 MCP 条目
+- 一键 `git pull` 更新本地仓库
+- **WebDAV 同步**：跨电脑同步 MCP 清单（坚果云等）；账号密码仅存本机
+
+内置端点默认：`http://127.0.0.1:18766/mcp`（需桌面端运行；Web 预览无法真正起服务）
+
+### WebDAV 换机流程
+
+1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
+2. 新电脑安装 MCP Hub，填同一 WebDAV → 拉取
+3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
+
+同步：仓库 URL、command/args、开关等。  
+不同步：WebDAV 密码、本机路径、`env` 密钥、内置 hubMCP。
+
+## 发布 / 更新
+
+推送到 `main` 会触发 GitHub Actions（`Push Build`）：
+
+- 自动解析下一版本号（相对最新正式 Release 升 patch，或沿用已抬高的 `pubspec`）
+- 构建 **Windows zip** + **Linux x64 tar.gz**
+- 以正式 Release 发布（资产名如 `McpHub-x.y.z-windows-x86-64.zip`）
+- 写回 `pubspec.yaml` 版本（`[skip ci]`）
+
+也可在 Actions 里手动跑 `Release Build`。客户端（Windows）可从 GitHub Release 检查并安装更新。
 
 ## 开发
 

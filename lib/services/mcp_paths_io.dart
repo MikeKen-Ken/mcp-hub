@@ -25,6 +25,8 @@ abstract final class McpPaths {
 
   static String get catalogPath => p.join(hubDataRoot, 'catalog.json');
 
+  static String get syncBasePath => p.join(hubDataRoot, 'sync_base.json');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

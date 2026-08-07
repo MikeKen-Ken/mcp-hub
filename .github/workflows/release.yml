@@ -1,0 +1,149 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: Build all platforms
+        type: boolean
+        default: true
+      build_windows:
+        description: Build Windows zip
+        type: boolean
+        default: false
+      build_linux_tar_x64:
+        description: Build Linux x64 tar.gz
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.44.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Get version from pubspec.yaml
+        id: get_version
+        run: |
+          VERSION=$(sed -n 's/^version: \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' pubspec.yaml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  build_windows_zip_x86_64:
+    needs: build
+    if: ${{ inputs.build_all || inputs.build_windows }}
+    runs-on: windows-2022
+
+    steps:
+      - name: Fix long file paths
+        run: git config --system core.longpaths true
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Compile for Windows
+        run: flutter build windows
+
+      - name: Zip compiled files
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath McpHub.zip
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-zip-x86-64-result
+          path: McpHub.zip
+
+  build_tar_x86_64:
+    needs: build
+    if: ${{ inputs.build_all || inputs.build_linux_tar_x64 }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build libayatana-appindicator3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Compile linux
+        run: flutter build linux
+
+      - name: Create tar.gz archive
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf ../../../../../result.tar.gz *
+
+      - name: Upload tar.gz archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: tar-gz-x86-64-result
+          path: ./result.tar.gz
+
+  upload_windows:
+    needs: [build, build_windows_zip_x86_64]
+    if: ${{ (inputs.build_all || inputs.build_windows) && needs.build_windows_zip_x86_64.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-zip-x86-64-result
+          path: windows-zip-x86-64-result
+
+      - name: Upload Windows zip to release
+        uses: ./.github/actions/publish-release-asset
+        with:
+          tag: v${{ needs.build.outputs.version }}
+          draft: "false"
+          assets: windows-zip-x86-64-result/McpHub.zip#McpHub-${{ needs.build.outputs.version }}-windows-x86-64.zip
+
+  upload_linux_tar_x64:
+    needs: [build, build_tar_x86_64]
+    if: ${{ (inputs.build_all || inputs.build_linux_tar_x64) && needs.build_tar_x86_64.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: tar-gz-x86-64-result
+          path: tar-gz-x86-64-result
+
+      - name: Prepare tar.gz asset
+        run: |
+          mkdir -p upload
+          cp tar-gz-x86-64-result/* upload/linux-x86-64.tar.gz
+        shell: bash
+
+      - name: Upload Linux x64 tar.gz to release
+        uses: ./.github/actions/publish-release-asset
+        with:
+          tag: v${{ needs.build.outputs.version }}
+          draft: "false"
+          assets: upload/linux-x86-64.tar.gz#McpHub-${{ needs.build.outputs.version }}-linux-x86-64.tar.gz

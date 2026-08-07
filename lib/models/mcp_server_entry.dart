@@ -14,34 +14,27 @@ class McpServerEntry {
     this.url,
     this.enabled = false,
     this.autoStart = false,
+    this.builtIn = false,
     this.notes,
+    this.updatedAt = 0,
   });
 
   final String id;
   final String name;
   final McpTransport transport;
-
-  /// Git remote used to clone / update the server sources.
   final String? repoUrl;
-
-  /// Checkout directory under the hub servers root (absolute or relative).
   final String? localPath;
-
-  /// stdio: executable
   final String? command;
   final List<String> args;
   final Map<String, String> env;
-
-  /// http: endpoint URL (e.g. http://127.0.0.1:18765/mcp)
   final String? url;
-
-  /// Whether this server should be written into Cursor / Codex.
   final bool enabled;
-
-  /// For HTTP servers: start process when Hub launches.
   final bool autoStart;
-
+  final bool builtIn;
   final String? notes;
+
+  /// Epoch ms; used for WebDAV conflict resolution.
+  final int updatedAt;
 
   McpServerEntry copyWith({
     String? id,
@@ -55,7 +48,10 @@ class McpServerEntry {
     String? url,
     bool? enabled,
     bool? autoStart,
+    bool? builtIn,
     String? notes,
+    int? updatedAt,
+    bool touch = false,
   }) {
     return McpServerEntry(
       id: id ?? this.id,
@@ -69,7 +65,11 @@ class McpServerEntry {
       url: url ?? this.url,
       enabled: enabled ?? this.enabled,
       autoStart: autoStart ?? this.autoStart,
+      builtIn: builtIn ?? this.builtIn,
       notes: notes ?? this.notes,
+      updatedAt: touch
+          ? DateTime.now().millisecondsSinceEpoch
+          : (updatedAt ?? this.updatedAt),
     );
   }
 
@@ -85,7 +85,9 @@ class McpServerEntry {
         if (url != null) 'url': url,
         'enabled': enabled,
         'autoStart': autoStart,
+        'builtIn': builtIn,
         if (notes != null) 'notes': notes,
+        'updatedAt': updatedAt,
       };
 
   factory McpServerEntry.fromJson(Map<String, dynamic> json) {
@@ -107,7 +109,9 @@ class McpServerEntry {
       url: json['url'] as String?,
       enabled: json['enabled'] as bool? ?? false,
       autoStart: json['autoStart'] as bool? ?? false,
+      builtIn: json['builtIn'] as bool? ?? false,
       notes: json['notes'] as String?,
+      updatedAt: json['updatedAt'] as int? ?? 0,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../controllers/hub_controller.dart';
 import '../models/mcp_transport.dart';
+import '../services/repo_name.dart';
 
 class AddServerScreen extends StatefulWidget {
   const AddServerScreen({super.key});
@@ -22,9 +23,17 @@ class _AddServerScreenState extends State<AddServerScreen> {
   bool _enabled = true;
   bool _autoStart = false;
   bool _busy = false;
+  bool _nameEdited = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _repo.addListener(_onRepoChanged);
+  }
 
   @override
   void dispose() {
+    _repo.removeListener(_onRepoChanged);
     _name.dispose();
     _repo.dispose();
     _command.dispose();
@@ -32,6 +41,17 @@ class _AddServerScreenState extends State<AddServerScreen> {
     _url.dispose();
     super.dispose();
   }
+
+  void _onRepoChanged() {
+    if (_nameEdited) return;
+    final inferred = RepoName.fromGitUrl(_repo.text);
+    if (inferred == null) return;
+    if (_name.text == inferred) return;
+    _name.text = inferred;
+    setState(() {});
+  }
+
+  String? get _inferredName => RepoName.fromGitUrl(_repo.text);
 
   Future<void> _submit() async {
     final hub = context.read<HubController>();
@@ -67,26 +87,42 @@ class _AddServerScreenState extends State<AddServerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final inferred = _inferredName;
+
     return Scaffold(
       appBar: AppBar(title: const Text('添加 MCP')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
-            controller: _name,
-            decoration: const InputDecoration(
-              labelText: '名称',
-              hintText: '例如 tavily / filesystem',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
             controller: _repo,
             decoration: const InputDecoration(
               labelText: 'Git 仓库 URL',
               hintText: 'https://github.com/org/mcp-server.git',
               border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            onChanged: (_) {
+              if (!_nameEdited) setState(() => _nameEdited = true);
+            },
+            decoration: InputDecoration(
+              labelText: '名称（可留空）',
+              hintText: inferred ?? '自动取仓库名',
+              border: const OutlineInputBorder(),
+              suffixIcon: _nameEdited
+                  ? IconButton(
+                      tooltip: '恢复为仓库名',
+                      onPressed: () {
+                        final value = RepoName.fromGitUrl(_repo.text);
+                        _name.text = value ?? '';
+                        setState(() => _nameEdited = false);
+                      },
+                      icon: const Icon(Icons.restart_alt),
+                    )
+                  : null,
             ),
           ),
           SwitchListTile(
@@ -120,7 +156,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
               controller: _command,
               decoration: const InputDecoration(
                 labelText: 'command',
-                hintText: 'npx / python / node',
+                hintText: 'npx',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -128,8 +164,8 @@ class _AddServerScreenState extends State<AddServerScreen> {
             TextField(
               controller: _args,
               decoration: const InputDecoration(
-                labelText: 'args（空格分隔）',
-                hintText: '-y @modelcontextprotocol/server-filesystem .',
+                labelText: 'args',
+                hintText: '-y @scope/mcp-server',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -146,8 +182,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
             TextField(
               controller: _command,
               decoration: const InputDecoration(
-                labelText: '启动命令（可选，Hub 启停用）',
-                hintText: 'npm / python / 可执行文件',
+                labelText: '启动命令（可选）',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -155,7 +190,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
             TextField(
               controller: _args,
               decoration: const InputDecoration(
-                labelText: '启动 args（空格分隔）',
+                labelText: '启动 args',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -168,7 +203,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
           ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('启用（写入客户端配置）'),
+            title: const Text('启用'),
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),

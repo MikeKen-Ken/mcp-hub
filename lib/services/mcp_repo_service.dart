@@ -59,4 +59,39 @@ class McpRepoService {
       localPath: target,
     );
   }
+
+  /// `git pull --ff-only` in an existing checkout.
+  Future<McpRepoCloneResult> pull({required String localPath}) async {
+    final dir = Directory(localPath);
+    if (!await dir.exists()) {
+      return McpRepoCloneResult(
+        ok: false,
+        message: '本地目录不存在：$localPath',
+      );
+    }
+    final result = await Process.run(
+      'git',
+      ['pull', '--ff-only'],
+      workingDirectory: localPath,
+      runInShell: true,
+    );
+    if (result.exitCode != 0) {
+      final err = (result.stderr as String).trim();
+      final out = (result.stdout as String).trim();
+      final detail = err.isNotEmpty ? err : out;
+      return McpRepoCloneResult(
+        ok: false,
+        localPath: localPath,
+        message: detail.isEmpty
+            ? 'git pull 失败 (code ${result.exitCode})'
+            : detail,
+      );
+    }
+    final out = (result.stdout as String).trim();
+    return McpRepoCloneResult(
+      ok: true,
+      localPath: localPath,
+      message: out.isEmpty ? '已是最新' : out,
+    );
+  }
 }

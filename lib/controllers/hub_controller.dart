@@ -1,31 +1,56 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
+import '../services/hub_mcp_constants.dart';
+import '../services/hub_mcp_host.dart';
 import '../services/mcp_catalog_store.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
 import '../services/mcp_process_manager.dart';
 import '../services/mcp_repo_service.dart';
+import '../services/repo_name.dart';
+import '../webdav/catalog_sync_document.dart';
+import '../webdav/catalog_sync_mapper.dart';
+import '../webdav/webdav_config.dart';
+import '../webdav/webdav_sync_service.dart';
 
-/// App-wide Hub state: catalog, toggles, clone, process, client config.
+/// App-wide Hub state: catalog, toggles, clone, process, client config, WebDAV.
 class HubController extends ChangeNotifier {
   HubController({
     McpCatalogStore? catalogStore,
     McpRepoService? repoService,
     McpProcessManager? processManager,
+    WebDavConfigStore? webDavConfigStore,
   })  : _catalogStore = catalogStore ?? McpCatalogStore(),
         _repoService = repoService ?? McpRepoService(),
-        _processManager = processManager ?? McpProcessManager();
+        _processManager = processManager ?? McpProcessManager(),
+        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore() {
+    hubMcpHost = HubMcpHost(this);
+    hubMcpHost.addListener(_onHostChanged);
+    webDavSync = WebDavSyncService(
+      loadConfig: () async => webDavConfig,
+      loadLocalDocument: () async => CatalogSyncMapper.toDocument(_servers),
+      applyDocument: _applySyncDocument,
+    );
+    webDavSync.addListener(_onWebDavChanged);
+  }
 
   final McpCatalogStore _catalogStore;
   final McpRepoService _repoService;
   final McpProcessManager _processManager;
+  final WebDavConfigStore _webDavConfigStore;
   final _uuid = const Uuid();
 
+  late final HubMcpHost hubMcpHost;
+  late final WebDavSyncService webDavSync;
+
   List<McpServerEntry> _servers = [];
+  WebDavConfig webDavConfig = WebDavConfig.empty;
   bool _loading = true;
   String? _lastMessage;
   bool? _cursorConfigured;
@@ -38,16 +63,93 @@ class HubController extends ChangeNotifier {
   bool? get codexConfigured => _codexConfigured;
   bool get isDesktopSupported => McpPaths.isDesktopSupported;
 
+  String get hubEndpointUrl => hubMcpHost.endpointUrl;
+
   McpProcessState processState(String id) => _processManager.stateFor(id);
+
+  void _onHostChanged() {
+    _syncBuiltInUrl();
+    notifyListeners();
+  }
+
+  void _onWebDavChanged() => notifyListeners();
 
   Future<void> load() async {
     _loading = true;
     notifyListeners();
+    webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
+    await _ensureBuiltInHubMcp();
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
+    await _syncHubMcpHost();
     await autoStartEnabledHttpServers();
+    if (webDavConfig.enabled &&
+        webDavConfig.autoPull &&
+        webDavConfig.isConfigured) {
+      unawaited(webDavSync.pullNow());
+    }
+    await webDavSync.startPolling();
+  }
+
+  Future<void> _applySyncDocument(CatalogSyncDocument doc) async {
+    _servers = CatalogSyncMapper.applyDocument(local: _servers, doc: doc);
+    await _ensureBuiltInHubMcp(persist: false);
+    await _catalogStore.save(_servers);
+    _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
+    notifyListeners();
+  }
+
+  Future<void> _ensureBuiltInHubMcp({bool persist = true}) async {
+    final index =
+        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    final builtIn = McpServerEntry(
+      id: HubMcpConstants.serverKey,
+      name: 'MCP Hub',
+      transport: McpTransport.http,
+      url: hubEndpointUrl,
+      enabled: true,
+      builtIn: true,
+      notes: '内置：用 AI 管理本 Hub（添加仓库、开关、一键配置等）',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    if (index < 0) {
+      _servers = [builtIn, ..._servers];
+    } else {
+      final existing = _servers[index];
+      _servers = [..._servers];
+      _servers[index] = existing.copyWith(
+        name: 'MCP Hub',
+        transport: McpTransport.http,
+        url: hubEndpointUrl,
+        builtIn: true,
+        notes: builtIn.notes,
+      );
+    }
+    if (persist) await _persist(scheduleRemote: false);
+  }
+
+  void _syncBuiltInUrl() {
+    final index =
+        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    if (index < 0) return;
+    if (_servers[index].url == hubEndpointUrl) return;
+    _servers = [..._servers];
+    _servers[index] = _servers[index].copyWith(url: hubEndpointUrl);
+    unawaited(_persist(scheduleRemote: false));
+  }
+
+  Future<void> _syncHubMcpHost() async {
+    McpServerEntry? hub;
+    for (final s in _servers) {
+      if (s.id == HubMcpConstants.serverKey) {
+        hub = s;
+        break;
+      }
+    }
+    await hubMcpHost.syncWithSettings(enabled: hub?.enabled ?? true);
   }
 
   Future<void> refreshClientStatus() async {
@@ -64,9 +166,11 @@ class HubController extends ChangeNotifier {
 
   Future<void> autoStartEnabledHttpServers() async {
     for (final server in _servers) {
+      if (server.builtIn) continue;
       if (server.enabled &&
           server.autoStart &&
-          server.transport == McpTransport.http) {
+          server.transport == McpTransport.http &&
+          server.command != null) {
         await _processManager.start(server);
       }
     }
@@ -77,9 +181,14 @@ class HubController extends ChangeNotifier {
     final index = _servers.indexWhere((s) => s.id == id);
     if (index < 0) return;
     _servers = [..._servers];
-    _servers[index] = _servers[index].copyWith(enabled: enabled);
+    _servers[index] = _servers[index].copyWith(
+      enabled: enabled,
+      touch: !(_servers[index].builtIn),
+    );
     await _persist();
-    if (!enabled && _servers[index].transport == McpTransport.http) {
+    if (id == HubMcpConstants.serverKey) {
+      await _syncHubMcpHost();
+    } else if (!enabled && _servers[index].transport == McpTransport.http) {
       await _processManager.stop(id);
     }
     notifyListeners();
@@ -97,7 +206,14 @@ class HubController extends ChangeNotifier {
     bool autoStart = false,
     bool cloneRepo = true,
   }) async {
-    final id = _slug(name);
+    final fromUrl = RepoName.fromGitUrl(repoUrl);
+    final resolvedName =
+        name.trim().isNotEmpty ? name.trim() : (fromUrl ?? '');
+    final id = _slug(resolvedName.isNotEmpty ? resolvedName : fromUrl ?? '');
+    if (id == HubMcpConstants.serverKey) {
+      throw StateError('不能使用保留名 ${HubMcpConstants.serverKey}');
+    }
+
     String? localPath;
     final root = McpPaths.serversRoot;
     if (root != null) {
@@ -116,7 +232,7 @@ class HubController extends ChangeNotifier {
 
     final entry = McpServerEntry(
       id: id,
-      name: name.trim().isEmpty ? id : name.trim(),
+      name: resolvedName.isNotEmpty ? resolvedName : id,
       transport: transport,
       repoUrl: repoUrl?.trim(),
       localPath: localPath,
@@ -126,6 +242,7 @@ class HubController extends ChangeNotifier {
       url: url?.trim(),
       enabled: enabled,
       autoStart: autoStart,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
     if (_servers.any((s) => s.id == entry.id)) {
@@ -139,8 +256,61 @@ class HubController extends ChangeNotifier {
     return entry.id;
   }
 
+  Future<void> updateServer(String id) async {
+    McpServerEntry? server;
+    for (final s in _servers) {
+      if (s.id == id) {
+        server = s;
+        break;
+      }
+    }
+    if (server == null) {
+      throw StateError('找不到 MCP：$id');
+    }
+    if (server.builtIn) {
+      throw StateError('内置 hubMCP 无需 git pull');
+    }
+    final path = server.localPath;
+    if (path == null || path.isEmpty) {
+      throw StateError('没有本地仓库路径，无法更新');
+    }
+    final result = await _repoService.pull(localPath: path);
+    _lastMessage = '${server.name}: ${result.message}';
+    notifyListeners();
+    if (!result.ok) {
+      throw StateError(result.message);
+    }
+  }
+
+  Future<void> updateAllServers() async {
+    final withPath = _servers
+        .where(
+          (s) =>
+              !s.builtIn &&
+              s.localPath != null &&
+              s.localPath!.isNotEmpty,
+        )
+        .toList();
+    if (withPath.isEmpty) {
+      _lastMessage = '没有可更新的本地仓库';
+      notifyListeners();
+      return;
+    }
+    final lines = <String>[];
+    for (final server in withPath) {
+      final result = await _repoService.pull(localPath: server.localPath!);
+      lines.add('${server.name}: ${result.message}');
+    }
+    _lastMessage = lines.join('\n');
+    notifyListeners();
+  }
+
   Future<void> removeServer(String id) async {
+    if (id == HubMcpConstants.serverKey) {
+      throw StateError('不能移除内置 hubMCP');
+    }
     await _processManager.stop(id);
+    webDavSync.rememberTombstone(id);
     _servers = _servers.where((s) => s.id != id).toList();
     await _persist();
     _lastMessage = '已移除 $id';
@@ -148,6 +318,14 @@ class HubController extends ChangeNotifier {
   }
 
   Future<void> startServer(String id) async {
+    if (id == HubMcpConstants.serverKey) {
+      await hubMcpHost.start();
+      _lastMessage = hubMcpHost.isRunning
+          ? 'hubMCP 已启动 $hubEndpointUrl'
+          : (hubMcpHost.lastError ?? '启动失败');
+      notifyListeners();
+      return;
+    }
     McpServerEntry? server;
     for (final s in _servers) {
       if (s.id == id) {
@@ -166,6 +344,12 @@ class HubController extends ChangeNotifier {
   }
 
   Future<void> stopServer(String id) async {
+    if (id == HubMcpConstants.serverKey) {
+      await hubMcpHost.stop();
+      _lastMessage = 'hubMCP 已停止';
+      notifyListeners();
+      return;
+    }
     await _processManager.stop(id);
     _lastMessage = '已停止 $id';
     notifyListeners();
@@ -194,20 +378,51 @@ class HubController extends ChangeNotifier {
     );
   }
 
-  Future<void> _persist() => _catalogStore.save(_servers);
+  Future<bool> testWebDav(WebDavConfig config) =>
+      webDavSync.testConnection(config);
+
+  Future<void> saveWebDavConfig(WebDavConfig config) async {
+    webDavConfig = config;
+    await _webDavConfigStore.save(config);
+    webDavSync.stopPolling();
+    if (config.enabled && config.isConfigured) {
+      if (config.autoPull) {
+        unawaited(webDavSync.pullNow());
+      }
+      await webDavSync.startPolling();
+      if (config.autoSync) {
+        webDavSync.schedulePush();
+      }
+    }
+    _lastMessage = config.enabled ? 'WebDAV 已保存并启用' : 'WebDAV 已关闭';
+    notifyListeners();
+  }
+
+  Future<void> syncWebDavNow() async {
+    await webDavSync.syncNow();
+    _lastMessage = webDavSync.status == CatalogSyncStatus.success
+        ? 'WebDAV 同步完成'
+        : (webDavSync.lastError ?? '同步失败');
+    notifyListeners();
+  }
+
+  Future<void> _persist({bool scheduleRemote = true}) async {
+    await _catalogStore.save(_servers);
+    if (scheduleRemote) webDavSync.schedulePush();
+  }
 
   String _slug(String name) {
-    final cleaned = name
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final cleaned = RepoName.slug(name);
     if (cleaned.isNotEmpty) return cleaned;
     return 'mcp-${_uuid.v4().substring(0, 8)}';
   }
 
   @override
   void dispose() {
+    hubMcpHost.removeListener(_onHostChanged);
+    webDavSync.removeListener(_onWebDavChanged);
+    hubMcpHost.dispose();
+    webDavSync.dispose();
     _processManager.stopAll();
     super.dispose();
   }
