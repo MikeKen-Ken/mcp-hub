@@ -29,7 +29,6 @@ class StatusBadge extends StatelessWidget {
         label,
         style: theme.textTheme.labelSmall?.copyWith(
           color: fg,
-          fontWeight: FontWeight.w500,
           height: 1.2,
           leadingDistribution: TextLeadingDistribution.even,
         ),

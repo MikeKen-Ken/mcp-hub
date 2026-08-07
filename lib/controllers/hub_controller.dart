@@ -28,10 +28,12 @@ class HubController extends ChangeNotifier {
     McpRepoService? repoService,
     McpProcessManager? processManager,
     WebDavConfigStore? webDavConfigStore,
+    bool initiallyLoading = true,
   })  : _catalogStore = catalogStore ?? McpCatalogStore(),
         _repoService = repoService ?? McpRepoService(),
         _processManager = processManager ?? McpProcessManager(),
-        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore() {
+        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
+        _loading = initiallyLoading {
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
     webDavSync = WebDavSyncService(
@@ -58,7 +60,7 @@ class HubController extends ChangeNotifier {
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
-  bool _loading = true;
+  bool _loading;
   String? _lastMessage;
   bool? _cursorConfigured;
   bool? _codexConfigured;
@@ -445,6 +447,26 @@ class HubController extends ChangeNotifier {
 
   Future<SkillSyncResult> pushSkillsToWebDav(SkillTarget target) async {
     final result = await skillSync.pushToWebDav(target);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> syncResourceFromWebDav(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    final result = await skillSync.syncResourceFromWebDav(resource, target);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> pushResourceToWebDav(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    final result = await skillSync.pushResourceToWebDav(resource, target);
     _lastMessage = result.message;
     notifyListeners();
     return result;

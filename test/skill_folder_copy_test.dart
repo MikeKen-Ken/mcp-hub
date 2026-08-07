@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/features/skill_sync/skill_folder_copy.dart';
+import 'package:mcp_hub/features/skill_sync/agent_resource_kind.dart';
 import 'package:mcp_hub/features/skill_sync/skill_target.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,6 +12,20 @@ void main() {
       expect(SkillTarget.tryParse('cursor'), SkillTarget.cursor);
       expect(SkillTarget.tryParse('CODEX'), SkillTarget.codex);
       expect(SkillTarget.tryParse('all'), isNull);
+    });
+  });
+
+  group('AgentResourceKind', () {
+    test('uses stable remote folder names', () {
+      expect(AgentResourceKind.skill.wireName, 'skills');
+      expect(AgentResourceKind.command.wireName, 'commands');
+      expect(AgentResourceKind.rule.wireName, 'rules');
+    });
+
+    test('Command is Cursor-only', () {
+      expect(AgentResourceKind.command.supports(SkillTarget.cursor), isTrue);
+      expect(AgentResourceKind.command.supports(SkillTarget.codex), isFalse);
+      expect(AgentResourceKind.rule.supports(SkillTarget.codex), isTrue);
     });
   });
 

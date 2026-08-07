@@ -8,6 +8,7 @@ import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
+import '../services/directory_opener.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
@@ -42,24 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text(AppBrand.displayName),
         actions: [
           IconButton(
-            tooltip: '立即同步 WebDAV',
-            onPressed: () async {
-              await hub.syncWebDavNow();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(hub.lastMessage ?? '同步完成')),
-              );
-            },
-            icon: Icon(
-              switch (hub.webDavSync.status) {
-                CatalogSyncStatus.syncing => Icons.cloud_sync,
-                CatalogSyncStatus.error => Icons.cloud_off,
-                CatalogSyncStatus.success => Icons.cloud_done,
-                CatalogSyncStatus.idle => Icons.cloud_outlined,
-              },
-            ),
-          ),
-          IconButton(
             tooltip: 'WebDAV 设置',
             onPressed: () {
               Navigator.of(context).push(
@@ -81,73 +64,45 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             icon: const Icon(Icons.upgrade),
           ),
-          IconButton(
-            tooltip: '全部 git pull',
-            onPressed: () async {
-              try {
-                await hub.updateAllServers();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
-                );
-              } catch (error) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$error')),
-                );
-              }
-            },
-            icon: const Icon(Icons.system_update_alt),
-          ),
-          IconButton(
-            tooltip: '刷新客户端配置状态',
-            onPressed: hub.refreshClientStatus,
-            icon: const Icon(Icons.refresh),
-          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const AddServerScreen()),
-          );
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('添加 MCP'),
       ),
       body: hub.loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                _ClientConfigCard(hub: hub),
-                const SizedBox(height: 12),
-                _SkillSyncCard(hub: hub),
-                const SizedBox(height: 12),
-                _WebDavStatusCard(hub: hub),
-                const SizedBox(height: 16),
-                Text(
-                  '本地 MCP',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text('配置中心', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
                 Text(
-                  '内置 hubMCP 始终存在，可用 AI 添加仓库/开关/写配置。'
-                  '其它开关控制是否写入 Cursor / Codex。',
+                  '按用途进入管理，首页只保留状态和入口。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 12),
-                if (hub.servers.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        '还没有 MCP。点击右下角添加仓库（git clone 到 ~/.mcp-hub/servers）。',
-                      ),
+                const SizedBox(height: 16),
+                _FeatureCard(
+                  icon: Icons.hub_outlined,
+                  title: '客户端 MCP',
+                  subtitle: '一键配置 Cursor / Codex，并管理 ${hub.servers.length} 个本地 MCP',
+                  status: _clientSummary(hub),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ClientMcpScreen(),
                     ),
-                  )
-                else
-                  ...hub.servers.map((server) => _ServerTile(serverId: server.id)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _FeatureCard(
+                  icon: Icons.sync_alt_outlined,
+                  title: 'Agent 配置同步',
+                  subtitle: '统一同步 Skill、Command 和 Rule',
+                  status: _resourceSummary(hub),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AgentConfigSyncScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _WebDavStatusCard(hub: hub),
                 if (hub.lastMessage != null) ...[
                   const SizedBox(height: 16),
                   Text(
@@ -162,6 +117,141 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  String _clientSummary(HubController hub) {
+    if (hub.cursorConfigured == true && hub.codexConfigured == true) {
+      return 'Cursor / Codex 已对齐';
+    }
+    return '有客户端尚未对齐';
+  }
+
+  String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
+        SkillSyncStatus.idle => '尚未同步',
+        SkillSyncStatus.syncing => '同步中…',
+        SkillSyncStatus.success => '最近同步成功',
+        SkillSyncStatus.error => '最近同步失败',
+      };
+}
+
+class _FeatureCard extends StatelessWidget {
+  const _FeatureCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.status,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        leading: CircleAvatar(child: Icon(icon)),
+        title: Text(title),
+        subtitle: Text('$subtitle\n$status'),
+        isThreeLine: true,
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class ClientMcpScreen extends StatelessWidget {
+  const ClientMcpScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final hub = context.watch<HubController>();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('客户端 MCP'),
+        actions: [
+          IconButton(
+            tooltip: '刷新配置状态',
+            onPressed: hub.refreshClientStatus,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _ClientConfigCard(hub: hub),
+          const SizedBox(height: 12),
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 10,
+              ),
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('本地 MCP'),
+              subtitle: Text('添加、启停和更新 MCP · 共 ${hub.servers.length} 个'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const LocalMcpScreen()),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class LocalMcpScreen extends StatelessWidget {
+  const LocalMcpScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final hub = context.watch<HubController>();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('本地 MCP'),
+        actions: [
+          IconButton(
+            tooltip: '全部更新',
+            onPressed: () async {
+              await hub.updateAllServers();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
+              );
+            },
+            icon: const Icon(Icons.system_update_alt),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AddServerScreen()),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('添加 MCP'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+        children: [
+          Text(
+            '开关决定该 MCP 是否写入 Cursor / Codex；内置 hubMCP 始终保留。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          ...hub.servers.map((server) => _ServerTile(serverId: server.id)),
+        ],
+      ),
     );
   }
 }
@@ -192,9 +282,7 @@ class _WebDavStatusCard extends StatelessWidget {
         leading: const Icon(Icons.cloud_outlined),
         title: const Text('WebDAV 配置同步'),
         subtitle: Text(
-          cfg.enabled
-              ? '$statusText · $when'
-              : '换电脑时可同步 MCP 清单；点右侧齿轮配置',
+          cfg.enabled ? '$statusText · $when' : '换电脑时可同步 MCP 清单；点右侧齿轮配置',
         ),
         trailing: IconButton(
           tooltip: '设置',
@@ -219,10 +307,37 @@ class _WebDavStatusCard extends StatelessWidget {
   }
 }
 
-class _SkillSyncCard extends StatelessWidget {
-  const _SkillSyncCard({required this.hub});
+class AgentConfigSyncScreen extends StatelessWidget {
+  const AgentConfigSyncScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final hub = context.watch<HubController>();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Agent 配置同步')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            '从 WebDAV 拉取并部署到本机，或把本机配置上传到 WebDAV。同步采用合并覆盖，不删除目标中的额外文件。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          for (final resource in AgentResourceKind.values) ...[
+            _ResourceSyncCard(hub: hub, resource: resource),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ResourceSyncCard extends StatelessWidget {
+  const _ResourceSyncCard({required this.hub, required this.resource});
 
   final HubController hub;
+  final AgentResourceKind resource;
 
   Future<void> _run(
     BuildContext context,
@@ -230,9 +345,9 @@ class _SkillSyncCard extends StatelessWidget {
   ) async {
     final result = await action();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   @override
@@ -259,30 +374,35 @@ class _SkillSyncCard extends StatelessWidget {
           children: [
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.auto_awesome_outlined),
-              title: const Text('Skill 同步'),
+              leading: Icon(switch (resource) {
+                AgentResourceKind.skill => Icons.auto_awesome_outlined,
+                AgentResourceKind.command => Icons.terminal_outlined,
+                AgentResourceKind.rule => Icons.rule_outlined,
+              }),
+              title: Text('${resource.label} 同步'),
               subtitle: Text(
                 supported
                     ? (webDavReady
-                        ? '$statusText · $when\n'
-                            '从 WebDAV 拉取文件夹后复制到 Cursor / Codex'
-                        : '需先启用 WebDAV；远端目录为 '
-                            '{remote}/skills/cursor 与 .../codex')
-                    : '当前平台不支持 Skill 目录同步',
+                          ? '$statusText · $when\n'
+                                '${_supportDescription()}'
+                          : '需先启用并配置 WebDAV')
+                    : '当前平台不支持目录同步',
               ),
             ),
             Row(
               children: [
                 Expanded(
                   child: FilledButton.tonalIcon(
-                    onPressed: !supported || !webDavReady || busy
+                    onPressed: !supported || !webDavReady || busy ||
+                            !resource.supports(SkillTarget.cursor)
                         ? null
                         : () => _run(
-                              context,
-                              () => hub.syncSkillsFromWebDav(
-                                SkillTarget.cursor,
-                              ),
+                            context,
+                            () => hub.syncResourceFromWebDav(
+                              resource,
+                              SkillTarget.cursor,
                             ),
+                          ),
                     icon: const Icon(Icons.cloud_download_outlined),
                     label: const Text('同步 Cursor'),
                   ),
@@ -290,14 +410,16 @@ class _SkillSyncCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.tonalIcon(
-                    onPressed: !supported || !webDavReady || busy
+                    onPressed: !supported || !webDavReady || busy ||
+                            !resource.supports(SkillTarget.codex)
                         ? null
                         : () => _run(
-                              context,
-                              () => hub.syncSkillsFromWebDav(
-                                SkillTarget.codex,
-                              ),
+                            context,
+                            () => hub.syncResourceFromWebDav(
+                              resource,
+                              SkillTarget.codex,
                             ),
+                          ),
                     icon: const Icon(Icons.cloud_download_outlined),
                     label: const Text('同步 Codex'),
                   ),
@@ -309,41 +431,85 @@ class _SkillSyncCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: !supported || !webDavReady || busy
+                    onPressed: !supported || !webDavReady || busy ||
+                            !resource.supports(SkillTarget.cursor)
                         ? null
                         : () => _run(
-                              context,
-                              () => hub.pushSkillsToWebDav(SkillTarget.cursor),
+                            context,
+                            () => hub.pushResourceToWebDav(
+                              resource,
+                              SkillTarget.cursor,
                             ),
+                          ),
                     child: const Text('上传 Cursor'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: !supported || !webDavReady || busy
+                    onPressed: !supported || !webDavReady || busy ||
+                            !resource.supports(SkillTarget.codex)
                         ? null
                         : () => _run(
-                              context,
-                              () => hub.pushSkillsToWebDav(SkillTarget.codex),
+                            context,
+                            () => hub.pushResourceToWebDav(
+                              resource,
+                              SkillTarget.codex,
                             ),
+                          ),
                     child: const Text('上传 Codex'),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            SelectableText(
-              'Cursor: ${McpPaths.cursorSkillsPath}\n'
-              'Codex: ${McpPaths.codexSkillsPath}\n'
-              '缓存: ${McpPaths.skillsCacheRoot}',
-              style: Theme.of(context).textTheme.labelSmall,
+            _DirectoryPathRow(
+              label: 'Cursor',
+              displayPath: hub.skillSync.resourceDeployPathFor(
+                resource,
+                SkillTarget.cursor,
+              ),
+              directoryPath: hub.skillSync.resourceDeployPathFor(
+                resource,
+                SkillTarget.cursor,
+              ),
+              enabled: supported && resource.supports(SkillTarget.cursor),
+            ),
+            _DirectoryPathRow(
+              label: 'Codex',
+              displayPath: hub.skillSync.resourceDeployPathFor(
+                resource,
+                SkillTarget.codex,
+              ),
+              directoryPath: hub.skillSync.resourceDeployPathFor(
+                resource,
+                SkillTarget.codex,
+              ),
+              enabled: supported && resource.supports(SkillTarget.codex),
+            ),
+            _DirectoryPathRow(
+              label: '缓存',
+              displayPath: McpPaths.resourceCachePath(
+                resource.wireName,
+                SkillTarget.cursor.wireName,
+              ),
+              directoryPath: McpPaths.resourceCachePath(
+                resource.wireName,
+                SkillTarget.cursor.wireName,
+              ),
+              enabled: supported,
             ),
           ],
         ),
       ),
     );
   }
+
+  String _supportDescription() => switch (resource) {
+        AgentResourceKind.skill => '支持 Cursor / Codex',
+        AgentResourceKind.command => '支持 Cursor；Codex 暂无对等的全局目录',
+        AgentResourceKind.rule => '支持 Cursor / Codex',
+      };
 }
 
 class _ClientConfigCard extends StatelessWidget {
@@ -352,10 +518,10 @@ class _ClientConfigCard extends StatelessWidget {
   final HubController hub;
 
   String _status(bool? value) => switch (value) {
-        true => '已对齐',
-        false => '未对齐 / 部分缺失',
-        null => '检测中…',
-      };
+    true => '已对齐',
+    false => '未对齐 / 部分缺失',
+    null => '检测中…',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -371,9 +537,7 @@ class _ClientConfigCard extends StatelessWidget {
               leading: const Icon(Icons.psychology_outlined),
               title: const Text('一键配置客户端'),
               subtitle: Text(
-                supported
-                    ? '合并写入已启用的 MCP，不覆盖其他服务'
-                    : '当前平台不支持写入客户端配置',
+                supported ? '合并写入已启用的 MCP，不覆盖其他服务' : '当前平台不支持写入客户端配置',
               ),
             ),
             FilledButton.icon(
@@ -382,9 +546,9 @@ class _ClientConfigCard extends StatelessWidget {
                   : () async {
                       final result = await hub.configureAllClients();
                       if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(result.message)),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(result.message)));
                     },
               icon: const Icon(Icons.flash_on_outlined),
               label: const Text('配置 Cursor + Codex'),
@@ -412,14 +576,67 @@ class _ClientConfigCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            SelectableText(
-              'Cursor: ${McpPaths.cursorMcpJsonPath}\n'
-              'Codex: ${McpPaths.codexConfigTomlPath}',
-              style: Theme.of(context).textTheme.labelSmall,
+            _DirectoryPathRow(
+              label: 'Cursor',
+              displayPath: McpPaths.cursorMcpJsonPath,
+              directoryPath: McpPaths.cursorConfigDirectory,
+              enabled: supported,
+            ),
+            _DirectoryPathRow(
+              label: 'Codex',
+              displayPath: McpPaths.codexConfigTomlPath,
+              directoryPath: McpPaths.codexConfigDirectory,
+              enabled: supported,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DirectoryPathRow extends StatelessWidget {
+  const _DirectoryPathRow({
+    required this.label,
+    required this.displayPath,
+    required this.directoryPath,
+    required this.enabled,
+  });
+
+  final String label;
+  final String? displayPath;
+  final String? directoryPath;
+  final bool enabled;
+
+  Future<void> _open(BuildContext context) async {
+    try {
+      await DirectoryOpener.open(directoryPath);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: SelectableText(
+            '$label: ${displayPath ?? "(不可用)"}',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ),
+        IconButton(
+          tooltip: '打开 $label 目录',
+          onPressed: enabled && directoryPath != null
+              ? () => _open(context)
+              : null,
+          icon: const Icon(Icons.folder_open_outlined),
+        ),
+      ],
     );
   }
 }
@@ -434,8 +651,9 @@ class _ServerTile extends StatelessWidget {
     final hub = context.watch<HubController>();
     final server = hub.servers.firstWhere((s) => s.id == serverId);
     final isHub = server.builtIn || server.id == HubMcpConstants.serverKey;
-    final transportLabel =
-        server.transport == McpTransport.http ? 'HTTP' : 'stdio';
+    final transportLabel = server.transport == McpTransport.http
+        ? 'HTTP'
+        : 'stdio';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -482,10 +700,18 @@ class _ServerTile extends StatelessWidget {
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.cloud_outlined, size: 20),
-                title: Text(server.repoUrl!, maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(
+                  server.repoUrl!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: server.localPath == null
                     ? null
-                    : Text(server.localPath!, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    : Text(
+                        server.localPath!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
               ),
             if (server.transport == McpTransport.http)
               ListTile(
@@ -516,10 +742,7 @@ class _ServerTile extends StatelessWidget {
                 dense: true,
                 leading: const Icon(Icons.terminal, size: 20),
                 title: Text(
-                  [
-                    server.command ?? '(未设置 command)',
-                    ...server.args,
-                  ].join(' '),
+                  [server.command ?? '(未设置 command)', ...server.args].join(' '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -536,15 +759,13 @@ class _ServerTile extends StatelessWidget {
                           await hub.updateServer(server.id);
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(hub.lastMessage ?? '已更新'),
-                            ),
+                            SnackBar(content: Text(hub.lastMessage ?? '已更新')),
                           );
                         } catch (error) {
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$error')),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('$error')));
                         }
                       },
                       icon: const Icon(Icons.cloud_download_outlined),
@@ -577,15 +798,13 @@ class _ServerTile extends StatelessWidget {
                             await hub.removeServer(server.id);
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(hub.lastMessage ?? '已移除'),
-                              ),
+                              SnackBar(content: Text(hub.lastMessage ?? '已移除')),
                             );
                           } catch (error) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$error')),
-                            );
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text('$error')));
                           }
                         }
                       },

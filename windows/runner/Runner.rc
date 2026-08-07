@@ -95,7 +95,11 @@ BEGIN
             VALUE "InternalName", "mcp_hub" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.mikeken. All rights reserved." "\0"
             VALUE "OriginalFilename", "mcp_hub.exe" "\0"
-            VALUE "ProductName", "Agent Hub" "\0"
+            // Keep this stable: path_provider uses CompanyName\ProductName as
+            // the Windows application-support directory. Changing it makes
+            // existing shared_preferences (including WebDAV credentials)
+            // appear to be lost after an update.
+            VALUE "ProductName", "mcp_hub" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

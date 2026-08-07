@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../services/mcp_paths.dart';
 import '../../webdav/webdav_config.dart';
+import 'agent_resource_kind.dart';
 import 'skill_folder_copy.dart';
 import 'skill_target.dart';
 import 'skill_webdav_folder_sync.dart';
@@ -34,7 +35,7 @@ class SkillSyncResult {
 /// Skill 模块：WebDAV 同步文件夹 → 本机缓存 → 复制到 Cursor/Codex。
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
-    required Future<WebDavConfig> Function() this._loadConfig,
+    required this._loadConfig,
     SkillWebDavFolderSync? folderSync,
     SkillFolderCopy? folderCopy,
   })  : _folderSync = folderSync ?? SkillWebDavFolderSync(),
@@ -49,6 +50,7 @@ class SkillSyncService extends ChangeNotifier {
   String? lastMessage;
   DateTime? lastSyncedAt;
   SkillTarget? lastTarget;
+  AgentResourceKind? lastResource;
 
   String? cachePathFor(SkillTarget target) => switch (target) {
         SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
@@ -60,17 +62,44 @@ class SkillSyncService extends ChangeNotifier {
         SkillTarget.codex => McpPaths.codexSkillsPath,
       };
 
+  String? resourceCachePathFor(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) => McpPaths.resourceCachePath(resource.wireName, target.wireName);
+
+  String? resourceDeployPathFor(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) => switch ((resource, target)) {
+        (AgentResourceKind.skill, SkillTarget.cursor) =>
+          McpPaths.cursorSkillsPath,
+        (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
+        (AgentResourceKind.command, SkillTarget.cursor) =>
+          McpPaths.cursorCommandsPath,
+        (AgentResourceKind.command, SkillTarget.codex) =>
+          McpPaths.codexCommandsPath,
+        (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
+        (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
+      };
+
   /// 从 WebDAV 拉取并复制到目标客户端 Skill 目录。
   Future<SkillSyncResult> syncFromWebDav(SkillTarget target) async {
-    return _run(target, () async {
+    return syncResourceFromWebDav(AgentResourceKind.skill, target);
+  }
+
+  Future<SkillSyncResult> syncResourceFromWebDav(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    return _run(resource, target, () async {
       final config = await _loadConfig();
       if (!config.enabled || !config.isConfigured) {
         throw StateError('请先配置并启用 WebDAV');
       }
-      final cachePath = cachePathFor(target);
-      final deployPath = deployPathFor(target);
+      final cachePath = resourceCachePathFor(resource, target);
+      final deployPath = resourceDeployPathFor(resource, target);
       if (cachePath == null || deployPath == null) {
-        throw StateError('当前平台不支持 Skill 同步');
+        throw StateError('${target.label} 不支持 ${resource.label} 同步');
       }
 
       final client = _folderSync.clientFor(config);
@@ -78,7 +107,11 @@ class SkillSyncService extends ChangeNotifier {
         throw StateError('WebDAV 未配置完整');
       }
 
-      final remote = _folderSync.remoteSkillsDir(config, target.wireName);
+      final remote = _folderSync.remoteResourceDir(
+        config,
+        resource.wireName,
+        target.wireName,
+      );
       final pulled = await _folderSync.pullFolder(
         client: client,
         remoteDir: remote,
@@ -88,7 +121,9 @@ class SkillSyncService extends ChangeNotifier {
         sourceDir: cachePath,
         targetDir: deployPath,
       );
-      final packages = await _folderCopy.countSkillPackages(deployPath);
+      final packages = resource == AgentResourceKind.skill
+          ? await _folderCopy.countSkillPackages(deployPath)
+          : 0;
 
       return SkillSyncResult(
         ok: true,
@@ -96,24 +131,32 @@ class SkillSyncService extends ChangeNotifier {
         pulledFiles: pulled,
         deployedFiles: deploy.copiedFiles,
         packageCount: packages,
-        message: '已同步 ${target.label} Skill：'
+        message: '已同步 ${target.label} ${resource.label}：'
             '拉取 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
-            '（约 $packages 个 Skill 包）→ $deployPath',
+            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+            ' → $deployPath',
       );
     });
   }
 
   /// 把本机目标目录内容上传到 WebDAV（先复制到缓存再推送）。
   Future<SkillSyncResult> pushToWebDav(SkillTarget target) async {
-    return _run(target, () async {
+    return pushResourceToWebDav(AgentResourceKind.skill, target);
+  }
+
+  Future<SkillSyncResult> pushResourceToWebDav(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    return _run(resource, target, () async {
       final config = await _loadConfig();
       if (!config.enabled || !config.isConfigured) {
         throw StateError('请先配置并启用 WebDAV');
       }
-      final cachePath = cachePathFor(target);
-      final deployPath = deployPathFor(target);
+      final cachePath = resourceCachePathFor(resource, target);
+      final deployPath = resourceDeployPathFor(resource, target);
       if (cachePath == null || deployPath == null) {
-        throw StateError('当前平台不支持 Skill 同步');
+        throw StateError('${target.label} 不支持 ${resource.label} 同步');
       }
 
       // 优先以客户端目录为准；若尚无部署目录则直接推缓存。
@@ -132,28 +175,35 @@ class SkillSyncService extends ChangeNotifier {
         throw StateError('WebDAV 未配置完整');
       }
 
-      final remote = _folderSync.remoteSkillsDir(config, target.wireName);
+      final remote = _folderSync.remoteResourceDir(
+        config,
+        resource.wireName,
+        target.wireName,
+      );
       final pushed = await _folderSync.pushFolder(
         client: client,
         remoteDir: remote,
         localDir: cachePath,
       );
-      final packages = await _folderCopy.countSkillPackages(cachePath);
+      final packages = resource == AgentResourceKind.skill
+          ? await _folderCopy.countSkillPackages(cachePath)
+          : 0;
 
       return SkillSyncResult(
         ok: true,
         target: target,
         pushedFiles: pushed,
         packageCount: packages,
-        message: '已上传 ${target.label} Skill：$pushed 个文件'
-            '（约 $packages 个 Skill 包）→ $remote',
+        message: '已上传 ${target.label} ${resource.label}：$pushed 个文件'
+            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+            ' → $remote',
       );
     });
   }
 
   /// 仅把本机缓存复制到客户端目录（不访问 WebDAV）。
   Future<SkillSyncResult> deployFromCache(SkillTarget target) async {
-    return _run(target, () async {
+    return _run(AgentResourceKind.skill, target, () async {
       final cachePath = cachePathFor(target);
       final deployPath = deployPathFor(target);
       if (cachePath == null || deployPath == null) {
@@ -176,18 +226,20 @@ class SkillSyncService extends ChangeNotifier {
   }
 
   Future<SkillSyncResult> _run(
+    AgentResourceKind resource,
     SkillTarget target,
     Future<SkillSyncResult> Function() action,
   ) async {
     if (status == SkillSyncStatus.syncing) {
       return const SkillSyncResult(
         ok: false,
-        message: 'Skill 同步进行中，请稍候',
+        message: '配置同步进行中，请稍候',
       );
     }
 
     status = SkillSyncStatus.syncing;
     lastTarget = target;
+    lastResource = resource;
     lastError = null;
     notifyListeners();
 
