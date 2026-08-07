@@ -1,6 +1,6 @@
-# MCP Hub
+# Agent Hub
 
-轻量桌面应用：把多个 MCP 仓库管理在本机，用开关启用，并一键写入 **Cursor** / **Codex** 配置。
+轻量桌面应用：集中管理 Cursor / Codex 的 Agent 相关配置（当前以 **MCP** 为主，后续可扩展 Skill 等），用开关启用，并一键写入客户端。
 
 技术栈与配置写法参考 [kanban](https://github.com/MikeKen-Ken) 项目里的 Windows MCP 一键配置实现，但职责独立——看板继续只做看板。
 
@@ -22,11 +22,11 @@
 ### WebDAV 换机流程
 
 1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
-2. 新电脑安装 MCP Hub，填同一 WebDAV → 拉取
+2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
 
-同步：仓库 URL、command/args、开关等。  
-不同步：WebDAV 密码、本机路径、`env` 密钥、内置 hubMCP。
+同步：仓库 URL、command/args 等。  
+不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
 
 ## 发布 / 更新
 
@@ -59,6 +59,7 @@ flutter test
 
 ## 后续
 
+- Skill 等其它 Agent 配置的统一管理
 - 从 Hub 仓库 `.gitmodules` 批量同步
 - 健康检查 / 日志面板
 - 多机清单同步

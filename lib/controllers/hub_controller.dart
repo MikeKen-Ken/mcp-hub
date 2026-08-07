@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../app_brand.dart';
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
 import '../services/hub_mcp_constants.dart';
@@ -106,7 +107,7 @@ class HubController extends ChangeNotifier {
         _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
     final builtIn = McpServerEntry(
       id: HubMcpConstants.serverKey,
-      name: 'MCP Hub',
+      name: AppBrand.displayName,
       transport: McpTransport.http,
       url: hubEndpointUrl,
       enabled: true,
@@ -121,7 +122,7 @@ class HubController extends ChangeNotifier {
       final existing = _servers[index];
       _servers = [..._servers];
       _servers[index] = existing.copyWith(
-        name: 'MCP Hub',
+        name: AppBrand.displayName,
         transport: McpTransport.http,
         url: hubEndpointUrl,
         builtIn: true,
@@ -181,10 +182,8 @@ class HubController extends ChangeNotifier {
     final index = _servers.indexWhere((s) => s.id == id);
     if (index < 0) return;
     _servers = [..._servers];
-    _servers[index] = _servers[index].copyWith(
-      enabled: enabled,
-      touch: !(_servers[index].builtIn),
-    );
+    // 开/关不 bump updatedAt，避免 WebDAV 把本机开关当成清单变更
+    _servers[index] = _servers[index].copyWith(enabled: enabled);
     await _persist();
     if (id == HubMcpConstants.serverKey) {
       await _syncHubMcpHost();
@@ -201,6 +200,7 @@ class HubController extends ChangeNotifier {
     String? command,
     List<String> args = const [],
     Map<String, String> env = const {},
+    String? cwd,
     String? url,
     bool enabled = true,
     bool autoStart = false,
@@ -239,6 +239,7 @@ class HubController extends ChangeNotifier {
       command: command?.trim(),
       args: args,
       env: env,
+      cwd: cwd?.trim().isEmpty == true ? null : cwd?.trim(),
       url: url?.trim(),
       enabled: enabled,
       autoStart: autoStart,
@@ -309,11 +310,32 @@ class HubController extends ChangeNotifier {
     if (id == HubMcpConstants.serverKey) {
       throw StateError('不能移除内置 hubMCP');
     }
+    McpServerEntry? server;
+    for (final s in _servers) {
+      if (s.id == id) {
+        server = s;
+        break;
+      }
+    }
     await _processManager.stop(id);
+
+    String? deleteMsg;
+    final path = server?.localPath;
+    if (path != null && path.isNotEmpty) {
+      final result = await _repoService.deleteLocal(localPath: path);
+      deleteMsg = result.message;
+      if (!result.ok) {
+        _lastMessage = '已停止进程，但删除本地目录失败：$deleteMsg';
+        notifyListeners();
+        throw StateError(deleteMsg);
+      }
+    }
+
     webDavSync.rememberTombstone(id);
     _servers = _servers.where((s) => s.id != id).toList();
     await _persist();
-    _lastMessage = '已移除 $id';
+    _lastMessage =
+        deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
     notifyListeners();
   }
 

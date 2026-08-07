@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
 import '../models/mcp_transport.dart';
 import '../services/hub_mcp_constants.dart';
-import '../services/hub_mcp_host.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
-import '../services/mcp_process_manager.dart';
 import '../webdav/webdav_sync_service.dart';
+import '../widgets/status_badge.dart';
 import 'add_server_screen.dart';
 import 'webdav_settings_screen.dart';
 
@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MCP Hub'),
+        title: const Text(AppBrand.displayName),
         actions: [
           IconButton(
             tooltip: '立即同步 WebDAV',
@@ -304,24 +304,8 @@ class _ServerTile extends StatelessWidget {
     final hub = context.watch<HubController>();
     final server = hub.servers.firstWhere((s) => s.id == serverId);
     final isHub = server.builtIn || server.id == HubMcpConstants.serverKey;
-    final proc = hub.processState(server.id);
     final transportLabel =
         server.transport == McpTransport.http ? 'HTTP' : 'stdio';
-    final hostStatus = hub.hubMcpHost.status;
-    final procLabel = isHub
-        ? switch (hostStatus) {
-            HubMcpStatus.stopped => '已停止',
-            HubMcpStatus.starting => '启动中',
-            HubMcpStatus.running => '运行中',
-            HubMcpStatus.error => '错误',
-          }
-        : switch (proc.status) {
-            McpProcessStatus.stopped => '已停止',
-            McpProcessStatus.starting => '启动中',
-            McpProcessStatus.running =>
-              '运行中${proc.pid == null ? '' : ' · ${proc.pid}'}',
-            McpProcessStatus.error => '错误',
-          };
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -331,18 +315,23 @@ class _ServerTile extends StatelessWidget {
           children: [
             SwitchListTile(
               title: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: Text(server.name)),
-                  if (isHub)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Chip(
-                        label: const Text('内置'),
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        labelStyle: Theme.of(context).textTheme.labelSmall,
-                      ),
+                  Flexible(
+                    child: Text(
+                      server.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  if (isHub) ...[
+                    const SizedBox(width: 8),
+                    const StatusBadge(label: '内置', tonal: true),
+                  ],
+                  if (server.autoStart) ...[
+                    const SizedBox(width: 6),
+                    const StatusBadge(label: '自动'),
+                  ],
                 ],
               ),
               subtitle: Text(
@@ -373,11 +362,9 @@ class _ServerTile extends StatelessWidget {
                 dense: true,
                 leading: const Icon(Icons.link, size: 20),
                 title: Text(server.url ?? '(未设置 URL)'),
-                subtitle: Text(
-                  isHub && hub.hubMcpHost.lastError != null
-                      ? '$procLabel · ${hub.hubMcpHost.lastError}'
-                      : procLabel,
-                ),
+                subtitle: isHub && hub.hubMcpHost.lastError != null
+                    ? Text(hub.hubMcpHost.lastError!)
+                    : null,
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -406,7 +393,6 @@ class _ServerTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: const Text('由 Cursor / Codex 按需拉起'),
               ),
             Align(
               alignment: Alignment.centerRight,
@@ -442,7 +428,7 @@ class _ServerTile extends StatelessWidget {
                           builder: (ctx) => AlertDialog(
                             title: const Text('移除 MCP？'),
                             content: Text(
-                              '仅从 Hub 目录移除条目，不会删除本地 clone。\n${server.name}',
+                              '将从 Hub 目录移除，并删除本地 clone 目录。\n${server.name}',
                             ),
                             actions: [
                               TextButton(
@@ -456,7 +442,22 @@ class _ServerTile extends StatelessWidget {
                             ],
                           ),
                         );
-                        if (ok == true) await hub.removeServer(server.id);
+                        if (ok == true) {
+                          try {
+                            await hub.removeServer(server.id);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(hub.lastMessage ?? '已移除'),
+                              ),
+                            );
+                          } catch (error) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$error')),
+                            );
+                          }
+                        }
                       },
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('移除'),

@@ -57,6 +57,7 @@ abstract final class McpClientConfig {
           'command': server.command ?? '',
           if (server.args.isNotEmpty) 'args': server.args,
           if (server.env.isNotEmpty) 'env': server.env,
+          if (server.cwd != null && server.cwd!.isNotEmpty) 'cwd': server.cwd,
         },
     };
   }
@@ -98,6 +99,9 @@ abstract final class McpClientConfig {
         if (server.args.isNotEmpty) {
           final args = server.args.map((a) => '"${_escapeToml(a)}"').join(', ');
           buffer.writeln('args = [$args]');
+        }
+        if (server.cwd != null && server.cwd!.isNotEmpty) {
+          buffer.writeln('cwd = "${_escapeToml(server.cwd!)}"');
         }
         if (server.env.isNotEmpty) {
           buffer.writeln();

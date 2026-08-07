@@ -51,7 +51,7 @@ class McpProcessManager {
       final process = await Process.start(
         command,
         server.args,
-        workingDirectory: server.localPath,
+        workingDirectory: server.cwd ?? server.localPath,
         environment: {
           ...Platform.environment,
           ...server.env,

@@ -4,7 +4,7 @@ class AppUpdateConstants {
 
   static const owner = 'MikeKen-Ken';
   static const repo = 'mcp-hub';
-  static const userAgent = 'McpHub-Updater';
+  static const userAgent = 'AgentHub-Updater';
 
   /// 已成功安装的包资源 `updated_at`（ISO8601），用于同版本覆盖包检测。
   static const prefsLastAssetUpdatedAt = 'app_update_last_asset_updated_at';

@@ -9,7 +9,6 @@ SyncableServer server(String id, {int updatedAt = 1, String? name}) {
     transport: 'stdio',
     updatedAt: updatedAt,
     command: 'npx',
-    enabled: true,
   );
 }
 

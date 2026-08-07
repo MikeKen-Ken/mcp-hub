@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.mikeken" "\0"
-            VALUE "FileDescription", "mcp_hub" "\0"
+            VALUE "FileDescription", "Agent Hub" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "mcp_hub" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.mikeken. All rights reserved." "\0"
             VALUE "OriginalFilename", "mcp_hub.exe" "\0"
-            VALUE "ProductName", "mcp_hub" "\0"
+            VALUE "ProductName", "Agent Hub" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

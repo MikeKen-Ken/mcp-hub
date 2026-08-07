@@ -40,7 +40,6 @@ abstract final class CatalogSyncMapper {
       command: s.command,
       args: s.args,
       url: s.url,
-      enabled: s.enabled,
       notes: s.notes,
     );
   }
@@ -89,8 +88,10 @@ abstract final class CatalogSyncMapper {
       command: sync.command,
       args: sync.args,
       env: existing?.env ?? const {},
+      cwd: existing?.cwd,
       url: sync.url,
-      enabled: sync.enabled,
+      // 开/关仅本机：拉取时保留本地状态；新条目默认关闭
+      enabled: existing?.enabled ?? false,
       autoStart: existing?.autoStart ?? false,
       builtIn: false,
       notes: sync.notes,

@@ -42,9 +42,7 @@ class SettingsSection extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: theme.textTheme.titleSmall,
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),

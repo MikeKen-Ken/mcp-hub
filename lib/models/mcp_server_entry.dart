@@ -11,6 +11,7 @@ class McpServerEntry {
     this.command,
     this.args = const [],
     this.env = const {},
+    this.cwd,
     this.url,
     this.enabled = false,
     this.autoStart = false,
@@ -27,6 +28,8 @@ class McpServerEntry {
   final String? command;
   final List<String> args;
   final Map<String, String> env;
+  /// stdio 工作目录（写入 Cursor/Codex；本机字段，不进 WebDAV）
+  final String? cwd;
   final String? url;
   final bool enabled;
   final bool autoStart;
@@ -45,6 +48,7 @@ class McpServerEntry {
     String? command,
     List<String>? args,
     Map<String, String>? env,
+    String? cwd,
     String? url,
     bool? enabled,
     bool? autoStart,
@@ -52,6 +56,7 @@ class McpServerEntry {
     String? notes,
     int? updatedAt,
     bool touch = false,
+    bool clearCwd = false,
   }) {
     return McpServerEntry(
       id: id ?? this.id,
@@ -62,6 +67,7 @@ class McpServerEntry {
       command: command ?? this.command,
       args: args ?? this.args,
       env: env ?? this.env,
+      cwd: clearCwd ? null : (cwd ?? this.cwd),
       url: url ?? this.url,
       enabled: enabled ?? this.enabled,
       autoStart: autoStart ?? this.autoStart,
@@ -82,6 +88,7 @@ class McpServerEntry {
         if (command != null) 'command': command,
         if (args.isNotEmpty) 'args': args,
         if (env.isNotEmpty) 'env': env,
+        if (cwd != null) 'cwd': cwd,
         if (url != null) 'url': url,
         'enabled': enabled,
         'autoStart': autoStart,
@@ -106,6 +113,7 @@ class McpServerEntry {
       env: envRaw is Map
           ? envRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
           : const {},
+      cwd: json['cwd'] as String?,
       url: json['url'] as String?,
       enabled: json['enabled'] as bool? ?? false,
       autoStart: json['autoStart'] as bool? ?? false,

@@ -6,7 +6,7 @@ import 'hub_mcp_constants.dart';
 import 'hub_mcp_results.dart';
 import 'mcp_client_configurator.dart';
 
-/// Register tools so Cursor/Codex can operate MCP Hub itself.
+/// Register tools so Cursor/Codex can operate Agent Hub itself.
 void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'list_servers',
@@ -30,6 +30,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
               'localPath': s.localPath,
               'command': s.command,
               'args': s.args,
+              'env': s.env,
+              'cwd': s.cwd,
               'url': s.url,
               'autoStart': s.autoStart,
             },
@@ -42,7 +44,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'add_server',
     description:
         '添加一个 MCP：可传 GitHub URL（名称可省略，自动取仓库名），'
-        'stdio 填 command/args，HTTP 填 url',
+        'stdio 填 command/args/env/cwd，HTTP 填 url',
     inputSchema: JsonSchema.object(
       properties: {
         'repoUrl': JsonSchema.string(description: 'Git 仓库 URL'),
@@ -50,6 +52,11 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'transport': JsonSchema.string(description: 'stdio 或 http，默认 stdio'),
         'command': JsonSchema.string(),
         'args': JsonSchema.array(items: JsonSchema.string()),
+        'env': JsonSchema.object(
+          description: '环境变量（仅存本机，不进 WebDAV）',
+          additionalProperties: JsonSchema.string(),
+        ),
+        'cwd': JsonSchema.string(description: 'stdio 工作目录（本机路径）'),
         'url': JsonSchema.string(description: 'HTTP 端点'),
         'enabled': JsonSchema.boolean(description: '默认 true'),
         'cloneRepo': JsonSchema.boolean(description: '是否 git clone，默认 true'),
@@ -76,6 +83,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           repoUrl: mcpTrimmedString(args['repoUrl']),
           command: mcpTrimmedString(args['command']),
           args: mcpStringList(args['args']),
+          env: mcpStringMap(args['env']),
+          cwd: mcpTrimmedString(args['cwd']),
           url: mcpTrimmedString(args['url']),
           enabled: mcpBool(args['enabled'], fallback: true),
           autoStart: mcpBool(args['autoStart']),
@@ -158,7 +167,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'remove_server',
-    description: '从 Hub 移除 MCP 条目（不能移除内置 hubMCP；不删本地目录）',
+    description: '从 Hub 移除 MCP 条目并删除本地 clone（不能移除内置 hubMCP）',
     inputSchema: JsonSchema.object(
       properties: {
         'id': JsonSchema.string(),

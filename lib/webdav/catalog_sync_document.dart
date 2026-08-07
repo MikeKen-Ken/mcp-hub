@@ -1,4 +1,4 @@
-/// Syncable MCP catalog fields (no secrets, no machine paths).
+/// Syncable MCP catalog fields (no secrets, no machine paths, no enable state).
 class SyncableServer {
   const SyncableServer({
     required this.id,
@@ -9,7 +9,6 @@ class SyncableServer {
     this.command,
     this.args = const [],
     this.url,
-    this.enabled = true,
     this.notes,
   });
 
@@ -21,7 +20,6 @@ class SyncableServer {
   final String? command;
   final List<String> args;
   final String? url;
-  final bool enabled;
   final String? notes;
 
   Map<String, dynamic> toJson() => {
@@ -33,7 +31,6 @@ class SyncableServer {
         if (command != null) 'command': command,
         if (args.isNotEmpty) 'args': args,
         if (url != null) 'url': url,
-        'enabled': enabled,
         if (notes != null) 'notes': notes,
       };
 
@@ -50,7 +47,7 @@ class SyncableServer {
           ? argsRaw.map((e) => e.toString()).toList()
           : const [],
       url: json['url'] as String?,
-      enabled: json['enabled'] as bool? ?? true,
+      // 忽略远端历史字段 enabled：开/关仅本机有效
       notes: json['notes'] as String?,
     );
   }
@@ -63,7 +60,6 @@ class SyncableServer {
         command == other.command &&
         _listEq(args, other.args) &&
         url == other.url &&
-        enabled == other.enabled &&
         notes == other.notes;
   }
 

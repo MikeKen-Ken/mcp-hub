@@ -8,7 +8,7 @@ import 'mcp_paths.dart';
 
 enum HubMcpStatus { stopped, starting, running, error }
 
-/// Embedded Streamable HTTP MCP for MCP Hub itself.
+/// Embedded Streamable HTTP MCP for Agent Hub itself.
 class HubMcpHost extends ChangeNotifier {
   HubMcpHost(this._hub);
 

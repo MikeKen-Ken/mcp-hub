@@ -94,4 +94,52 @@ class McpRepoService {
       message: out.isEmpty ? '已是最新' : out,
     );
   }
+
+  /// 删除 Hub 管理的本地 clone（仅允许 `serversRoot` 下的子目录）。
+  Future<McpRepoCloneResult> deleteLocal({required String localPath}) async {
+    final root = McpPaths.serversRoot;
+    if (root == null) {
+      return const McpRepoCloneResult(
+        ok: false,
+        message: '当前平台不支持本地仓库管理',
+      );
+    }
+
+    final normalizedRoot = p.normalize(root);
+    final normalizedPath = p.normalize(localPath);
+    final relative = p.relative(normalizedPath, from: normalizedRoot);
+    if (relative == '.' ||
+        relative.startsWith('..') ||
+        p.isAbsolute(relative)) {
+      return McpRepoCloneResult(
+        ok: true,
+        localPath: normalizedPath,
+        message: '路径不在 Hub servers 下，跳过删除本地目录',
+      );
+    }
+
+    final dir = Directory(normalizedPath);
+    if (!await dir.exists()) {
+      return McpRepoCloneResult(
+        ok: true,
+        localPath: normalizedPath,
+        message: '本地目录不存在，跳过删除',
+      );
+    }
+
+    try {
+      await dir.delete(recursive: true);
+      return McpRepoCloneResult(
+        ok: true,
+        localPath: normalizedPath,
+        message: '已删除本地目录 $normalizedPath',
+      );
+    } catch (error) {
+      return McpRepoCloneResult(
+        ok: false,
+        localPath: normalizedPath,
+        message: '删除本地目录失败：$error',
+      );
+    }
+  }
 }

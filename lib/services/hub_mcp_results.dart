@@ -46,3 +46,12 @@ List<String> mcpStringList(Object? value) {
   }
   return const [];
 }
+
+Map<String, String> mcpStringMap(Object? value) {
+  if (value is Map) {
+    return value.map(
+      (k, v) => MapEntry(k.toString(), v.toString()),
+    );
+  }
+  return const {};
+}
