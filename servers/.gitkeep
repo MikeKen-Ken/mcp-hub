@@ -1,0 +1,2 @@
+# Optional: pin MCP repos as git submodules for development mirrors.
+# Runtime checkouts live in ~/.mcp-hub/servers by default.
