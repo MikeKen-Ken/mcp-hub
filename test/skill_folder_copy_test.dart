@@ -27,6 +27,21 @@ void main() {
       expect(AgentResourceKind.command.supports(SkillTarget.codex), isFalse);
       expect(AgentResourceKind.rule.supports(SkillTarget.codex), isTrue);
     });
+
+    test('supportedTargets 随 supports 过滤', () {
+      expect(
+        AgentResourceKind.skill.supportedTargets.toList(),
+        [SkillTarget.cursor, SkillTarget.codex],
+      );
+      expect(
+        AgentResourceKind.command.supportedTargets.toList(),
+        [SkillTarget.cursor],
+      );
+      expect(
+        AgentResourceKind.rule.supportedTargets.toList(),
+        [SkillTarget.cursor, SkillTarget.codex],
+      );
+    });
   });
 
   group('SkillFolderCopy', () {

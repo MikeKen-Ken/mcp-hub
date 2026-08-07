@@ -319,7 +319,9 @@ class AgentConfigSyncScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '从 WebDAV 拉取并部署到本机，或把本机配置上传到 WebDAV。同步采用合并覆盖，不删除目标中的额外文件。',
+            '每种资源一键同步/上传，覆盖该类型支持的全部客户端。'
+            '从 WebDAV 拉取并部署到本机，或把本机配置上传到 WebDAV。'
+            '同步采用合并覆盖，不删除目标中的额外文件。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -393,100 +395,45 @@ class _ResourceSyncCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: FilledButton.tonalIcon(
-                    onPressed: !supported || !webDavReady || busy ||
-                            !resource.supports(SkillTarget.cursor)
+                    onPressed: !supported || !webDavReady || busy
                         ? null
                         : () => _run(
                             context,
-                            () => hub.syncResourceFromWebDav(
-                              resource,
-                              SkillTarget.cursor,
-                            ),
+                            () => hub.syncResourceToAllTargets(resource),
                           ),
                     icon: const Icon(Icons.cloud_download_outlined),
-                    label: const Text('同步 Cursor'),
+                    label: const Text('同步'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: !supported || !webDavReady || busy ||
-                            !resource.supports(SkillTarget.codex)
+                  child: OutlinedButton.icon(
+                    onPressed: !supported || !webDavReady || busy
                         ? null
                         : () => _run(
                             context,
-                            () => hub.syncResourceFromWebDav(
-                              resource,
-                              SkillTarget.codex,
-                            ),
+                            () => hub.pushResourceToAllTargets(resource),
                           ),
-                    icon: const Icon(Icons.cloud_download_outlined),
-                    label: const Text('同步 Codex'),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('上传'),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: !supported || !webDavReady || busy ||
-                            !resource.supports(SkillTarget.cursor)
-                        ? null
-                        : () => _run(
-                            context,
-                            () => hub.pushResourceToWebDav(
-                              resource,
-                              SkillTarget.cursor,
-                            ),
-                          ),
-                    child: const Text('上传 Cursor'),
-                  ),
+            for (final target in SkillTarget.values)
+              _DirectoryPathRow(
+                label: target.label,
+                displayPath: hub.skillSync.resourceDeployPathFor(
+                  resource,
+                  target,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: !supported || !webDavReady || busy ||
-                            !resource.supports(SkillTarget.codex)
-                        ? null
-                        : () => _run(
-                            context,
-                            () => hub.pushResourceToWebDav(
-                              resource,
-                              SkillTarget.codex,
-                            ),
-                          ),
-                    child: const Text('上传 Codex'),
-                  ),
+                directoryPath: hub.skillSync.resourceDeployPathFor(
+                  resource,
+                  target,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _DirectoryPathRow(
-              label: 'Cursor',
-              displayPath: hub.skillSync.resourceDeployPathFor(
-                resource,
-                SkillTarget.cursor,
+                enabled: supported && resource.supports(target),
               ),
-              directoryPath: hub.skillSync.resourceDeployPathFor(
-                resource,
-                SkillTarget.cursor,
-              ),
-              enabled: supported && resource.supports(SkillTarget.cursor),
-            ),
-            _DirectoryPathRow(
-              label: 'Codex',
-              displayPath: hub.skillSync.resourceDeployPathFor(
-                resource,
-                SkillTarget.codex,
-              ),
-              directoryPath: hub.skillSync.resourceDeployPathFor(
-                resource,
-                SkillTarget.codex,
-              ),
-              enabled: supported && resource.supports(SkillTarget.codex),
-            ),
             _DirectoryPathRow(
               label: '缓存',
               displayPath: McpPaths.resourceCachePath(
@@ -505,11 +452,15 @@ class _ResourceSyncCard extends StatelessWidget {
     );
   }
 
-  String _supportDescription() => switch (resource) {
-        AgentResourceKind.skill => '支持 Cursor / Codex',
-        AgentResourceKind.command => '支持 Cursor；Codex 暂无对等的全局目录',
-        AgentResourceKind.rule => '支持 Cursor / Codex',
-      };
+  String _supportDescription() {
+    final labels =
+        resource.supportedTargets.map((t) => t.label).join('、');
+    if (resource == AgentResourceKind.command &&
+        !resource.supports(SkillTarget.codex)) {
+      return '将同步/上传：$labels（Codex 暂无对等的全局 Command 目录）';
+    }
+    return '将同步/上传：$labels';
+  }
 }
 
 class _ClientConfigCard extends StatelessWidget {

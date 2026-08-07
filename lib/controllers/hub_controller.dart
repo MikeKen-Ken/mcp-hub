@@ -472,19 +472,30 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
-  Future<SkillSyncResult> syncAllSkillsFromWebDav() async {
-    final cursor = await skillSync.syncFromWebDav(SkillTarget.cursor);
-    final codex = await skillSync.syncFromWebDav(SkillTarget.codex);
-    final message = '${cursor.message}；${codex.message}';
-    _lastMessage = message;
+  Future<SkillSyncResult> syncResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.syncResourceToAllTargets(resource);
+    _lastMessage = result.message;
     notifyListeners();
-    return SkillSyncResult(
-      ok: cursor.ok && codex.ok,
-      message: message,
-      pulledFiles: cursor.pulledFiles + codex.pulledFiles,
-      deployedFiles: cursor.deployedFiles + codex.deployedFiles,
-      packageCount: cursor.packageCount + codex.packageCount,
-    );
+    return result;
+  }
+
+  Future<SkillSyncResult> pushResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.pushResourceToAllTargets(resource);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> syncAllSkillsFromWebDav() async {
+    return syncResourceToAllTargets(AgentResourceKind.skill);
+  }
+
+  Future<SkillSyncResult> pushAllSkillsToWebDav() async {
+    return pushResourceToAllTargets(AgentResourceKind.skill);
   }
 
   Future<void> _persist({bool scheduleRemote = true}) async {

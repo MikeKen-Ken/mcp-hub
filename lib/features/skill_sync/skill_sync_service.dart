@@ -65,12 +65,14 @@ class SkillSyncService extends ChangeNotifier {
   String? resourceCachePathFor(
     AgentResourceKind resource,
     SkillTarget target,
-  ) => McpPaths.resourceCachePath(resource.wireName, target.wireName);
+  ) =>
+      McpPaths.resourceCachePath(resource.wireName, target.wireName);
 
   String? resourceDeployPathFor(
     AgentResourceKind resource,
     SkillTarget target,
-  ) => switch ((resource, target)) {
+  ) =>
+      switch ((resource, target)) {
         (AgentResourceKind.skill, SkillTarget.cursor) =>
           McpPaths.cursorSkillsPath,
         (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
@@ -91,50 +93,45 @@ class SkillSyncService extends ChangeNotifier {
     AgentResourceKind resource,
     SkillTarget target,
   ) async {
-    return _run(resource, target, () async {
-      final config = await _loadConfig();
-      if (!config.enabled || !config.isConfigured) {
-        throw StateError('请先配置并启用 WebDAV');
-      }
-      final cachePath = resourceCachePathFor(resource, target);
-      final deployPath = resourceDeployPathFor(resource, target);
-      if (cachePath == null || deployPath == null) {
-        throw StateError('${target.label} 不支持 ${resource.label} 同步');
+    return _run(resource, target, () => _doSyncOne(resource, target));
+  }
+
+  /// 从 WebDAV 拉取并部署到该资源支持的全部客户端（一次忙状态）。
+  Future<SkillSyncResult> syncResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    return _run(resource, null, () async {
+      final targets = resource.supportedTargets.toList();
+      if (targets.isEmpty) {
+        throw StateError('${resource.label} 没有可同步的客户端');
       }
 
-      final client = _folderSync.clientFor(config);
-      if (client == null) {
-        throw StateError('WebDAV 未配置完整');
-      }
+      var pulledFiles = 0;
+      var deployedFiles = 0;
+      var packageCount = 0;
+      final parts = <String>[];
+      var allOk = true;
 
-      final remote = _folderSync.remoteResourceDir(
-        config,
-        resource.wireName,
-        target.wireName,
-      );
-      final pulled = await _folderSync.pullFolder(
-        client: client,
-        remoteDir: remote,
-        localDir: cachePath,
-      );
-      final deploy = await _folderCopy.copyContents(
-        sourceDir: cachePath,
-        targetDir: deployPath,
-      );
-      final packages = resource == AgentResourceKind.skill
-          ? await _folderCopy.countSkillPackages(deployPath)
-          : 0;
+      for (final target in targets) {
+        try {
+          final one = await _doSyncOne(resource, target);
+          pulledFiles += one.pulledFiles;
+          deployedFiles += one.deployedFiles;
+          packageCount += one.packageCount;
+          parts.add(one.message);
+        } catch (error) {
+          allOk = false;
+          parts.add('${target.label}：失败（$error）');
+          debugPrint('${resource.label} 同步 ${target.label} 失败: $error');
+        }
+      }
 
       return SkillSyncResult(
-        ok: true,
-        target: target,
-        pulledFiles: pulled,
-        deployedFiles: deploy.copiedFiles,
-        packageCount: packages,
-        message: '已同步 ${target.label} ${resource.label}：'
-            '拉取 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
-            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-            ' → $deployPath',
+        ok: allOk,
+        pulledFiles: pulledFiles,
+        deployedFiles: deployedFiles,
+        packageCount: packageCount,
+        message: parts.join('；'),
       );
     });
   }
@@ -148,55 +145,42 @@ class SkillSyncService extends ChangeNotifier {
     AgentResourceKind resource,
     SkillTarget target,
   ) async {
-    return _run(resource, target, () async {
-      final config = await _loadConfig();
-      if (!config.enabled || !config.isConfigured) {
-        throw StateError('请先配置并启用 WebDAV');
-      }
-      final cachePath = resourceCachePathFor(resource, target);
-      final deployPath = resourceDeployPathFor(resource, target);
-      if (cachePath == null || deployPath == null) {
-        throw StateError('${target.label} 不支持 ${resource.label} 同步');
+    return _run(resource, target, () => _doPushOne(resource, target));
+  }
+
+  /// 把该资源支持的全部本机客户端目录上传到 WebDAV（一次忙状态）。
+  Future<SkillSyncResult> pushResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    return _run(resource, null, () async {
+      final targets = resource.supportedTargets.toList();
+      if (targets.isEmpty) {
+        throw StateError('${resource.label} 没有可上传的客户端');
       }
 
-      // 优先以客户端目录为准；若尚无部署目录则直接推缓存。
-      final deployDir = Directory(deployPath);
-      if (await deployDir.exists()) {
-        await _folderCopy.copyContents(
-          sourceDir: deployPath,
-          targetDir: cachePath,
-        );
-      } else {
-        await Directory(cachePath).create(recursive: true);
-      }
+      var pushedFiles = 0;
+      var packageCount = 0;
+      final parts = <String>[];
+      var allOk = true;
 
-      final client = _folderSync.clientFor(config);
-      if (client == null) {
-        throw StateError('WebDAV 未配置完整');
+      for (final target in targets) {
+        try {
+          final one = await _doPushOne(resource, target);
+          pushedFiles += one.pushedFiles;
+          packageCount += one.packageCount;
+          parts.add(one.message);
+        } catch (error) {
+          allOk = false;
+          parts.add('${target.label}：失败（$error）');
+          debugPrint('${resource.label} 上传 ${target.label} 失败: $error');
+        }
       }
-
-      final remote = _folderSync.remoteResourceDir(
-        config,
-        resource.wireName,
-        target.wireName,
-      );
-      final pushed = await _folderSync.pushFolder(
-        client: client,
-        remoteDir: remote,
-        localDir: cachePath,
-      );
-      final packages = resource == AgentResourceKind.skill
-          ? await _folderCopy.countSkillPackages(cachePath)
-          : 0;
 
       return SkillSyncResult(
-        ok: true,
-        target: target,
-        pushedFiles: pushed,
-        packageCount: packages,
-        message: '已上传 ${target.label} ${resource.label}：$pushed 个文件'
-            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-            ' → $remote',
+        ok: allOk,
+        pushedFiles: pushedFiles,
+        packageCount: packageCount,
+        message: parts.join('；'),
       );
     });
   }
@@ -225,9 +209,114 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  Future<SkillSyncResult> _run(
+  Future<SkillSyncResult> _doSyncOne(
     AgentResourceKind resource,
     SkillTarget target,
+  ) async {
+    final config = await _loadConfig();
+    if (!config.enabled || !config.isConfigured) {
+      throw StateError('请先配置并启用 WebDAV');
+    }
+    final cachePath = resourceCachePathFor(resource, target);
+    final deployPath = resourceDeployPathFor(resource, target);
+    if (cachePath == null || deployPath == null) {
+      throw StateError('${target.label} 不支持 ${resource.label} 同步');
+    }
+
+    final client = _folderSync.clientFor(config);
+    if (client == null) {
+      throw StateError('WebDAV 未配置完整');
+    }
+
+    final remote = _folderSync.remoteResourceDir(
+      config,
+      resource.wireName,
+      target.wireName,
+    );
+    final pulled = await _folderSync.pullFolder(
+      client: client,
+      remoteDir: remote,
+      localDir: cachePath,
+    );
+    final deploy = await _folderCopy.copyContents(
+      sourceDir: cachePath,
+      targetDir: deployPath,
+    );
+    final packages = resource == AgentResourceKind.skill
+        ? await _folderCopy.countSkillPackages(deployPath)
+        : 0;
+
+    return SkillSyncResult(
+      ok: true,
+      target: target,
+      pulledFiles: pulled,
+      deployedFiles: deploy.copiedFiles,
+      packageCount: packages,
+      message: '已同步 ${target.label} ${resource.label}：'
+          '拉取 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
+          '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          ' → $deployPath',
+    );
+  }
+
+  Future<SkillSyncResult> _doPushOne(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    final config = await _loadConfig();
+    if (!config.enabled || !config.isConfigured) {
+      throw StateError('请先配置并启用 WebDAV');
+    }
+    final cachePath = resourceCachePathFor(resource, target);
+    final deployPath = resourceDeployPathFor(resource, target);
+    if (cachePath == null || deployPath == null) {
+      throw StateError('${target.label} 不支持 ${resource.label} 同步');
+    }
+
+    // 优先以客户端目录为准；若尚无部署目录则直接推缓存。
+    final deployDir = Directory(deployPath);
+    if (await deployDir.exists()) {
+      await _folderCopy.copyContents(
+        sourceDir: deployPath,
+        targetDir: cachePath,
+      );
+    } else {
+      await Directory(cachePath).create(recursive: true);
+    }
+
+    final client = _folderSync.clientFor(config);
+    if (client == null) {
+      throw StateError('WebDAV 未配置完整');
+    }
+
+    final remote = _folderSync.remoteResourceDir(
+      config,
+      resource.wireName,
+      target.wireName,
+    );
+    final pushed = await _folderSync.pushFolder(
+      client: client,
+      remoteDir: remote,
+      localDir: cachePath,
+    );
+    final packages = resource == AgentResourceKind.skill
+        ? await _folderCopy.countSkillPackages(cachePath)
+        : 0;
+
+    return SkillSyncResult(
+      ok: true,
+      target: target,
+      pushedFiles: pushed,
+      packageCount: packages,
+      message: '已上传 ${target.label} ${resource.label}：$pushed 个文件'
+          '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          ' → $remote',
+    );
+  }
+
+  Future<SkillSyncResult> _run(
+    AgentResourceKind resource,
+    SkillTarget? target,
     Future<SkillSyncResult> Function() action,
   ) async {
     if (status == SkillSyncStatus.syncing) {
@@ -247,8 +336,8 @@ class SkillSyncService extends ChangeNotifier {
       final result = await action();
       lastMessage = result.message;
       lastSyncedAt = DateTime.now();
-      lastError = null;
-      status = SkillSyncStatus.success;
+      lastError = result.ok ? null : result.message;
+      status = result.ok ? SkillSyncStatus.success : SkillSyncStatus.error;
       notifyListeners();
       return result;
     } catch (error) {

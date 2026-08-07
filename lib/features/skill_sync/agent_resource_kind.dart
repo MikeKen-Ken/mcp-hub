@@ -23,4 +23,8 @@ enum AgentResourceKind {
         (AgentResourceKind.command, SkillTarget.codex) => false,
         _ => true,
       };
+
+  /// 该资源支持同步的全部客户端（新增客户端时随 [SkillTarget] / [supports] 自动扩展）。
+  Iterable<SkillTarget> get supportedTargets =>
+      SkillTarget.values.where(supports);
 }

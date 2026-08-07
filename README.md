@@ -26,7 +26,7 @@
 1. 旧电脑启用 WebDAV，远端目录例如 `/McpHub`
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
-4. 在「Agent 配置同步」中按类型同步本机配置
+4. 在「Agent 配置同步」中按资源类型一键同步/上传（覆盖该资源支持的全部客户端）
 
 同步：仓库 URL、command/args 等。  
 不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
@@ -51,7 +51,7 @@
 | Cursor Rule | `{remotePath}/rules/cursor/` | `~/.cursor/rules/` |
 | Codex Rule | `{remotePath}/rules/codex/` | `~/.codex/rules/` |
 
-Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 目录对等的入口，因此界面中不提供 Codex Command 同步。
+Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 目录对等的入口，因此 Command 同步仅覆盖 Cursor。每种资源在界面上只有「同步」「上传」两个按钮，会自动覆盖该资源支持的全部客户端。
 
 ## 发布 / 更新
 

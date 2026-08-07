@@ -335,19 +335,14 @@ void registerHubMcpTools(McpServer server, HubController hub) {
             'packageCount': r.packageCount,
           });
         }
-        if (isPush) {
-          final cursor = await runOne(SkillTarget.cursor);
-          final codex = await runOne(SkillTarget.codex);
-          return mcpJsonResult({
-            'ok': cursor.ok && codex.ok,
-            'message': '${cursor.message}；${codex.message}',
-          });
-        }
-        final r = await hub.syncAllSkillsFromWebDav();
+        final r = isPush
+            ? await hub.pushAllSkillsToWebDav()
+            : await hub.syncAllSkillsFromWebDav();
         return mcpJsonResult({
           'ok': r.ok,
           'message': r.message,
           'pulledFiles': r.pulledFiles,
+          'pushedFiles': r.pushedFiles,
           'deployedFiles': r.deployedFiles,
           'packageCount': r.packageCount,
         });
