@@ -16,47 +16,59 @@
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
 - **WebDAV 同步**：跨电脑同步 MCP 清单（坚果云等）；账号密码仅存本机
-- **Agent 配置同步**：通过 WebDAV 同步 Skill、Command 和 Rule 文件夹
+- **Agent 配置同步**：WebDAV 只同步 Cursor 侧 Skill / Command / Rule；Codex 由本机从 Cursor 转换生成
 - **分层管理界面**：首页只展示功能入口；本地 MCP 收纳在「客户端 MCP」二级菜单中
 
 内置端点默认：`http://127.0.0.1:18766/mcp`（需桌面端运行；Web 预览无法真正起服务）
 
 ### WebDAV 换机流程
-
 1. 旧电脑启用 WebDAV，远端目录例如 `/AgentHub`
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
-4. 在「Agent 配置同步」中按资源类型一键同步/上传（覆盖该资源支持的全部客户端）
+4. 在「Agent 配置同步」中同步 Cursor 资源（Skill / Command / Rule）；Skill 与 Rule 会自动本机转换为 Codex
 
 同步：仓库 URL、command/args 等。  
+
 不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
 
-### Skill 目录约定
+### Agent 配置同步约定（Cursor-only 远端）
+**远端权威源只保留 Cursor 目录**，不再把 Codex 当作 WebDAV 上下行目标：
 
 | 角色 | 路径 |
 |------|------|
-| WebDAV Cursor | `{remotePath}/skills/cursor/` |
-| WebDAV Codex | `{remotePath}/skills/codex/` |
-| 本机缓存 | `~/.mcp-hub/skills/{cursor\|codex}/` |
-| 部署 Cursor | `~/.cursor/skills/` |
-| 部署 Codex | `~/.codex/skills/` |
+| WebDAV（权威） | `{remotePath}/{skills\|commands\|rules}/cursor/` |
+| 本机缓存 | `~/.mcp-hub/skills/cursor/` 或 `~/.mcp-hub/agent-resources/{commands\|rules}/cursor/` |
+| 部署 Cursor | `~/.cursor/skills/`、`~/.cursor/commands/`、`~/.cursor/rules/` |
+| 本机 Codex（转换产物） | `~/.codex/skills/`、`~/.codex/AGENTS.md` |
 
 每个 Skill 是一个含 `SKILL.md` 的子文件夹。同步为合并复制（覆盖同名，不删除目标多余项；跳过 `.` 开头目录）。
 
-### Command / Rule 目录约定
+**迁移说明**：若旧远端仍有 `{remotePath}/skills/codex/`、`rules/codex/` 等目录，新版本会**忽略、不再拉取也不再上传**；不会自动批量删除远端旧目录。可手工清理，或以 Cursor 为准重新「上传全部」。本机 Codex 请用同步后的自动转换或「一键转换」生成。
 
-| 类型 | WebDAV | 本机部署 |
-|------|--------|----------|
+### Command / Rule
+
+| 类型 | WebDAV | 本机 |
+|------|--------|------|
 | Cursor Command | `{remotePath}/commands/cursor/` | `~/.cursor/commands/` |
 | Cursor Rule | `{remotePath}/rules/cursor/` | `~/.cursor/rules/` |
-| Codex Rule | `{remotePath}/rules/codex/` | `~/.codex/rules/` |
+| Codex Rule | （不通过 WebDAV） | 由 Cursor Rule 转换写入 `~/.codex/AGENTS.md` |
 
-Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 目录对等的入口，因此 Command 同步仅覆盖 Cursor。每种资源在界面上只有「同步」「上传」两个按钮，会自动覆盖该资源支持的全部客户端。
+Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 对等的入口，因此 Command 不同步/不转换到 Codex。
+
+### 一键转换（Cursor → Codex）
+
+以本机 Cursor 目录为唯一编辑源，批量转换到 Codex（不依赖 WebDAV）。从 WebDAV **同步 Cursor 成功后也会自动执行** Skill / Rule 转换：
+
+| 资源 | 源 | 目标 | 转换内容 |
+|------|----|------|----------|
+| Skill | `~/.cursor/skills/` | `~/.codex/skills/` | 合并复制 Skill 包，并为每个包生成/更新 `agents/openai.yaml` |
+| Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` | 去掉 frontmatter，合并写入全局 `AGENTS.md`（整文件覆盖） |
+| Command | `~/.cursor/commands/` | — | Codex 暂无对等目录，按钮禁用 |
+
+界面提供「转换全部（Skill + Rule）」以及按资源的「一键转换」。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。若目标包已有 `openai.yaml`，会保留其中的 `allow_implicit_invocation`。
 
 ## 发布 / 更新
-
 推送到 `main` 会触发 GitHub Actions（`Push Build`）：
-
 - 自动解析下一版本号（相对最新正式 Release 升 patch，或沿用已抬高的 `pubspec`）
 - 构建 **Windows zip** + **Linux x64 tar.gz**
 - 以正式 Release 发布（资产名如 `McpHub-x.y.z-windows-x86-64.zip`）
@@ -71,6 +83,7 @@ $env:Path = "C:\Users\Administrator\AppData\Local\flutter\bin;" + $env:Path
 flutter pub get
 flutter run -d windows
 flutter test
+
 ```
 
 ## 数据目录

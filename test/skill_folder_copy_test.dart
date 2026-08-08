@@ -22,25 +22,20 @@ void main() {
       expect(AgentResourceKind.rule.wireName, 'rules');
     });
 
-    test('Command is Cursor-only', () {
-      expect(AgentResourceKind.command.supports(SkillTarget.cursor), isTrue);
-      expect(AgentResourceKind.command.supports(SkillTarget.codex), isFalse);
-      expect(AgentResourceKind.rule.supports(SkillTarget.codex), isTrue);
-    });
-
-    test('supportedTargets 随 supports 过滤', () {
-      expect(
-        AgentResourceKind.skill.supportedTargets.toList(),
-        [SkillTarget.cursor, SkillTarget.codex],
-      );
-      expect(
-        AgentResourceKind.command.supportedTargets.toList(),
-        [SkillTarget.cursor],
-      );
-      expect(
-        AgentResourceKind.rule.supportedTargets.toList(),
-        [SkillTarget.cursor, SkillTarget.codex],
-      );
+    test('WebDAV 仅 Cursor；Codex 靠本机转换', () {
+      for (final resource in AgentResourceKind.values) {
+        expect(resource.supportsWebDav(SkillTarget.cursor), isTrue);
+        expect(resource.supportsWebDav(SkillTarget.codex), isFalse);
+        expect(resource.webDavTargets.toList(), [SkillTarget.cursor]);
+        expect(resource.supportedTargets.toList(), [SkillTarget.cursor]);
+      }
+      expect(AgentResourceKind.skill.canConvertToCodex, isTrue);
+      expect(AgentResourceKind.rule.canConvertToCodex, isTrue);
+      expect(AgentResourceKind.command.canConvertToCodex, isFalse);
+      expect(AgentResourceKind.command.supportsLocalPath(SkillTarget.codex),
+          isFalse);
+      expect(AgentResourceKind.skill.supportsLocalPath(SkillTarget.codex),
+          isTrue);
     });
   });
 

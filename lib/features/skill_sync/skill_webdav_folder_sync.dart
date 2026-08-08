@@ -23,12 +23,14 @@ class SkillWebDavFolderSync {
     return client;
   }
 
-  /// `{remotePath}/skills/{cursor|codex}`
+  /// `{remotePath}/skills/cursor`（远端仅 Cursor；旧 `.../codex` 不再使用）。
   String remoteSkillsDir(WebDavConfig config, String targetWireName) {
     return remoteResourceDir(config, 'skills', targetWireName);
   }
 
-  /// `{remotePath}/{skills|commands|rules}/{cursor|codex}`
+  /// `{remotePath}/{skills|commands|rules}/cursor`
+  ///
+  /// 权威远端只保留 Cursor 侧目录；历史 `{...}/codex` 可忽略，勿再拉取/上传。
   String remoteResourceDir(
     WebDavConfig config,
     String resourceWireName,

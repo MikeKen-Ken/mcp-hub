@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../app_brand.dart';
+import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
@@ -46,6 +47,7 @@ class HubController extends ChangeNotifier {
       loadConfig: () async => webDavConfig,
     );
     skillSync.addListener(_onSkillSyncChanged);
+    configBackup = ConfigBackupService();
   }
 
   final McpCatalogStore _catalogStore;
@@ -57,19 +59,24 @@ class HubController extends ChangeNotifier {
   late final HubMcpHost hubMcpHost;
   late final WebDavSyncService webDavSync;
   late final SkillSyncService skillSync;
+  late final ConfigBackupService configBackup;
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
   bool _loading;
   String? _lastMessage;
-  bool? _cursorConfigured;
-  bool? _codexConfigured;
+  McpClientAlignReport? _cursorAlignReport;
+  McpClientAlignReport? _codexAlignReport;
 
   List<McpServerEntry> get servers => List.unmodifiable(_servers);
   bool get loading => _loading;
   String? get lastMessage => _lastMessage;
-  bool? get cursorConfigured => _cursorConfigured;
-  bool? get codexConfigured => _codexConfigured;
+  McpClientAlignReport? get cursorAlignReport => _cursorAlignReport;
+  McpClientAlignReport? get codexAlignReport => _codexAlignReport;
+  /// `null` 表示检测中；兼容旧 UI。
+  bool? get cursorConfigured => _cursorAlignReport?.isAligned;
+  /// `null` 表示检测中；兼容旧 UI。
+  bool? get codexConfigured => _codexAlignReport?.isAligned;
   bool get isDesktopSupported => McpPaths.isDesktopSupported;
 
   String get hubEndpointUrl => hubMcpHost.endpointUrl;
@@ -110,6 +117,7 @@ class HubController extends ChangeNotifier {
     await _catalogStore.save(_servers);
     _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
     notifyListeners();
+    await refreshClientStatus();
   }
 
   Future<void> _ensureBuiltInHubMcp({bool persist = true}) async {
@@ -150,6 +158,7 @@ class HubController extends ChangeNotifier {
     _servers = [..._servers];
     _servers[index] = _servers[index].copyWith(url: hubEndpointUrl);
     unawaited(_persist(scheduleRemote: false));
+    unawaited(refreshClientStatus());
   }
 
   Future<void> _syncHubMcpHost() async {
@@ -164,11 +173,14 @@ class HubController extends ChangeNotifier {
   }
 
   Future<void> refreshClientStatus() async {
-    _cursorConfigured = await McpClientConfigurator.areEnabledConfigured(
+    _cursorAlignReport = null;
+    _codexAlignReport = null;
+    notifyListeners();
+    _cursorAlignReport = await McpClientConfigurator.diagnoseEnabled(
       McpClientKind.cursor,
       servers: _servers,
     );
-    _codexConfigured = await McpClientConfigurator.areEnabledConfigured(
+    _codexAlignReport = await McpClientConfigurator.diagnoseEnabled(
       McpClientKind.codex,
       servers: _servers,
     );
@@ -201,6 +213,7 @@ class HubController extends ChangeNotifier {
       await _processManager.stop(id);
     }
     notifyListeners();
+    await refreshClientStatus();
   }
 
   Future<String> addServer({
@@ -264,6 +277,7 @@ class HubController extends ChangeNotifier {
     await _persist();
     _lastMessage = '已添加 ${entry.name}';
     notifyListeners();
+    await refreshClientStatus();
     return entry.id;
   }
 
@@ -347,6 +361,7 @@ class HubController extends ChangeNotifier {
     _lastMessage =
         deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
     notifyListeners();
+    await refreshClientStatus();
   }
 
   Future<void> startServer(String id) async {
@@ -531,12 +546,89 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
+  Future<SkillSyncResult> convertResourceFromCursor(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.convertFromCursor(resource);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  /// 一键转换全部可转换资源（Skill + Rule → Codex）。
+  Future<SkillSyncResult> convertAllResourcesFromCursor() async {
+    final result = await skillSync.convertAllFromCursor();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
   Future<SkillSyncResult> syncAllSkillsFromWebDav() async {
     return syncResourceToAllTargets(AgentResourceKind.skill);
   }
 
   Future<SkillSyncResult> pushAllSkillsToWebDav() async {
     return pushResourceToAllTargets(AgentResourceKind.skill);
+  }
+
+  Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
+    final result = await skillSync.syncAllResourcesFromWebDav();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> pushAllResourcesToWebDav() async {
+    final result = await skillSync.pushAllResourcesToWebDav();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<ConfigBackupResult> exportConfigBackup(String zipPath) async {
+    final result = await configBackup.exportToZip(
+      zipPath: zipPath,
+      servers: _servers,
+    );
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<ConfigBackupResult> importConfigBackup(String zipPath) async {
+    final payload = await configBackup.importFromZip(zipPath);
+    if (!payload.result.ok) {
+      _lastMessage = payload.result.message;
+      notifyListeners();
+      return payload.result;
+    }
+
+    if (payload.servers != null) {
+      await _applyImportedServers(payload.servers!);
+    }
+
+    await refreshClientStatus();
+    _lastMessage = payload.result.message;
+    notifyListeners();
+    return payload.result;
+  }
+
+  /// 用备份清单替换非内置 MCP，并按本机 servers 根目录重写 localPath。
+  Future<void> _applyImportedServers(List<McpServerEntry> imported) async {
+    final hubIndex =
+        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    final hub = hubIndex >= 0 ? _servers[hubIndex] : null;
+    final root = McpPaths.serversRoot;
+    _servers = [
+      ?hub,
+      for (final s in imported)
+        if (!s.builtIn && s.id != HubMcpConstants.serverKey)
+          s.copyWith(
+            localPath: root == null ? s.localPath : p.join(root, s.id),
+          ),
+    ];
+    await _ensureBuiltInHubMcp(persist: false);
+    await _persist();
   }
 
   Future<void> _persist({bool scheduleRemote = true}) async {

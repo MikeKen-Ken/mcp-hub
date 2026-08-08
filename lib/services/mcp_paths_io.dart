@@ -62,6 +62,10 @@ abstract final class McpPaths {
 
   static String get codexRulesPath => p.join(_userProfile, '.codex', 'rules');
 
+  /// Codex 全局 Agent 指引（由 Cursor `~/.cursor/rules` 一键转换写入）。
+  static String get codexAgentsMdPath =>
+      p.join(_userProfile, '.codex', 'AGENTS.md');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

@@ -19,5 +19,6 @@ abstract final class McpPaths {
   static String? get codexCommandsPath => null;
   static String? get cursorRulesPath => null;
   static String? get codexRulesPath => null;
+  static String? get codexAgentsMdPath => null;
   static bool get isDesktopSupported => false;
 }

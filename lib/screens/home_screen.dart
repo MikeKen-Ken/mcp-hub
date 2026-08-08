@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
+import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
 import '../services/directory_opener.dart';
@@ -93,11 +94,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 _FeatureCard(
                   icon: Icons.sync_alt_outlined,
                   title: 'Agent 配置同步',
-                  subtitle: '统一同步 Skill、Command 和 Rule',
+                  subtitle: 'WebDAV 同步 Cursor；本机转换 Codex',
                   status: _resourceSummary(hub),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const AgentConfigSyncScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _FeatureCard(
+                  icon: Icons.folder_zip_outlined,
+                  title: '配置备份',
+                  subtitle: '导出 / 恢复本机 MCP 与 Agent 配置',
+                  status: '建议定期保存到网盘或移动硬盘',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ConfigBackupScreen(),
                     ),
                   ),
                 ),
@@ -121,10 +134,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _clientSummary(HubController hub) {
-    if (hub.cursorConfigured == true && hub.codexConfigured == true) {
+    final cursor = hub.cursorAlignReport;
+    final codex = hub.codexAlignReport;
+    if (cursor == null || codex == null) {
+      return '正在检测…';
+    }
+    if (cursor.isAligned && codex.isAligned) {
       return 'Cursor / Codex 已对齐';
     }
-    return '有客户端尚未对齐';
+    final parts = <String>[];
+    if (!cursor.isAligned) parts.add(cursor.prefixedReason);
+    if (!codex.isAligned) parts.add(codex.prefixedReason);
+    return parts.join('；');
   }
 
   String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
@@ -342,19 +363,106 @@ class _WebDavStatusCard extends StatelessWidget {
 class AgentConfigSyncScreen extends StatelessWidget {
   const AgentConfigSyncScreen({super.key});
 
+  Future<void> _run(
+    BuildContext context,
+    Future<SkillSyncResult> Function() action,
+  ) async {
+    final result = await action();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final hub = context.watch<HubController>();
+    final supported = hub.isDesktopSupported;
+    final webDavReady =
+        hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
+    final busy = hub.skillSync.status == SkillSyncStatus.syncing;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Agent 配置同步')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '每种资源一键同步/上传，覆盖该类型支持的全部客户端。'
-            '从 WebDAV 拉取并部署到本机，或把本机配置上传到 WebDAV。'
-            '同步采用合并覆盖，不删除目标中的额外文件。',
+            'WebDAV 远端只保留 Cursor 目录（skills/commands/rules 的 cursor 侧）。'
+            '「同步」拉取 Cursor 后会自动本机转换为 Codex（Skill / Rule）；'
+            '「上传」只上传本机 Cursor，不会把 Codex 当作远端源。'
+            '也可不依赖 WebDAV，用下方「一键转换」从本机 Cursor 生成 Codex。'
+            '部署到客户端目录时采用合并覆盖，不删除目标中的额外文件。',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.layers_outlined),
+                    title: const Text('整体同步'),
+                    subtitle: Text(
+                      supported
+                          ? (webDavReady
+                                ? '一次拉取远端 Cursor（Skill / Command / Rule），'
+                                    '并自动转换 Skill + Rule 到本机 Codex'
+                                : '需先启用并配置 WebDAV')
+                          : '当前平台不支持目录同步',
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: !supported || !webDavReady || busy
+                              ? null
+                              : () => _run(
+                                    context,
+                                    hub.syncAllResourcesFromWebDav,
+                                  ),
+                          icon: const Icon(Icons.cloud_download_outlined),
+                          label: const Text('同步全部'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: !supported || !webDavReady || busy
+                              ? null
+                              : () => _run(
+                                    context,
+                                    hub.pushAllResourcesToWebDav,
+                                  ),
+                          icon: const Icon(Icons.cloud_upload_outlined),
+                          label: const Text('上传全部'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: !supported || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              hub.convertAllResourcesFromCursor,
+                            ),
+                    icon: const Icon(Icons.transform_outlined),
+                    label: const Text('转换全部（Skill + Rule）'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '不访问 WebDAV：以本机 Cursor 为源，生成 Codex Skills 与 AGENTS.md',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           for (final resource in AgentResourceKind.values) ...[
@@ -453,21 +561,35 @@ class _ResourceSyncCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: !supported || busy || !_canConvert
+                  ? null
+                  : () => _run(
+                      context,
+                      () => hub.convertResourceFromCursor(resource),
+                    ),
+              icon: const Icon(Icons.transform_outlined),
+              label: Text(_convertButtonLabel),
+            ),
+            if (_convertHint != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _convertHint!,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+            const SizedBox(height: 8),
             for (final target in SkillTarget.values)
               _DirectoryPathRow(
-                label: target.label,
-                displayPath: hub.skillSync.resourceDeployPathFor(
-                  resource,
-                  target,
-                ),
-                directoryPath: hub.skillSync.resourceDeployPathFor(
-                  resource,
-                  target,
-                ),
-                enabled: supported && resource.supports(target),
+                label: target == SkillTarget.cursor
+                    ? '${target.label}（WebDAV）'
+                    : '${target.label}（本机转换）',
+                displayPath: _pathLabelFor(target),
+                directoryPath: _directoryFor(target),
+                enabled: supported && resource.supportsLocalPath(target),
               ),
             _DirectoryPathRow(
-              label: '缓存',
+              label: '缓存（Cursor）',
               displayPath: McpPaths.resourceCachePath(
                 resource.wireName,
                 SkillTarget.cursor.wireName,
@@ -484,14 +606,46 @@ class _ResourceSyncCard extends StatelessWidget {
     );
   }
 
-  String _supportDescription() {
-    final labels =
-        resource.supportedTargets.map((t) => t.label).join('、');
-    if (resource == AgentResourceKind.command &&
-        !resource.supports(SkillTarget.codex)) {
-      return '将同步/上传：$labels（Codex 暂无对等的全局 Command 目录）';
+  bool get _canConvert => resource.canConvertToCodex;
+
+  String get _convertButtonLabel => switch (resource) {
+        AgentResourceKind.skill => '一键转换 Cursor → Codex',
+        AgentResourceKind.rule => '一键转换 Cursor → AGENTS.md',
+        AgentResourceKind.command => '一键转换（Codex 暂不支持）',
+      };
+
+  String? get _convertHint => switch (resource) {
+        AgentResourceKind.skill =>
+          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（同步 Cursor 后也会自动执行）',
+        AgentResourceKind.rule =>
+          '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
+              '（同步 Cursor 后也会自动执行）',
+        AgentResourceKind.command =>
+          'Codex 暂无与 Cursor 全局 Command 对等的目录',
+      };
+
+  String? _pathLabelFor(SkillTarget target) {
+    if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
+      return McpPaths.codexAgentsMdPath;
     }
-    return '将同步/上传：$labels';
+    return hub.skillSync.resourceDeployPathFor(resource, target);
+  }
+
+  String? _directoryFor(SkillTarget target) {
+    if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
+      return McpPaths.codexConfigDirectory;
+    }
+    return hub.skillSync.resourceDeployPathFor(resource, target);
+  }
+
+  String _supportDescription() {
+    if (resource == AgentResourceKind.command) {
+      return 'WebDAV 仅同步/上传 Cursor；Codex 暂无对等的全局 Command 目录';
+    }
+    if (resource == AgentResourceKind.rule) {
+      return 'WebDAV 仅同步/上传 Cursor；同步后自动（或一键）转换为 Codex AGENTS.md';
+    }
+    return 'WebDAV 仅同步/上传 Cursor；同步后自动（或一键）转换到本机 Codex';
   }
 }
 
@@ -500,15 +654,27 @@ class _ClientConfigCard extends StatelessWidget {
 
   final HubController hub;
 
-  String _status(bool? value) => switch (value) {
-    true => '已对齐',
-    false => '未对齐 / 部分缺失',
-    null => '检测中…',
-  };
+  String _buttonLabel(McpClientAlignReport? report) {
+    if (report == null) return '正在检测…';
+    return report.shortLabel;
+  }
 
   @override
   Widget build(BuildContext context) {
     final supported = hub.isDesktopSupported;
+    final cursor = hub.cursorAlignReport;
+    final codex = hub.codexAlignReport;
+    final detailLines = <String>[];
+    if (cursor == null || codex == null) {
+      detailLines.add('正在检测…');
+    } else {
+      if (!cursor.isAligned) detailLines.add(cursor.prefixedReason);
+      if (!codex.isAligned) detailLines.add(codex.prefixedReason);
+      if (detailLines.isEmpty) {
+        detailLines.add('Cursor / Codex 已对齐');
+      }
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -544,7 +710,7 @@ class _ClientConfigCard extends StatelessWidget {
                     onPressed: !supported
                         ? null
                         : () => hub.configureClient(McpClientKind.cursor),
-                    child: Text('Cursor · ${_status(hub.cursorConfigured)}'),
+                    child: Text('Cursor · ${_buttonLabel(cursor)}'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -553,10 +719,15 @@ class _ClientConfigCard extends StatelessWidget {
                     onPressed: !supported
                         ? null
                         : () => hub.configureClient(McpClientKind.codex),
-                    child: Text('Codex · ${_status(hub.codexConfigured)}'),
+                    child: Text('Codex · ${_buttonLabel(codex)}'),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              detailLines.join('\n'),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             _DirectoryPathRow(

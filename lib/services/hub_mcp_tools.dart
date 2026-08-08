@@ -282,8 +282,9 @@ void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'sync_skills',
     description:
-        '从 WebDAV 拉取 Skill 文件夹并复制到 Cursor/Codex 目录；'
-        'direction=push 则上传本机 Skill 到 WebDAV',
+        'WebDAV 仅同步 Cursor Skill；pull 成功后会自动本机转换为 Codex。'
+        'target=codex 且 direction=pull 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）；'
+        'direction=push 只上传本机 Cursor，不会上传 Codex',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
@@ -306,46 +307,37 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           mcpTrimmedString(args['direction'])?.toLowerCase() ?? 'pull';
       final isPush = direction == 'push';
 
-      Future<SkillSyncResult> runOne(SkillTarget target) {
-        return isPush
-            ? hub.pushSkillsToWebDav(target)
-            : hub.syncSkillsFromWebDav(target);
-      }
+      Map<String, Object?> pack(SkillSyncResult r) => {
+            'ok': r.ok,
+            'message': r.message,
+            'pulledFiles': r.pulledFiles,
+            'pushedFiles': r.pushedFiles,
+            'deployedFiles': r.deployedFiles,
+            'packageCount': r.packageCount,
+          };
 
       try {
-        if (targetRaw == 'cursor') {
-          final r = await runOne(SkillTarget.cursor);
-          return mcpJsonResult({
-            'ok': r.ok,
-            'message': r.message,
-            'pulledFiles': r.pulledFiles,
-            'pushedFiles': r.pushedFiles,
-            'deployedFiles': r.deployedFiles,
-            'packageCount': r.packageCount,
-          });
-        }
         if (targetRaw == 'codex') {
-          final r = await runOne(SkillTarget.codex);
-          return mcpJsonResult({
-            'ok': r.ok,
-            'message': r.message,
-            'pulledFiles': r.pulledFiles,
-            'pushedFiles': r.pushedFiles,
-            'deployedFiles': r.deployedFiles,
-            'packageCount': r.packageCount,
-          });
+          if (isPush) {
+            return mcpJsonResult({
+              'ok': false,
+              'message':
+                  '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
+            });
+          }
+          final r = await hub.convertResourceFromCursor(AgentResourceKind.skill);
+          return mcpJsonResult(pack(r));
+        }
+        if (targetRaw == 'cursor') {
+          final r = isPush
+              ? await hub.pushSkillsToWebDav(SkillTarget.cursor)
+              : await hub.syncSkillsFromWebDav(SkillTarget.cursor);
+          return mcpJsonResult(pack(r));
         }
         final r = isPush
             ? await hub.pushAllSkillsToWebDav()
             : await hub.syncAllSkillsFromWebDav();
-        return mcpJsonResult({
-          'ok': r.ok,
-          'message': r.message,
-          'pulledFiles': r.pulledFiles,
-          'pushedFiles': r.pushedFiles,
-          'deployedFiles': r.deployedFiles,
-          'packageCount': r.packageCount,
-        });
+        return mcpJsonResult(pack(r));
       } catch (error) {
         return mcpErrorResult('$error');
       }
