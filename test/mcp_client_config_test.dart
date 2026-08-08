@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/models/mcp_server_entry.dart';
 import 'package:mcp_hub/models/mcp_transport.dart';
 import 'package:mcp_hub/services/mcp_client_config.dart';
+import 'package:mcp_hub/services/mcp_client_configurator.dart';
 
 void main() {
   final httpServer = McpServerEntry(
@@ -52,6 +53,10 @@ void main() {
         McpClientConfig.isCursorServerConfigured(text, server: httpServer),
         isTrue,
       );
+      expect(
+        McpClientConfig.isCursorServerConfigured(text, server: stdioServer),
+        isTrue,
+      );
     });
 
     test('removes disabled managed servers', () {
@@ -94,6 +99,150 @@ void main() {
         McpClientConfig.isCodexServerConfigured(text, server: stdioServer),
         isTrue,
       );
+      expect(
+        McpClientConfig.isCodexServerConfigured(text, server: httpServer),
+        isTrue,
+      );
+      expect(McpClientConfig.hasCodexRmcpClient(text), isTrue);
+    });
+  });
+
+  group('diagnoseCursorServer', () {
+    test('reports missing server', () {
+      const existing = '{"mcpServers": {}}';
+      final d = McpClientConfig.diagnoseCursorServer(
+        existing,
+        server: httpServer,
+      );
+      expect(d.missing, isTrue);
+      expect(d.isAligned, isFalse);
+    });
+
+    test('reports field mismatches for stdio', () {
+      const existing = '''
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "node",
+      "args": ["wrong"],
+      "cwd": "D:\\\\other",
+      "env": { "FOO": "baz" }
+    }
+  }
+}
+''';
+      final d = McpClientConfig.diagnoseCursorServer(
+        existing,
+        server: stdioServer,
+      );
+      expect(d.missing, isFalse);
+      expect(d.diffs.map((e) => e.field), containsAll(['command', 'args', 'cwd', 'env']));
+    });
+
+    test('reports url mismatch for http', () {
+      const existing = '''
+{
+  "mcpServers": {
+    "kanbanMCP": { "url": "http://127.0.0.1:1/mcp", "type": "http" }
+  }
+}
+''';
+      final d = McpClientConfig.diagnoseCursorServer(
+        existing,
+        server: httpServer,
+      );
+      expect(d.missing, isFalse);
+      expect(d.diffs.single.field, 'url');
+    });
+  });
+
+  group('diagnoseCodexServer', () {
+    test('reports missing server without matching env table', () {
+      const existing = '''
+[mcp_servers.filesystem.env]
+FOO = "bar"
+''';
+      final d = McpClientConfig.diagnoseCodexServer(
+        existing,
+        server: stdioServer,
+      );
+      expect(d.missing, isTrue);
+    });
+
+    test('reports command mismatch and keeps env parse', () {
+      final existing = '''
+[mcp_servers.filesystem]
+command = "node"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+cwd = "C:\\\\work\\\\project"
+
+[mcp_servers.filesystem.env]
+FOO = "bar"
+''';
+      final d = McpClientConfig.diagnoseCodexServer(
+        existing,
+        server: stdioServer,
+      );
+      expect(d.missing, isFalse);
+      expect(d.diffs.single.field, 'command');
+      expect(d.diffs.single.actual, 'node');
+    });
+
+    test('detects missing rmcp_client', () {
+      expect(McpClientConfig.hasCodexRmcpClient('[mcp_servers.x]\ncommand = "a"\n'), isFalse);
+      expect(
+        McpClientConfig.hasCodexRmcpClient('[features]\nrmcp_client = true\n'),
+        isTrue,
+      );
+    });
+  });
+
+  group('McpClientAlignReport', () {
+    test('formats missing and field reasons', () {
+      const report = McpClientAlignReport(
+        kind: McpClientKind.cursor,
+        status: McpClientAlignStatus.incomplete,
+        missingServerIds: ['hubMCP', 'filesystem'],
+        fieldDiffs: [
+          McpClientFieldDiff(
+            serverId: 'kanbanMCP',
+            field: 'url',
+            expected: 'a',
+            actual: 'b',
+          ),
+        ],
+      );
+      expect(report.reasonText, contains('缺少 hubMCP、filesystem'));
+      expect(report.reasonText, contains('kanbanMCP.url 不一致'));
+      expect(report.prefixedReason, startsWith('Cursor：'));
+      expect(report.shortLabel, '未对齐');
+    });
+
+    test('formats file missing and parse error', () {
+      const missing = McpClientAlignReport(
+        kind: McpClientKind.codex,
+        status: McpClientAlignStatus.fileMissing,
+      );
+      expect(missing.reasonText, '配置文件不存在');
+      expect(missing.shortLabel, '配置文件不存在');
+
+      const parse = McpClientAlignReport(
+        kind: McpClientKind.cursor,
+        status: McpClientAlignStatus.parseError,
+        parseErrorMessage: 'Unexpected character',
+      );
+      expect(parse.reasonText, contains('配置解析失败'));
+      expect(parse.reasonText, contains('Unexpected character'));
+    });
+
+    test('formats rmcp_client missing', () {
+      const report = McpClientAlignReport(
+        kind: McpClientKind.codex,
+        status: McpClientAlignStatus.incomplete,
+        rmcpClientMissing: true,
+      );
+      expect(report.reasonText, '缺少 rmcp_client');
+      expect(report.prefixedReason, 'Codex：缺少 rmcp_client');
     });
   });
 }
