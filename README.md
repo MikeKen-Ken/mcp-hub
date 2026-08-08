@@ -15,23 +15,23 @@
   - Codex: `%USERPROFILE%\.codex\config.toml`（并确保 `features.rmcp_client = true`）
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
-- **WebDAV 同步**：跨电脑同步 MCP 清单（坚果云等）；账号密码仅存本机
-- **Agent 配置同步**：WebDAV 只同步 Cursor 侧 Skill / Command / Rule；Codex 由本机从 Cursor 转换生成
+- **WebDAV 下载/上传**：跨电脑下载/上传 MCP 清单（坚果云等）；账号密码仅存本机
+- **Agent 配置下载/上传**：WebDAV 只下载/上传 Cursor 侧 Skill / Command / Rule；Codex 由本机从 Cursor 转换生成
 - **分层管理界面**：首页只展示功能入口；本地 MCP 收纳在「客户端 MCP」二级菜单中
 
 内置端点默认：`http://127.0.0.1:18766/mcp`（需桌面端运行；Web 预览无法真正起服务）
 
 ### WebDAV 换机流程
 1. 旧电脑启用 WebDAV，远端目录例如 `/AgentHub`
-2. 新电脑安装 Agent Hub，填同一 WebDAV → 拉取
+2. 新电脑安装 Agent Hub，填同一 WebDAV → 下载
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
-4. 在「Agent 配置同步」中同步 Cursor 资源（Skill / Command / Rule）；Skill 与 Rule 会自动本机转换为 Codex
+4. 在「Agent 配置下载/上传」中下载 Cursor 资源（Skill / Command / Rule）；Skill 与 Rule 会自动本机转换为 Codex
 
-同步：仓库 URL、command/args 等。  
+下载/上传：仓库 URL、command/args 等。  
 
-不同步：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
+不下载/上传：WebDAV 密码、本机路径、`cwd`、`env` 密钥、MCP 开/关状态、内置 hubMCP。
 
-### Agent 配置同步约定（Cursor-only 远端）
+### Agent 配置下载/上传约定（Cursor-only 远端）
 **远端权威源只保留 Cursor 目录**，不再把 Codex 当作 WebDAV 上下行目标：
 
 | 角色 | 路径 |
@@ -41,9 +41,9 @@
 | 部署 Cursor | `~/.cursor/skills/`、`~/.cursor/commands/`、`~/.cursor/rules/` |
 | 本机 Codex（转换产物） | `~/.codex/skills/`、`~/.codex/AGENTS.md` |
 
-每个 Skill 是一个含 `SKILL.md` 的子文件夹。同步为合并复制（覆盖同名，不删除目标多余项；跳过 `.` 开头目录）。
+每个 Skill 是一个含 `SKILL.md` 的子文件夹。下载/上传为合并复制（覆盖同名，不删除目标多余项；跳过 `.` 开头目录）。
 
-**迁移说明**：若旧远端仍有 `{remotePath}/skills/codex/`、`rules/codex/` 等目录，新版本会**忽略、不再拉取也不再上传**；不会自动批量删除远端旧目录。可手工清理，或以 Cursor 为准重新「上传全部」。本机 Codex 请用同步后的自动转换或「一键转换」生成。
+**迁移说明**：若旧远端仍有 `{remotePath}/skills/codex/`、`rules/codex/` 等目录，新版本会**忽略、不再下载也不再上传**；不会自动批量删除远端旧目录。可手工清理，或以 Cursor 为准重新「上传全部」。本机 Codex 请用下载后的自动转换或「一键转换」生成。
 
 ### Command / Rule
 
@@ -53,11 +53,11 @@
 | Cursor Rule | `{remotePath}/rules/cursor/` | `~/.cursor/rules/` |
 | Codex Rule | （不通过 WebDAV） | 由 Cursor Rule 转换写入 `~/.codex/AGENTS.md` |
 
-Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 对等的入口，因此 Command 不同步/不转换到 Codex。
+Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 对等的入口，因此 Command 不下载/上传、不转换到 Codex。
 
 ### 一键转换（Cursor → Codex）
 
-以本机 Cursor 目录为唯一编辑源，批量转换到 Codex（不依赖 WebDAV）。从 WebDAV **同步 Cursor 成功后也会自动执行** Skill / Rule 转换：
+以本机 Cursor 目录为唯一编辑源，批量转换到 Codex（不依赖 WebDAV）。从 WebDAV **下载 Cursor 成功后也会自动执行** Skill / Rule 转换：
 
 | 资源 | 源 | 目标 | 转换内容 |
 |------|----|------|----------|

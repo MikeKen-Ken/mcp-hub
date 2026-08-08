@@ -14,20 +14,20 @@ void main() {
       );
     });
 
-    test('拒绝将 Codex 作为 WebDAV 拉取/上传目标', () async {
+    test('拒绝将 Codex 作为 WebDAV 下载/上传目标', () async {
       final pull = await service.syncResourceFromWebDav(
         AgentResourceKind.skill,
         SkillTarget.codex,
       );
       expect(pull.ok, isFalse);
-      expect(pull.message, contains('仅同步 Cursor'));
+      expect(pull.message, contains('仅下载/上传 Cursor'));
 
       final push = await service.pushResourceToWebDav(
         AgentResourceKind.rule,
         SkillTarget.codex,
       );
       expect(push.ok, isFalse);
-      expect(push.message, contains('仅同步 Cursor'));
+      expect(push.message, contains('仅下载/上传 Cursor'));
     });
 
     test('Command 一键转换明确不支持', () async {

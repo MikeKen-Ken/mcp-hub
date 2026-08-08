@@ -13,7 +13,7 @@ import 'skill_webdav_folder_sync.dart';
 
 enum SkillSyncStatus { idle, syncing, success, error }
 
-/// 一次 Skill 同步的结果摘要。
+/// 一次 Skill 下载/上传的结果摘要。
 class SkillSyncResult {
   const SkillSyncResult({
     required this.ok,
@@ -33,8 +33,8 @@ class SkillSyncResult {
   final int packageCount;
 }
 
-/// Agent 资源：WebDAV 仅同步 Cursor → 本机缓存 → 部署；
-/// 同步成功后对本机执行 Cursor→Codex 转换（Skill / Rule）。
+/// Agent 资源：WebDAV 仅下载 Cursor → 本机缓存 → 部署；
+/// 下载成功后对本机执行 Cursor→Codex 转换（Skill / Rule）。
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
     required Future<WebDavConfig> Function() loadConfig,
@@ -62,8 +62,8 @@ class SkillSyncService extends ChangeNotifier {
   SkillTarget? lastTarget;
   AgentResourceKind? lastResource;
   static const _codexNotOnWebDavMessage =
-      'WebDAV 仅同步 Cursor 目录；Codex 由本机从 Cursor 转换生成，'
-      '请使用「一键转换」或先同步 Cursor（同步后会自动转换）';
+      'WebDAV 仅下载/上传 Cursor 目录；Codex 由本机从 Cursor 转换生成，'
+      '请使用「一键转换」或先下载 Cursor（下载后会自动转换）';
   String? cachePathFor(SkillTarget target) => switch (target) {
         SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
         SkillTarget.codex => McpPaths.codexSkillsCachePath,
@@ -92,7 +92,7 @@ class SkillSyncService extends ChangeNotifier {
         (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
         (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
       };
-  /// 从 WebDAV 拉取并复制到目标客户端 Skill 目录。
+  /// 从 WebDAV 下载并复制到目标客户端 Skill 目录。
   Future<SkillSyncResult> syncFromWebDav(SkillTarget target) async {
     return syncResourceFromWebDav(AgentResourceKind.skill, target);
   }
@@ -111,14 +111,14 @@ class SkillSyncService extends ChangeNotifier {
     return _run(resource, target, () => _doSyncOne(resource, target));
   }
 
-  /// 从 WebDAV 拉取 Cursor 并部署；可转换资源会接着生成本机 Codex。
+  /// 从 WebDAV 下载 Cursor 并部署；可转换资源会接着生成本机 Codex。
   Future<SkillSyncResult> syncResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
     return _run(resource, null, () async {
       final targets = resource.webDavTargets.toList();
       if (targets.isEmpty) {
-        throw StateError('${resource.label} 没有可同步的客户端');
+        throw StateError('${resource.label} 没有可下载的客户端');
       }
       var pulledFiles = 0;
       var deployedFiles = 0;
@@ -136,7 +136,7 @@ class SkillSyncService extends ChangeNotifier {
         } catch (error) {
           allOk = false;
           parts.add('${target.label}：失败（$error）');
-          debugPrint('${resource.label} 同步 ${target.label} 失败: $error');
+          debugPrint('${resource.label} 下载 ${target.label} 失败: $error');
         }
       }
       return SkillSyncResult(
@@ -203,7 +203,7 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 一次性从 WebDAV 同步全部 Agent 资源（仅 Cursor），并自动转换到 Codex。
+  /// 一次性从 WebDAV 下载全部 Agent 资源（仅 Cursor），并自动转换到 Codex。
   Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
     return _run(null, null, () async {
       var pulledFiles = 0;
@@ -223,7 +223,7 @@ class SkillSyncService extends ChangeNotifier {
           } catch (error) {
             allOk = false;
             parts.add('${resource.label}/${target.label}：失败（$error）');
-            debugPrint('整体同步 ${resource.label} ${target.label} 失败: $error');
+            debugPrint('整体下载 ${resource.label} ${target.label} 失败: $error');
           }
         }
       }
@@ -232,7 +232,7 @@ class SkillSyncService extends ChangeNotifier {
         pulledFiles: pulledFiles,
         deployedFiles: deployedFiles,
         packageCount: packageCount,
-        message: parts.isEmpty ? '没有可同步的资源' : parts.join('；'),
+        message: parts.isEmpty ? '没有可下载的资源' : parts.join('；'),
       );
     });
   }
@@ -274,7 +274,7 @@ class SkillSyncService extends ChangeNotifier {
       final cachePath = cachePathFor(target);
       final deployPath = deployPathFor(target);
       if (cachePath == null || deployPath == null) {
-        throw StateError('当前平台不支持 Skill 同步');
+        throw StateError('当前平台不支持 Skill 下载/上传');
       }
       final deploy = await _folderCopy.copyContents(
         sourceDir: cachePath,
@@ -414,7 +414,7 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 同步 Cursor 成功后，对本机执行可转换资源的 Cursor→Codex。
+  /// 下载 Cursor 成功后，对本机执行可转换资源的 Cursor→Codex。
   Future<SkillSyncResult> _maybeConvertAfterCursorSync(
     AgentResourceKind resource,
     SkillSyncResult syncResult,
@@ -436,7 +436,7 @@ class SkillSyncService extends ChangeNotifier {
         message: '${syncResult.message}；${convert.message}',
       );
     } catch (error) {
-      debugPrint('${resource.label} 同步后转换 Codex 失败: $error');
+      debugPrint('${resource.label} 下载后转换 Codex 失败: $error');
       return SkillSyncResult(
         ok: false,
         target: SkillTarget.cursor,
@@ -459,13 +459,13 @@ class SkillSyncService extends ChangeNotifier {
     final cachePath = resourceCachePathFor(resource, target);
     final deployPath = resourceDeployPathFor(resource, target);
     if (cachePath == null || deployPath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 同步');
+      throw StateError('${target.label} 不支持 ${resource.label} 下载');
     }
     final client = _folderSync.clientFor(config);
     if (client == null) {
       throw StateError('WebDAV 未配置完整');
     }
-    // 远端仅 Cursor；旧的 .../codex/ 目录不再拉取。
+    // 远端仅 Cursor；旧的 .../codex/ 目录不再下载。
     final remote = _folderSync.remoteResourceDir(
       config,
       resource.wireName,
@@ -489,8 +489,8 @@ class SkillSyncService extends ChangeNotifier {
       pulledFiles: pulled,
       deployedFiles: deploy.copiedFiles,
       packageCount: packages,
-      message: '已同步 Cursor ${resource.label}：'
-          '拉取 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
+      message: '已下载 Cursor ${resource.label}：'
+          '下载 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $deployPath',
     );
@@ -511,7 +511,7 @@ class SkillSyncService extends ChangeNotifier {
     final cachePath = resourceCachePathFor(resource, target);
     final deployPath = resourceDeployPathFor(resource, target);
     if (cachePath == null || deployPath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 同步');
+      throw StateError('${target.label} 不支持 ${resource.label} 上传');
     }
     // 优先以客户端目录为准；若尚无部署目录则直接推缓存。
     final deployDir = Directory(deployPath);
@@ -560,7 +560,7 @@ class SkillSyncService extends ChangeNotifier {
     if (status == SkillSyncStatus.syncing) {
       return const SkillSyncResult(
         ok: false,
-        message: '配置同步进行中，请稍候',
+        message: '配置下载/上传进行中，请稍候',
       );
     }
     status = SkillSyncStatus.syncing;
@@ -580,7 +580,7 @@ class SkillSyncService extends ChangeNotifier {
       lastError = '$error';
       lastMessage = lastError;
       status = SkillSyncStatus.error;
-      debugPrint('Skill 同步失败: $error');
+      debugPrint('Skill 下载/上传失败: $error');
       notifyListeners();
       return SkillSyncResult(
         ok: false,

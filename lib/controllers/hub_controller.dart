@@ -455,18 +455,18 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.syncNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'WebDAV 同步完成'
-        : (webDavSync.lastError ?? '同步失败');
+        ? 'WebDAV 下载/上传完成'
+        : (webDavSync.lastError ?? '下载/上传失败');
     notifyListeners();
   }
 
-  /// 从 WebDAV 拉取并合并 MCP 清单到本机。
+  /// 从 WebDAV 下载并合并 MCP 清单到本机。
   Future<void> pullWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已从 WebDAV 同步 MCP 清单'
-        : (webDavSync.lastError ?? '同步失败');
+        ? '已从 WebDAV 下载 MCP 清单'
+        : (webDavSync.lastError ?? '下载失败');
     notifyListeners();
   }
 
@@ -487,7 +487,7 @@ class HubController extends ChangeNotifier {
       return false;
     }
     if (isWebDavSyncing) {
-      _lastMessage = '同步进行中，请稍候';
+      _lastMessage = '下载/上传进行中，请稍候';
       notifyListeners();
       return false;
     }

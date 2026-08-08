@@ -18,7 +18,7 @@ void main() {
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
     expect(find.text('客户端 MCP'), findsOneWidget);
-    expect(find.text('Agent 配置同步'), findsOneWidget);
+    expect(find.text('Agent 配置下载/上传'), findsOneWidget);
     expect(find.text('本地 MCP'), findsNothing);
 
     await tester.tap(find.text('客户端 MCP'));

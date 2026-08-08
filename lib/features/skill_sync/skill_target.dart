@@ -1,4 +1,4 @@
-/// Skill 同步目标客户端。
+/// Skill 下载/上传目标客户端。
 enum SkillTarget {
   cursor,
   codex;

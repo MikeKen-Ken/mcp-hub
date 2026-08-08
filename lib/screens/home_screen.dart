@@ -93,8 +93,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
                 _FeatureCard(
                   icon: Icons.sync_alt_outlined,
-                  title: 'Agent 配置同步',
-                  subtitle: 'WebDAV 同步 Cursor；本机转换 Codex',
+                  title: 'Agent 配置下载/上传',
+                  subtitle: 'WebDAV 下载 Cursor；本机转换 Codex',
                   status: _resourceSummary(hub),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -149,10 +149,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
-        SkillSyncStatus.idle => '尚未同步',
-        SkillSyncStatus.syncing => '同步中…',
-        SkillSyncStatus.success => '最近同步成功',
-        SkillSyncStatus.error => '最近同步失败',
+        SkillSyncStatus.idle => '尚未下载/上传',
+        SkillSyncStatus.syncing => '下载/上传中…',
+        SkillSyncStatus.success => '最近下载/上传成功',
+        SkillSyncStatus.error => '最近下载/上传失败',
       };
 }
 
@@ -214,7 +214,7 @@ class ClientMcpScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: webDavReady
-                ? '从 WebDAV 同步 MCP 清单'
+                ? '从 WebDAV 下载 MCP 清单'
                 : '需先启用并配置 WebDAV',
             onPressed: !webDavReady || syncing
                 ? null
@@ -322,20 +322,22 @@ class _WebDavStatusCard extends StatelessWidget {
         ? '未启用'
         : switch (sync.status) {
             CatalogSyncStatus.idle => '空闲',
-            CatalogSyncStatus.syncing => '同步中…',
+            CatalogSyncStatus.syncing => '下载/上传中…',
             CatalogSyncStatus.success => '成功',
             CatalogSyncStatus.error => '失败',
           };
     final when = sync.lastSyncedAt == null
-        ? '尚未同步'
+        ? '尚未下载/上传'
         : '上次：${sync.lastSyncedAt!.toLocal()}';
 
     return Card(
       child: ListTile(
         leading: const Icon(Icons.cloud_outlined),
-        title: const Text('WebDAV 配置同步'),
+        title: const Text('WebDAV 配置下载/上传'),
         subtitle: Text(
-          cfg.enabled ? '$statusText · $when' : '换电脑时可同步 MCP 清单；点右侧齿轮配置',
+          cfg.enabled
+              ? '$statusText · $when'
+              : '换电脑时可下载 MCP 清单；点右侧齿轮配置',
         ),
         trailing: IconButton(
           tooltip: '设置',
@@ -383,13 +385,13 @@ class AgentConfigSyncScreen extends StatelessWidget {
     final busy = hub.skillSync.status == SkillSyncStatus.syncing;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agent 配置同步')),
+      appBar: AppBar(title: const Text('Agent 配置下载/上传')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
             'WebDAV 远端只保留 Cursor 目录（skills/commands/rules 的 cursor 侧）。'
-            '「同步」拉取 Cursor 后会自动本机转换为 Codex（Skill / Rule）；'
+            '「下载」会把 Cursor 拉到本机后自动转换为 Codex（Skill / Rule）；'
             '「上传」只上传本机 Cursor，不会把 Codex 当作远端源。'
             '也可不依赖 WebDAV，用下方「一键转换」从本机 Cursor 生成 Codex。'
             '部署到客户端目录时采用合并覆盖，不删除目标中的额外文件。',
@@ -405,14 +407,14 @@ class AgentConfigSyncScreen extends StatelessWidget {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.layers_outlined),
-                    title: const Text('整体同步'),
+                    title: const Text('整体下载/上传'),
                     subtitle: Text(
                       supported
                           ? (webDavReady
-                                ? '一次拉取远端 Cursor（Skill / Command / Rule），'
+                                ? '一次下载远端 Cursor（Skill / Command / Rule），'
                                     '并自动转换 Skill + Rule 到本机 Codex'
                                 : '需先启用并配置 WebDAV')
-                          : '当前平台不支持目录同步',
+                          : '当前平台不支持目录下载/上传',
                     ),
                   ),
                   Row(
@@ -426,7 +428,7 @@ class AgentConfigSyncScreen extends StatelessWidget {
                                     hub.syncAllResourcesFromWebDav,
                                   ),
                           icon: const Icon(Icons.cloud_download_outlined),
-                          label: const Text('同步全部'),
+                          label: const Text('下载全部'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -500,12 +502,12 @@ class _ResourceSyncCard extends StatelessWidget {
     final busy = hub.skillSync.status == SkillSyncStatus.syncing;
     final statusText = switch (hub.skillSync.status) {
       SkillSyncStatus.idle => '空闲',
-      SkillSyncStatus.syncing => '同步中…',
+      SkillSyncStatus.syncing => '下载/上传中…',
       SkillSyncStatus.success => '成功',
       SkillSyncStatus.error => '失败',
     };
     final when = hub.skillSync.lastSyncedAt == null
-        ? '尚未同步'
+        ? '尚未下载/上传'
         : '上次：${hub.skillSync.lastSyncedAt!.toLocal()}';
 
     return Card(
@@ -521,14 +523,14 @@ class _ResourceSyncCard extends StatelessWidget {
                 AgentResourceKind.command => Icons.terminal_outlined,
                 AgentResourceKind.rule => Icons.rule_outlined,
               }),
-              title: Text('${resource.label} 同步'),
+              title: Text('${resource.label} 下载/上传'),
               subtitle: Text(
                 supported
                     ? (webDavReady
                           ? '$statusText · $when\n'
                                 '${_supportDescription()}'
                           : '需先启用并配置 WebDAV')
-                    : '当前平台不支持目录同步',
+                    : '当前平台不支持目录下载/上传',
               ),
             ),
             Row(
@@ -542,7 +544,7 @@ class _ResourceSyncCard extends StatelessWidget {
                             () => hub.syncResourceToAllTargets(resource),
                           ),
                     icon: const Icon(Icons.cloud_download_outlined),
-                    label: const Text('同步'),
+                    label: const Text('下载'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -616,10 +618,10 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
         AgentResourceKind.skill =>
-          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（同步 Cursor 后也会自动执行）',
+          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（下载 Cursor 后也会自动执行）',
         AgentResourceKind.rule =>
           '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
-              '（同步 Cursor 后也会自动执行）',
+              '（下载 Cursor 后也会自动执行）',
         AgentResourceKind.command =>
           'Codex 暂无与 Cursor 全局 Command 对等的目录',
       };
@@ -640,12 +642,12 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String _supportDescription() {
     if (resource == AgentResourceKind.command) {
-      return 'WebDAV 仅同步/上传 Cursor；Codex 暂无对等的全局 Command 目录';
+      return 'WebDAV 仅下载/上传 Cursor；Codex 暂无对等的全局 Command 目录';
     }
     if (resource == AgentResourceKind.rule) {
-      return 'WebDAV 仅同步/上传 Cursor；同步后自动（或一键）转换为 Codex AGENTS.md';
+      return 'WebDAV 仅下载/上传 Cursor；下载后自动（或一键）转换为 Codex AGENTS.md';
     }
-    return 'WebDAV 仅同步/上传 Cursor；同步后自动（或一键）转换到本机 Codex';
+    return 'WebDAV 仅下载/上传 Cursor；下载后自动（或一键）转换到本机 Codex';
   }
 }
 

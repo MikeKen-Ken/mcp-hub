@@ -1,6 +1,6 @@
 import 'skill_target.dart';
 
-/// 可通过 WebDAV 在设备间同步的 Agent 配置资源。
+/// 可通过 WebDAV 在设备间下载/上传的 Agent 配置资源。
 ///
 /// 远端权威源**仅 Cursor**（`{skills|commands|rules}/cursor`）。
 /// Codex 由本机从 Cursor 转换生成，不作为 WebDAV 上下行目标。
@@ -21,10 +21,10 @@ enum AgentResourceKind {
         AgentResourceKind.rule => 'Rule',
       };
 
-  /// WebDAV 是否同步该客户端目录（仅 Cursor）。
+  /// WebDAV 是否下载/上传该客户端目录（仅 Cursor）。
   bool supportsWebDav(SkillTarget target) => target == SkillTarget.cursor;
 
-  /// 该资源在 WebDAV 上同步的客户端列表（恒为 Cursor）。
+  /// 该资源在 WebDAV 上下载/上传的客户端列表（恒为 Cursor）。
   Iterable<SkillTarget> get webDavTargets => const [SkillTarget.cursor];
 
   /// 兼容旧名：等同 [webDavTargets]（远端不再含 Codex）。

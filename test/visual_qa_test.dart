@@ -39,7 +39,7 @@ void main() {
     await tester.pump();
     await _capture(key, 'home');
 
-    await tester.tap(find.text('Agent 配置同步'));
+    await tester.tap(find.text('Agent 配置下载/上传'));
     await tester.pumpAndSettle();
     await _capture(key, 'sync');
   });

@@ -257,7 +257,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'sync_webdav',
-    description: '立即拉取并推送 MCP 目录到 WebDAV（需已配置）',
+    description: '立即下载并上传 MCP 目录到 WebDAV（需已配置）',
     inputSchema: JsonSchema.object(properties: const {}),
     annotations: const ToolAnnotations(
       readOnlyHint: false,
@@ -282,7 +282,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'sync_skills',
     description:
-        'WebDAV 仅同步 Cursor Skill；pull 成功后会自动本机转换为 Codex。'
+        'WebDAV 仅下载/上传 Cursor Skill；pull（下载）成功后会自动本机转换为 Codex。'
         'target=codex 且 direction=pull 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）；'
         'direction=push 只上传本机 Cursor，不会上传 Codex',
     inputSchema: JsonSchema.object(

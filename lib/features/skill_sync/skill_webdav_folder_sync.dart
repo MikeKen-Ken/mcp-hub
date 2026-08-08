@@ -6,7 +6,7 @@ import 'package:webdav_client/webdav_client.dart';
 
 import '../../webdav/webdav_config.dart';
 
-/// WebDAV 与本地 Skill 文件夹之间的递归同步。
+/// WebDAV 与本地 Skill 文件夹之间的递归下载/上传。
 class SkillWebDavFolderSync {
   Client? clientFor(WebDavConfig config) {
     if (!config.isConfigured) return null;
@@ -30,7 +30,7 @@ class SkillWebDavFolderSync {
 
   /// `{remotePath}/{skills|commands|rules}/cursor`
   ///
-  /// 权威远端只保留 Cursor 侧目录；历史 `{...}/codex` 可忽略，勿再拉取/上传。
+  /// 权威远端只保留 Cursor 侧目录；历史 `{...}/codex` 可忽略，勿再下载/上传。
   String remoteResourceDir(
     WebDavConfig config,
     String resourceWireName,

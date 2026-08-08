@@ -97,7 +97,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
           !_enabled
               ? '已保存'
               : (!_autoSync && !_autoPull)
-                  ? '已保存；仅手动同步'
+                  ? '已保存；仅手动下载/上传'
                   : '已保存',
         ),
       ),
@@ -108,7 +108,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('WebDAV 同步')),
+      appBar: AppBar(title: const Text('WebDAV 下载/上传')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -116,8 +116,8 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
           children: [
             Card(
               child: SwitchListTile(
-                title: const Text('启用 WebDAV 同步'),
-                subtitle: const Text('连接配置仅保存在本机，不同步密码到远端'),
+                title: const Text('启用 WebDAV 下载/上传'),
+                subtitle: const Text('连接配置仅保存在本机，不会把密码传到远端'),
                 value: _enabled,
                 onChanged: (v) => setState(() => _enabled = v),
               ),
@@ -191,13 +191,13 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('启动 / 定时自动拉取'),
+                title: const Text('启动 / 定时自动下载'),
                 value: _autoPull,
                 onChanged: (v) => setState(() => _autoPull = v),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('拉取间隔：${_pollSeconds}s'),
+                title: Text('下载间隔：${_pollSeconds}s'),
                 subtitle: Slider(
                   min: WebDavConfig.minPollIntervalSeconds.toDouble(),
                   max: WebDavConfig.maxPollIntervalSeconds.toDouble(),
@@ -238,12 +238,12 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ],
               const SizedBox(height: 12),
               Text(
-                '同步内容：MCP 清单（仓库 URL、command/args 等），'
-                '在「客户端 MCP」右上角可同步/上传；'
+                '下载/上传内容：MCP 清单（仓库 URL、command/args 等），'
+                '在「客户端 MCP」右上角可下载/上传；'
                 'Skill / Command / Rule 文件夹在 {远端}/{skills|commands|rules}/{客户端}/，'
-                '在「Agent 配置同步」按资源一键同步或上传。\n'
-                '不同步：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
-                '换电脑后：配置好同一 WebDAV → 在客户端 MCP 同步清单 → 同步 Agent 配置 → 再按需 clone / 一键写入客户端。',
+                '在「Agent 配置下载/上传」按资源一键下载或上传。\n'
+                '不下载/上传：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
+                '换电脑后：配置好同一 WebDAV → 在客户端 MCP 下载清单 → 下载 Agent 配置 → 再按需 clone / 一键写入客户端。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
