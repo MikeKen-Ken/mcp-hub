@@ -10,10 +10,7 @@ void main() {
     final hub = HubController(initiallyLoading: false);
     addTearDown(hub.dispose);
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: hub,
-        child: const McpHubApp(),
-      ),
+      ChangeNotifierProvider.value(value: hub, child: const McpHubApp()),
     );
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
@@ -22,26 +19,28 @@ void main() {
 
     await tester.tap(find.text('Agent 配置下载/上传'));
     await tester.pumpAndSettle();
-    expect(find.text('MCP 设置'), findsOneWidget);
+    expect(find.text('按资源管理'), findsOneWidget);
+    expect(find.text('MCP'), findsOneWidget);
+    expect(find.text('Skill'), findsOneWidget);
+    expect(find.text('Command'), findsOneWidget);
+    expect(find.text('Rule'), findsOneWidget);
     expect(find.text('打开 MCP 设置'), findsOneWidget);
 
     await tester.tap(find.text('2  更新/覆盖全部'));
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
     expect(find.text('继续覆盖'), findsOneWidget);
-    expect(
-      find.textContaining('缓存中不存在的本地文件和目录也会被删除。'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('缓存中不存在的本地文件和目录也会被删除。'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsNothing);
 
-    final applyOne = find.text('更新/覆盖').first;
-    await tester.ensureVisible(applyOne);
-    await tester.tap(applyOne);
+    final mcpApply = find.text('更新/覆盖').first;
+    await tester.ensureVisible(mcpApply);
+    await tester.tap(mcpApply);
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
+    expect(find.textContaining('当前已启用的 MCP'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 

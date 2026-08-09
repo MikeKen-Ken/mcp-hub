@@ -349,8 +349,6 @@ class AgentConfigSyncScreen extends StatelessWidget {
                         busy: busy,
                         run: (action) => _run(context, action),
                       ),
-                      const SizedBox(height: 12),
-                      const _McpSettingsCard(),
                       const SizedBox(height: 24),
                       const _SectionHeader('按资源管理'),
                       const SizedBox(height: 4),
@@ -363,6 +361,10 @@ class AgentConfigSyncScreen extends StatelessWidget {
                         spacing: 12,
                         runSpacing: 12,
                         children: [
+                          SizedBox(
+                            width: cardWidth,
+                            child: _McpResourceSyncCard(hub: hub),
+                          ),
                           for (final resource in AgentResourceKind.values)
                             SizedBox(
                               width: cardWidth,
@@ -637,37 +639,155 @@ class _BulkResourceSyncCard extends StatelessWidget {
   }
 }
 
-class _McpSettingsCard extends StatelessWidget {
-  const _McpSettingsCard();
+class _McpResourceSyncCard extends StatelessWidget {
+  const _McpResourceSyncCard({required this.hub});
+
+  final HubController hub;
+
+  Future<void> _run(
+    BuildContext context,
+    Future<void> Function() action,
+  ) async {
+    await action();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(hub.lastMessage ?? '完成')));
+  }
 
   @override
   Widget build(BuildContext context) {
+    final supported = hub.isDesktopSupported;
+    final webDavReady = hub.isWebDavReady;
+    final busy = hub.isWebDavSyncing;
+
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 10,
-        ),
-        leading: const CircleAvatar(
-          child: Icon(Icons.hub_outlined),
-        ),
-        title: const Text('MCP 设置'),
-        subtitle: const Text(
-          '管理 MCP 清单、启停和更新，并写入 Cursor / Codex 配置。',
-        ),
-        trailing: FilledButton.tonal(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ClientMcpScreen()),
-          ),
-          child: const Text('打开 MCP 设置'),
-        ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const ClientMcpScreen()),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CircleAvatar(child: Icon(Icons.hub_outlined)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MCP',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        supported
+                            ? (webDavReady
+                                  ? '共 ${hub.servers.length} 个 MCP · 清单可下载/上传'
+                                  : 'WebDAV 未就绪，仍可更新客户端配置')
+                            : '当前平台不支持 MCP 配置写入',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(context, hub.pullWebDavNow),
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  label: const Text('下载'),
+                ),
+                FilledButton.icon(
+                  onPressed: !supported
+                      ? null
+                      : () async {
+                          final confirmed = await _confirmMcpConfigUpdate(
+                            context,
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(context, hub.configureAllClients);
+                        },
+                  icon: const Icon(Icons.install_desktop_outlined),
+                  label: const Text('更新/覆盖'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(context, hub.pushWebDavNow),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('上传'),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ClientMcpScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.tune_outlined),
+              label: const Text('打开 MCP 设置'),
+            ),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: const Text('说明与目录'),
+              subtitle: const Text('下载/上传 MCP 清单；更新/覆盖将已启用 MCP 写入客户端。'),
+              children: [
+                _DirectoryPathRow(
+                  label: 'Cursor',
+                  displayPath: McpPaths.cursorMcpJsonPath,
+                  directoryPath: McpPaths.cursorConfigDirectory,
+                  enabled: supported,
+                ),
+                _DirectoryPathRow(
+                  label: 'Codex',
+                  displayPath: McpPaths.codexConfigTomlPath,
+                  directoryPath: McpPaths.codexConfigDirectory,
+                  enabled: supported,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+Future<bool> _confirmMcpConfigUpdate(BuildContext context) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认更新/覆盖？'),
+          content: const Text(
+            '即将把当前已启用的 MCP 写入 Cursor 和 Codex 配置。\n\n'
+            '会更新同名 MCP，但会保留客户端配置中不由 Agent Hub 管理的服务。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('继续覆盖'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 class _ResourceSyncCard extends StatelessWidget {
