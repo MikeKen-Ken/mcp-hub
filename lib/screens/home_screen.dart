@@ -74,23 +74,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('配置中心', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
                 Text(
-                  '按用途进入管理，首页只保留状态和入口。',
+                  '集中查看 Agent Hub 状态，并进入常用管理功能。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
-                _FeatureCard(
-                  icon: Icons.hub_outlined,
-                  title: '客户端 MCP',
-                  subtitle:
-                      '一键配置 Cursor / Codex，并管理 ${hub.servers.length} 个本地 MCP',
-                  status: _clientSummary(hub),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ClientMcpScreen(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                _HomeSummaryCard(hub: hub),
+                const SizedBox(height: 24),
+                const _SectionHeader('常用入口'),
+                const SizedBox(height: 8),
                 _FeatureCard(
                   icon: Icons.sync_alt_outlined,
                   title: 'Agent 配置下载/上传',
@@ -115,13 +106,40 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 if (hub.lastMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    hub.lastMessage!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  const SizedBox(height: 24),
+                  const _SectionHeader('最近状态'),
+                  const SizedBox(height: 8),
+                  _StatusMessageCard(message: hub.lastMessage!),
                 ],
+                const SizedBox(height: 24),
+                const _SectionHeader('连接状态'),
+                const SizedBox(height: 8),
+                _FeatureCard(
+                  icon: Icons.hub_outlined,
+                  title: '客户端 MCP',
+                  subtitle: '配置 Cursor / Codex 的 MCP 连接',
+                  status: _clientSummary(hub),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ClientMcpScreen(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
+                const _SectionHeader('MCP 列表'),
+                const SizedBox(height: 8),
+                _FeatureCard(
+                  icon: Icons.storage_outlined,
+                  title: '本地 MCP',
+                  subtitle: '添加、启停和更新已管理的 MCP',
+                  status: '共 ${hub.servers.length} 个',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const LocalMcpScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 Text(
                   '数据目录：${McpPaths.hubDataRoot ?? "(不可用)"}',
                   style: Theme.of(context).textTheme.labelSmall,
@@ -189,6 +207,79 @@ class _FeatureCard extends StatelessWidget {
   }
 }
 
+class _HomeSummaryCard extends StatelessWidget {
+  const _HomeSummaryCard({required this.hub});
+
+  final HubController hub;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              child: const Icon(Icons.account_tree_outlined),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('当前摘要', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('已管理 ${hub.servers.length} 个本地 MCP'),
+                  Text(
+                    'Agent 资源：${_resourceSummary(hub)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
+    SkillSyncStatus.idle => '尚未下载/上传',
+    SkillSyncStatus.syncing => '下载/上传中…',
+    SkillSyncStatus.success => '最近下载/上传成功',
+    SkillSyncStatus.error => '最近下载/上传失败',
+  };
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(title, style: Theme.of(context).textTheme.titleSmall);
+  }
+}
+
+class _StatusMessageCard extends StatelessWidget {
+  const _StatusMessageCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Text(message, style: Theme.of(context).textTheme.bodySmall),
+      ),
+    );
+  }
+}
+
 class ClientMcpScreen extends StatelessWidget {
   const ClientMcpScreen({super.key});
 
@@ -237,8 +328,17 @@ class ClientMcpScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text('连接状态', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            '将已启用的 MCP 合并写入客户端配置，并查看本地 MCP 列表。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
           _ClientConfigCard(hub: hub),
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
+          const _SectionHeader('MCP 列表'),
+          const SizedBox(height: 8),
           Card(
             clipBehavior: Clip.antiAlias,
             child: ListTile(
@@ -330,111 +430,313 @@ class AgentConfigSyncScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Agent 配置下载/上传')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'WebDAV 远端只保留 Cursor 目录（skills/commands/rules 的 cursor 侧）。'
-            '「下载」只把远端全量镜像到本机缓存，不覆盖正式配置；'
-            '「更新/覆盖」再把缓存全量镜像到正式 Cursor 目录（本地多余也会删除），'
-            '并可自动转换 Skill / Rule 到 Codex。'
-            '「上传」把本机正式 Cursor 全量镜像到远端（远端多余也会删除）。'
-            '也可不依赖 WebDAV，用下方「一键转换」从本机 Cursor 生成 Codex。',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.layers_outlined),
-                    title: const Text('整体下载 / 覆盖 / 上传'),
-                    subtitle: Text(
-                      supported
-                          ? (webDavReady
-                                ? '下载→缓存；更新/覆盖→正式目录；上传→远端全量一致'
-                                : '需先启用并配置 WebDAV')
-                          : '当前平台不支持目录下载/上传',
-                    ),
-                  ),
-                  Row(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final contentWidth = constraints.maxWidth.clamp(0, 1120).toDouble();
+          final twoColumns = contentWidth >= 820;
+          final cardWidth = twoColumns
+              ? (contentWidth - 44) / 2
+              : contentWidth - 32;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1120),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: !supported || !webDavReady || busy
-                              ? null
-                              : () => _run(
-                                  context,
-                                  hub.syncAllResourcesFromWebDav,
-                                ),
-                          icon: const Icon(Icons.cloud_download_outlined),
-                          label: const Text('下载全部'),
-                        ),
+                      _AgentSyncOverview(
+                        hub: hub,
+                        supported: supported,
+                        webDavReady: webDavReady,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: !supported || busy
-                              ? null
-                              : () => _run(
-                                  context,
-                                  hub.applyAllResourcesFromCache,
-                                ),
-                          icon: const Icon(Icons.install_desktop_outlined),
-                          label: const Text('更新/覆盖全部'),
-                        ),
+                      const SizedBox(height: 24),
+                      const _SectionHeader('全部资源'),
+                      const SizedBox(height: 8),
+                      _BulkResourceSyncCard(
+                        hub: hub,
+                        supported: supported,
+                        webDavReady: webDavReady,
+                        busy: busy,
+                        run: (action) => _run(context, action),
+                      ),
+                      const SizedBox(height: 24),
+                      const _SectionHeader('按资源管理'),
+                      const SizedBox(height: 4),
+                      Text(
+                        '只处理某一类配置时使用；展开卡片可查看转换说明和目录位置。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          for (final resource in AgentResourceKind.values)
+                            SizedBox(
+                              width: cardWidth,
+                              child: _ResourceSyncCard(
+                                hub: hub,
+                                resource: resource,
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: !supported || !webDavReady || busy
-                        ? null
-                        : () => _run(context, hub.pushAllResourcesToWebDav),
-                    icon: const Icon(Icons.cloud_upload_outlined),
-                    label: const Text('上传全部'),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonalIcon(
-                    onPressed: !supported || busy
-                        ? null
-                        : () =>
-                              _run(context, hub.convertAllResourcesFromCursor),
-                    icon: const Icon(Icons.transform_outlined),
-                    label: const Text('转换全部（Skill + Rule）'),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '不访问 WebDAV：以本机 Cursor 为源，生成 Codex Skills 与 AGENTS.md',
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  _DirectoryPathRow(
-                    label: 'Skill 缓存根目录',
-                    displayPath: McpPaths.skillsCacheRoot,
-                    directoryPath: McpPaths.skillsCacheRoot,
-                    enabled: supported,
-                  ),
-                  _DirectoryPathRow(
-                    label: '其他资源缓存根目录',
-                    displayPath: McpPaths.agentResourcesCacheRoot,
-                    directoryPath: McpPaths.agentResourcesCacheRoot,
-                    enabled: supported,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          for (final resource in AgentResourceKind.values) ...[
-            _ResourceSyncCard(hub: hub, resource: resource),
-            const SizedBox(height: 12),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AgentSyncOverview extends StatelessWidget {
+  const _AgentSyncOverview({
+    required this.hub,
+    required this.supported,
+    required this.webDavReady,
+  });
+
+  final HubController hub;
+  final bool supported;
+  final bool webDavReady;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final status = switch (hub.skillSync.status) {
+      SkillSyncStatus.idle => '尚未同步',
+      SkillSyncStatus.syncing => '正在同步…',
+      SkillSyncStatus.success => '最近同步成功',
+      SkillSyncStatus.error => '最近同步失败',
+    };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '在设备与 WebDAV 之间管理 Agent 配置',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                _SyncStatusPill(
+                  icon: webDavReady
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+                  label: supported && webDavReady ? 'WebDAV 已就绪' : 'WebDAV 未就绪',
+                  active: supported && webDavReady,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '远端以 Cursor 配置为准；Codex Skill 与 AGENTS.md 由本机 Cursor 配置转换生成。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const _FlowLabel(index: 1, label: '下载到缓存'),
+                Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
+                const _FlowLabel(index: 2, label: '更新到正式目录'),
+                Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
+                const _FlowLabel(index: 3, label: '按需上传远端'),
+                const SizedBox(width: 4),
+                _SyncStatusPill(
+                  icon: Icons.history_outlined,
+                  label: status,
+                  active: hub.skillSync.status == SkillSyncStatus.success,
+                ),
+              ],
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FlowLabel extends StatelessWidget {
+  const _FlowLabel({required this.index, required this.label});
+
+  final int index;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 10,
+            backgroundColor: scheme.primaryContainer,
+            foregroundColor: scheme.onPrimaryContainer,
+            child: Text(
+              '$index',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(label),
         ],
+      ),
+    );
+  }
+}
+
+class _SyncStatusPill extends StatelessWidget {
+  const _SyncStatusPill({
+    required this.icon,
+    required this.label,
+    required this.active,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: active
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class _BulkResourceSyncCard extends StatelessWidget {
+  const _BulkResourceSyncCard({
+    required this.hub,
+    required this.supported,
+    required this.webDavReady,
+    required this.busy,
+    required this.run,
+  });
+
+  final HubController hub;
+  final bool supported;
+  final bool webDavReady;
+  final bool busy;
+  final Future<void> Function(Future<SkillSyncResult> Function() action) run;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('推荐流程', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              webDavReady
+                  ? '按顺序执行前三步，可让本机与远端保持一致。'
+                  : '下载和上传需要先在设置中启用并配置 WebDAV。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => run(hub.syncAllResourcesFromWebDav),
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  label: const Text('1  下载全部'),
+                ),
+                FilledButton.icon(
+                  onPressed: !supported || busy
+                      ? null
+                      : () => run(hub.applyAllResourcesFromCache),
+                  icon: const Icon(Icons.install_desktop_outlined),
+                  label: const Text('2  更新/覆盖全部'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => run(hub.pushAllResourcesToWebDav),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('3  上传全部'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || busy
+                      ? null
+                      : () => run(hub.convertAllResourcesFromCursor),
+                  icon: const Icon(Icons.transform_outlined),
+                  label: const Text('仅本机转换'),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: const Text('缓存目录'),
+              subtitle: const Text('下载内容会先保存在这里，不会直接覆盖正式配置'),
+              children: [
+                _DirectoryPathRow(
+                  label: 'Skill 缓存根目录',
+                  displayPath: McpPaths.skillsCacheRoot,
+                  directoryPath: McpPaths.skillsCacheRoot,
+                  enabled: supported,
+                ),
+                _DirectoryPathRow(
+                  label: '其他资源缓存根目录',
+                  displayPath: McpPaths.agentResourcesCacheRoot,
+                  directoryPath: McpPaths.agentResourcesCacheRoot,
+                  enabled: supported,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -474,69 +776,89 @@ class _ResourceSyncCard extends StatelessWidget {
         : '上次：${hub.skillSync.lastSyncedAt!.toLocal()}';
 
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(switch (resource) {
-                AgentResourceKind.skill => Icons.auto_awesome_outlined,
-                AgentResourceKind.command => Icons.terminal_outlined,
-                AgentResourceKind.rule => Icons.rule_outlined,
-              }),
-              title: Text('${resource.label} 下载/上传'),
-              subtitle: Text(
-                supported
-                    ? (webDavReady
-                          ? '$statusText · $when\n'
-                                '${_supportDescription()}'
-                          : '需先启用并配置 WebDAV')
-                    : '当前平台不支持目录下载/上传',
-              ),
-            ),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                CircleAvatar(
+                  child: Icon(switch (resource) {
+                    AgentResourceKind.skill => Icons.auto_awesome_outlined,
+                    AgentResourceKind.command => Icons.terminal_outlined,
+                    AgentResourceKind.rule => Icons.rule_outlined,
+                  }),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: !supported || !webDavReady || busy
-                        ? null
-                        : () => _run(
-                            context,
-                            () => hub.syncResourceToAllTargets(resource),
-                          ),
-                    icon: const Icon(Icons.cloud_download_outlined),
-                    label: const Text('下载'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        resource.label,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        supported
+                            ? (webDavReady
+                                  ? '$statusText · $when'
+                                  : 'WebDAV 未就绪，可使用本机转换')
+                            : '当前平台不支持目录下载/上传',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: !supported || busy
-                        ? null
-                        : () => _run(
-                            context,
-                            () => hub.applyResourceFromCache(resource),
-                          ),
-                    icon: const Icon(Icons.install_desktop_outlined),
-                    label: const Text('更新/覆盖'),
+                if (_canConvert)
+                  const _SyncStatusPill(
+                    icon: Icons.transform_outlined,
+                    label: '支持转换',
+                    active: true,
                   ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.syncResourceToAllTargets(resource),
+                        ),
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  label: const Text('下载'),
+                ),
+                FilledButton.icon(
+                  onPressed: !supported || busy
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.applyResourceFromCache(resource),
+                        ),
+                  icon: const Icon(Icons.install_desktop_outlined),
+                  label: const Text('更新/覆盖'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.pushResourceToAllTargets(resource),
+                        ),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('上传'),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: !supported || !webDavReady || busy
-                  ? null
-                  : () => _run(
-                      context,
-                      () => hub.pushResourceToAllTargets(resource),
-                    ),
-              icon: const Icon(Icons.cloud_upload_outlined),
-              label: const Text('上传'),
-            ),
-            const SizedBox(height: 8),
+            const Divider(height: 24),
             FilledButton.tonalIcon(
               onPressed: !supported || busy || !_canConvert
                   ? null
@@ -547,34 +869,45 @@ class _ResourceSyncCard extends StatelessWidget {
               icon: const Icon(Icons.transform_outlined),
               label: Text(_convertButtonLabel),
             ),
-            if (_convertHint != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                _convertHint!,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ],
-            const SizedBox(height: 8),
-            for (final target in SkillTarget.values)
-              _DirectoryPathRow(
-                label: target == SkillTarget.cursor
-                    ? '${target.label}（正式目录）'
-                    : '${target.label}（本机转换）',
-                displayPath: _pathLabelFor(target),
-                directoryPath: _directoryFor(target),
-                enabled: supported && resource.supportsLocalPath(target),
-              ),
-            _DirectoryPathRow(
-              label: '缓存（Cursor）',
-              displayPath: McpPaths.resourceCachePath(
-                resource.wireName,
-                SkillTarget.cursor.wireName,
-              ),
-              directoryPath: McpPaths.resourceCachePath(
-                resource.wireName,
-                SkillTarget.cursor.wireName,
-              ),
-              enabled: supported,
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: const Text('说明与目录'),
+              subtitle: Text(_supportDescription()),
+              children: [
+                if (_convertHint != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _convertHint!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                for (final target in SkillTarget.values)
+                  _DirectoryPathRow(
+                    label: target == SkillTarget.cursor
+                        ? '${target.label}（正式目录）'
+                        : '${target.label}（本机转换）',
+                    displayPath: _pathLabelFor(target),
+                    directoryPath: _directoryFor(target),
+                    enabled: supported && resource.supportsLocalPath(target),
+                  ),
+                _DirectoryPathRow(
+                  label: '缓存（Cursor）',
+                  displayPath: McpPaths.resourceCachePath(
+                    resource.wireName,
+                    SkillTarget.cursor.wireName,
+                  ),
+                  directoryPath: McpPaths.resourceCachePath(
+                    resource.wireName,
+                    SkillTarget.cursor.wireName,
+                  ),
+                  enabled: supported,
+                ),
+              ],
             ),
           ],
         ),
