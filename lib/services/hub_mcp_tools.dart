@@ -284,16 +284,18 @@ void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'sync_skills',
     description:
-        'WebDAV 仅下载/上传 Cursor Skill；pull（下载）成功后会自动本机转换为 Codex。'
-        'target=codex 且 direction=pull 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）；'
-        'direction=push 只上传本机 Cursor，不会上传 Codex',
+        'WebDAV 仅下载/上传 Cursor Skill。'
+        'direction=pull：远端全量镜像到本机缓存（不覆盖正式目录）；'
+        'direction=apply：缓存全量镜像到正式 Cursor 目录（本地多余删除，成功后可自动转 Codex）；'
+        'direction=push：本机正式目录全量镜像到远端（远端多余删除）。'
+        'target=codex 且 direction=pull/apply 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
           description: 'all | cursor | codex，默认 all',
         ),
         'direction': JsonSchema.string(
-          description: 'pull（默认）或 push',
+          description: 'pull（默认）| apply | push',
         ),
       },
     ),
@@ -308,6 +310,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       final direction =
           mcpTrimmedString(args['direction'])?.toLowerCase() ?? 'pull';
       final isPush = direction == 'push';
+      final isApply = direction == 'apply';
 
       Map<String, Object?> pack(SkillSyncResult r) => {
             'ok': r.ok,
@@ -331,14 +334,24 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           return mcpJsonResult(pack(r));
         }
         if (targetRaw == 'cursor') {
-          final r = isPush
-              ? await hub.pushSkillsToWebDav(SkillTarget.cursor)
-              : await hub.syncSkillsFromWebDav(SkillTarget.cursor);
+          final SkillSyncResult r;
+          if (isPush) {
+            r = await hub.pushSkillsToWebDav(SkillTarget.cursor);
+          } else if (isApply) {
+            r = await hub.applyResourceFromCache(AgentResourceKind.skill);
+          } else {
+            r = await hub.syncSkillsFromWebDav(SkillTarget.cursor);
+          }
           return mcpJsonResult(pack(r));
         }
-        final r = isPush
-            ? await hub.pushAllSkillsToWebDav()
-            : await hub.syncAllSkillsFromWebDav();
+        final SkillSyncResult r;
+        if (isPush) {
+          r = await hub.pushAllSkillsToWebDav();
+        } else if (isApply) {
+          r = await hub.applyResourceFromCache(AgentResourceKind.skill);
+        } else {
+          r = await hub.syncAllSkillsFromWebDav();
+        }
         return mcpJsonResult(pack(r));
       } catch (error) {
         return mcpErrorResult('$error');

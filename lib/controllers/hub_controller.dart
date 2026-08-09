@@ -625,6 +625,23 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
+  /// 用缓存全量覆盖正式 Cursor 目录（可随后自动转换 Codex）。
+  Future<SkillSyncResult> applyResourceFromCache(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.applyResourceFromCache(resource);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> applyAllResourcesFromCache() async {
+    final result = await skillSync.applyAllResourcesFromCache();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
   Future<ConfigBackupResult> exportConfigBackup(String zipPath) async {
     final result = await configBackup.exportToZip(
       zipPath: zipPath,

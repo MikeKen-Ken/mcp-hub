@@ -80,6 +80,38 @@ void main() {
       expect(await copy.countSkillPackages(target.path), 1);
     });
 
+    test('全量镜像会删除目标多余项并保留点开头目录', () async {
+      final source = Directory(p.join(temp.path, 'src'));
+      final target = Directory(p.join(temp.path, 'dst'));
+      await source.create(recursive: true);
+      await target.create(recursive: true);
+
+      final keep = Directory(p.join(source.path, 'keep-skill'));
+      await keep.create();
+      await File(p.join(keep.path, 'SKILL.md')).writeAsString('# keep\n');
+
+      final stale = Directory(p.join(target.path, 'stale-skill'));
+      await stale.create();
+      await File(p.join(stale.path, 'SKILL.md')).writeAsString('# stale\n');
+
+      final hidden = Directory(p.join(target.path, '.system'));
+      await hidden.create();
+      await File(p.join(hidden.path, 'secret')).writeAsString('keep');
+
+      final copy = const SkillFolderCopy();
+      final result = await copy.mirrorContents(
+        sourceDir: source.path,
+        targetDir: target.path,
+      );
+
+      expect(result.copiedFiles, 1);
+      expect(result.deletedEntries, 1);
+      expect(await Directory(p.join(target.path, 'keep-skill')).exists(), isTrue);
+      expect(await Directory(p.join(target.path, 'stale-skill')).exists(), isFalse);
+      expect(await Directory(p.join(target.path, '.system')).exists(), isTrue);
+      expect(await copy.countSkillPackages(target.path), 1);
+    });
+
     test('源目录不存在时抛错', () async {
       final copy = const SkillFolderCopy();
       expect(

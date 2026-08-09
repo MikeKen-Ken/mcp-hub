@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../services/mcp_paths.dart';
 import '../../webdav/webdav_config.dart';
@@ -33,8 +34,8 @@ class SkillSyncResult {
   final int packageCount;
 }
 
-/// Agent 资源：WebDAV 仅下载 Cursor → 本机缓存 → 部署；
-/// 下载成功后对本机执行 Cursor→Codex 转换（Skill / Rule）。
+/// Agent 资源：WebDAV 仅下载 Cursor → 本机缓存；
+/// 「更新/覆盖」再把缓存全量镜像到正式目录，并可转换 Codex。
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
     required Future<WebDavConfig> Function() loadConfig,
@@ -92,7 +93,7 @@ class SkillSyncService extends ChangeNotifier {
         (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
         (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
       };
-  /// 从 WebDAV 下载并复制到目标客户端 Skill 目录。
+  /// 从 WebDAV 下载 Cursor Skill 到本机缓存（不覆盖正式目录）。
   Future<SkillSyncResult> syncFromWebDav(SkillTarget target) async {
     return syncResourceFromWebDav(AgentResourceKind.skill, target);
   }
@@ -111,7 +112,7 @@ class SkillSyncService extends ChangeNotifier {
     return _run(resource, target, () => _doSyncOne(resource, target));
   }
 
-  /// 从 WebDAV 下载 Cursor 并部署；可转换资源会接着生成本机 Codex。
+  /// 从 WebDAV 下载 Cursor 到本机缓存（不覆盖正式目录）。
   Future<SkillSyncResult> syncResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
@@ -121,7 +122,6 @@ class SkillSyncService extends ChangeNotifier {
         throw StateError('${resource.label} 没有可下载的客户端');
       }
       var pulledFiles = 0;
-      var deployedFiles = 0;
       var packageCount = 0;
       final parts = <String>[];
       var allOk = true;
@@ -129,7 +129,6 @@ class SkillSyncService extends ChangeNotifier {
         try {
           final one = await _doSyncOne(resource, target);
           pulledFiles += one.pulledFiles;
-          deployedFiles += one.deployedFiles;
           packageCount += one.packageCount;
           parts.add(one.message);
           if (!one.ok) allOk = false;
@@ -142,14 +141,13 @@ class SkillSyncService extends ChangeNotifier {
       return SkillSyncResult(
         ok: allOk,
         pulledFiles: pulledFiles,
-        deployedFiles: deployedFiles,
         packageCount: packageCount,
         message: parts.join('；'),
       );
     });
   }
 
-  /// 把本机目标目录内容上传到 WebDAV（先复制到缓存再推送）。
+  /// 把本机目标目录全量镜像上传到 WebDAV（先镜像到缓存再推送）。
   Future<SkillSyncResult> pushToWebDav(SkillTarget target) async {
     return pushResourceToWebDav(AgentResourceKind.skill, target);
   }
@@ -203,11 +201,10 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 一次性从 WebDAV 下载全部 Agent 资源（仅 Cursor），并自动转换到 Codex。
+  /// 一次性从 WebDAV 下载全部 Agent 资源到本机缓存（仅 Cursor，不覆盖正式目录）。
   Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
     return _run(null, null, () async {
       var pulledFiles = 0;
-      var deployedFiles = 0;
       var packageCount = 0;
       final parts = <String>[];
       var allOk = true;
@@ -216,7 +213,6 @@ class SkillSyncService extends ChangeNotifier {
           try {
             final one = await _doSyncOne(resource, target);
             pulledFiles += one.pulledFiles;
-            deployedFiles += one.deployedFiles;
             packageCount += one.packageCount;
             parts.add(one.message);
             if (!one.ok) allOk = false;
@@ -230,14 +226,13 @@ class SkillSyncService extends ChangeNotifier {
       return SkillSyncResult(
         ok: allOk,
         pulledFiles: pulledFiles,
-        deployedFiles: deployedFiles,
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可下载的资源' : parts.join('；'),
       );
     });
   }
 
-  /// 一次性把全部 Agent 资源的本机 Cursor 目录上传到 WebDAV。
+  /// 一次性把全部 Agent 资源的本机 Cursor 目录全量镜像上传到 WebDAV。
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
     return _run(null, null, () async {
       var pushedFiles = 0;
@@ -268,26 +263,57 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 仅把本机缓存复制到客户端目录（不访问 WebDAV）。
+  /// 仅把本机 Skill 缓存全量镜像到客户端正式目录（不访问 WebDAV）。
   Future<SkillSyncResult> deployFromCache(SkillTarget target) async {
-    return _run(AgentResourceKind.skill, target, () async {
-      final cachePath = cachePathFor(target);
-      final deployPath = deployPathFor(target);
-      if (cachePath == null || deployPath == null) {
-        throw StateError('当前平台不支持 Skill 下载/上传');
-      }
-      final deploy = await _folderCopy.copyContents(
-        sourceDir: cachePath,
-        targetDir: deployPath,
-      );
-      final packages = await _folderCopy.countSkillPackages(deployPath);
+    return applyResourceFromCache(AgentResourceKind.skill, target: target);
+  }
+
+  /// 把缓存全量镜像到正式目录；Cursor 侧完成后可自动转换 Codex。
+  Future<SkillSyncResult> applyResourceFromCache(
+    AgentResourceKind resource, {
+    SkillTarget target = SkillTarget.cursor,
+  }) async {
+    if (!resource.supportsWebDav(target) && target != SkillTarget.cursor) {
       return SkillSyncResult(
-        ok: true,
+        ok: false,
         target: target,
-        deployedFiles: deploy.copiedFiles,
-        packageCount: packages,
-        message: '已从缓存部署 ${target.label} Skill：'
-            '${deploy.copiedFiles} 个文件（约 $packages 个包）→ $deployPath',
+        message: _codexNotOnWebDavMessage,
+      );
+    }
+    return _run(
+      resource,
+      target,
+      () => _doApplyOne(resource, target),
+    );
+  }
+
+  /// 把全部资源的 Cursor 缓存全量镜像到正式目录，并可转换 Codex。
+  Future<SkillSyncResult> applyAllResourcesFromCache() async {
+    return _run(null, null, () async {
+      var deployedFiles = 0;
+      var packageCount = 0;
+      final parts = <String>[];
+      var allOk = true;
+      for (final resource in AgentResourceKind.values) {
+        for (final target in resource.webDavTargets) {
+          try {
+            final one = await _doApplyOne(resource, target);
+            deployedFiles += one.deployedFiles;
+            packageCount += one.packageCount;
+            parts.add(one.message);
+            if (!one.ok) allOk = false;
+          } catch (error) {
+            allOk = false;
+            parts.add('${resource.label}/${target.label}：失败（$error）');
+            debugPrint('整体覆盖 ${resource.label} ${target.label} 失败: $error');
+          }
+        }
+      }
+      return SkillSyncResult(
+        ok: allOk,
+        deployedFiles: deployedFiles,
+        packageCount: packageCount,
+        message: parts.isEmpty ? '没有可覆盖的资源' : parts.join('；'),
       );
     });
   }
@@ -372,17 +398,57 @@ class SkillSyncService extends ChangeNotifier {
       cursorSkillsDir: source,
       codexSkillsDir: target,
     );
+    final removed = await _removeStaleSkillPackages(
+      sourceSkillsDir: source,
+      targetSkillsDir: target,
+    );
     final copied = items.fold<int>(0, (sum, e) => sum + e.copiedFiles);
+    final removeHint = removed == 0 ? '' : '，并删除多余 $removed 个包';
     return SkillSyncResult(
       ok: true,
       target: SkillTarget.codex,
       deployedFiles: copied,
       packageCount: items.length,
       message: items.isEmpty
-          ? 'Cursor Skill 目录为空，未转换任何包 → $target'
+          ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
           : '已从 Cursor 批量转换 ${items.length} 个 Skill 到 Codex'
-              '（复制 $copied 个文件，并写入 agents/openai.yaml）→ $target',
+              '（复制 $copied 个文件，并写入 agents/openai.yaml$removeHint）→ $target',
     );
+  }
+
+  /// 删除目标侧已不在源目录中的 Skill 包（跳过点开头目录）。
+  Future<int> _removeStaleSkillPackages({
+    required String sourceSkillsDir,
+    required String targetSkillsDir,
+  }) async {
+    final targetRoot = Directory(targetSkillsDir);
+    if (!await targetRoot.exists()) return 0;
+
+    final keepNames = <String>{};
+    final sourceRoot = Directory(sourceSkillsDir);
+    if (await sourceRoot.exists()) {
+      await for (final entity in sourceRoot.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final name = p.basename(entity.path);
+        if (name.startsWith('.')) continue;
+        final skillMd = File(p.join(entity.path, 'SKILL.md'));
+        if (await skillMd.exists()) keepNames.add(name);
+      }
+    }
+
+    var removed = 0;
+    await for (final entity in targetRoot.list(followLinks: false)) {
+      if (entity is! Directory) continue;
+      final name = p.basename(entity.path);
+      if (name.startsWith('.')) continue;
+      final skillMd = File(p.join(entity.path, 'SKILL.md'));
+      if (!await skillMd.exists()) continue;
+      if (keepNames.contains(name)) continue;
+      await entity.delete(recursive: true);
+      removed += 1;
+      debugPrint('已删除 Codex 多余 Skill 包：$name');
+    }
+    return removed;
   }
 
   Future<SkillSyncResult> _convertRulesFromCursor() async {
@@ -414,40 +480,41 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 下载 Cursor 成功后，对本机执行可转换资源的 Cursor→Codex。
-  Future<SkillSyncResult> _maybeConvertAfterCursorSync(
+  /// 覆盖正式目录后，对本机执行可转换资源的 Cursor→Codex。
+  Future<SkillSyncResult> _maybeConvertAfterCursorApply(
     AgentResourceKind resource,
-    SkillSyncResult syncResult,
+    SkillSyncResult applyResult,
   ) async {
-    if (!resource.canConvertToCodex) return syncResult;
+    if (!resource.canConvertToCodex) return applyResult;
     try {
       final convert = switch (resource) {
         AgentResourceKind.skill => await _convertSkillsFromCursor(),
         AgentResourceKind.rule => await _convertRulesFromCursor(),
-        AgentResourceKind.command => syncResult,
+        AgentResourceKind.command => applyResult,
       };
-      if (identical(convert, syncResult)) return syncResult;
+      if (identical(convert, applyResult)) return applyResult;
       return SkillSyncResult(
-        ok: syncResult.ok && convert.ok,
+        ok: applyResult.ok && convert.ok,
         target: SkillTarget.cursor,
-        pulledFiles: syncResult.pulledFiles,
-        deployedFiles: syncResult.deployedFiles + convert.deployedFiles,
-        packageCount: syncResult.packageCount + convert.packageCount,
-        message: '${syncResult.message}；${convert.message}',
+        pulledFiles: applyResult.pulledFiles,
+        deployedFiles: applyResult.deployedFiles + convert.deployedFiles,
+        packageCount: applyResult.packageCount + convert.packageCount,
+        message: '${applyResult.message}；${convert.message}',
       );
     } catch (error) {
-      debugPrint('${resource.label} 下载后转换 Codex 失败: $error');
+      debugPrint('${resource.label} 覆盖后转换 Codex 失败: $error');
       return SkillSyncResult(
         ok: false,
         target: SkillTarget.cursor,
-        pulledFiles: syncResult.pulledFiles,
-        deployedFiles: syncResult.deployedFiles,
-        packageCount: syncResult.packageCount,
-        message: '${syncResult.message}；Cursor→Codex 转换失败：$error',
+        pulledFiles: applyResult.pulledFiles,
+        deployedFiles: applyResult.deployedFiles,
+        packageCount: applyResult.packageCount,
+        message: '${applyResult.message}；Cursor→Codex 转换失败：$error',
       );
     }
   }
 
+  /// 仅下载到缓存目录：与远端全量一致，不触碰正式配置。
   Future<SkillSyncResult> _doSyncOne(
     AgentResourceKind resource,
     SkillTarget target,
@@ -457,8 +524,7 @@ class SkillSyncService extends ChangeNotifier {
       throw StateError('请先配置并启用 WebDAV');
     }
     final cachePath = resourceCachePathFor(resource, target);
-    final deployPath = resourceDeployPathFor(resource, target);
-    if (cachePath == null || deployPath == null) {
+    if (cachePath == null) {
       throw StateError('${target.label} 不支持 ${resource.label} 下载');
     }
     final client = _folderSync.clientFor(config);
@@ -476,28 +542,56 @@ class SkillSyncService extends ChangeNotifier {
       remoteDir: remote,
       localDir: cachePath,
     );
-    final deploy = await _folderCopy.copyContents(
+    final packages = resource == AgentResourceKind.skill
+        ? await _folderCopy.countSkillPackages(cachePath)
+        : 0;
+    return SkillSyncResult(
+      ok: true,
+      target: target,
+      pulledFiles: pulled,
+      packageCount: packages,
+      message: '已下载 Cursor ${resource.label} 到缓存：'
+          '$pulled 个文件'
+          '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          ' → $cachePath（未覆盖正式目录，请使用「更新/覆盖」）',
+    );
+  }
+
+  /// 把缓存全量镜像到正式目录（本地多余也会删除）。
+  Future<SkillSyncResult> _doApplyOne(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    if (!McpPaths.isDesktopSupported) {
+      throw StateError('当前平台不支持目录覆盖');
+    }
+    final cachePath = resourceCachePathFor(resource, target);
+    final deployPath = resourceDeployPathFor(resource, target);
+    if (cachePath == null || deployPath == null) {
+      throw StateError('${target.label} 不支持 ${resource.label} 覆盖');
+    }
+    await Directory(cachePath).create(recursive: true);
+    final deploy = await _folderCopy.mirrorContents(
       sourceDir: cachePath,
       targetDir: deployPath,
     );
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(deployPath)
         : 0;
-    final syncResult = SkillSyncResult(
+    final applyResult = SkillSyncResult(
       ok: true,
       target: target,
-      pulledFiles: pulled,
       deployedFiles: deploy.copiedFiles,
       packageCount: packages,
-      message: '已下载 Cursor ${resource.label}：'
-          '下载 $pulled 个文件，部署 ${deploy.copiedFiles} 个文件'
+      message: '已用缓存全量覆盖正式 Cursor ${resource.label}：'
+          '写入 ${deploy.copiedFiles} 个文件，删除多余 ${deploy.deletedEntries} 项'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $deployPath',
     );
     if (target == SkillTarget.cursor) {
-      return _maybeConvertAfterCursorSync(resource, syncResult);
+      return _maybeConvertAfterCursorApply(resource, applyResult);
     }
-    return syncResult;
+    return applyResult;
   }
 
   Future<SkillSyncResult> _doPushOne(
@@ -513,10 +607,10 @@ class SkillSyncService extends ChangeNotifier {
     if (cachePath == null || deployPath == null) {
       throw StateError('${target.label} 不支持 ${resource.label} 上传');
     }
-    // 优先以客户端目录为准；若尚无部署目录则直接推缓存。
+    // 以正式目录为准全量镜像到缓存；若尚无正式目录则确保缓存存在后推送。
     final deployDir = Directory(deployPath);
     if (await deployDir.exists()) {
-      await _folderCopy.copyContents(
+      await _folderCopy.mirrorContents(
         sourceDir: deployPath,
         targetDir: cachePath,
       );
@@ -527,7 +621,7 @@ class SkillSyncService extends ChangeNotifier {
     if (client == null) {
       throw StateError('WebDAV 未配置完整');
     }
-    // 仅上传到 .../cursor/；不再写入远端 .../codex/。
+    // 仅上传到 .../cursor/；全量镜像，远端多余项也会删除。
     final remote = _folderSync.remoteResourceDir(
       config,
       resource.wireName,
@@ -546,9 +640,9 @@ class SkillSyncService extends ChangeNotifier {
       target: target,
       pushedFiles: pushed,
       packageCount: packages,
-      message: '已上传 Cursor ${resource.label}：$pushed 个文件'
+      message: '已全量上传 Cursor ${resource.label}：$pushed 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-          ' → $remote',
+          ' → $remote（远端已与本机一致）',
     );
   }
 

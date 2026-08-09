@@ -62,7 +62,7 @@ class SkillWebDavFolderSync {
     return _downloadDir(client, remoteDir, localDir);
   }
 
-  /// 将本地目录上传到远端（先确保远端目录存在，覆盖同名文件）。
+  /// 将本地目录全量镜像到远端（覆盖同名，并删除远端多余项）。
   Future<int> pushFolder({
     required Client client,
     required String remoteDir,
@@ -73,7 +73,71 @@ class SkillWebDavFolderSync {
       await local.create(recursive: true);
     }
     await client.mkdirAll(remoteDir);
-    return _uploadDir(client, localDir, remoteDir);
+    final uploaded = await _uploadDir(client, localDir, remoteDir);
+    await _deleteRemoteExtras(client, localDir, remoteDir);
+    return uploaded;
+  }
+
+  /// 删除远端有、本地没有的条目，使远端与本地目录一致。
+  Future<void> _deleteRemoteExtras(
+    Client client,
+    String localDir,
+    String remoteDir,
+  ) async {
+    List<File> entries;
+    try {
+      entries = await client.readDir(remoteDir);
+    } catch (error) {
+      final message = error.toString().toLowerCase();
+      if (message.contains('404') ||
+          message.contains('not found') ||
+          message.contains('no such file')) {
+        return;
+      }
+      rethrow;
+    }
+
+    final localNames = <String>{};
+    final local = io.Directory(localDir);
+    if (await local.exists()) {
+      await for (final entity in local.list(followLinks: false)) {
+        final name = p.basename(entity.path);
+        if (name.startsWith('.')) continue;
+        localNames.add(name);
+      }
+    }
+
+    for (final entry in entries) {
+      final name = entry.name;
+      if (name == null || name.isEmpty || name == '.' || name == '..') {
+        continue;
+      }
+      if (name.startsWith('.')) continue;
+
+      final remotePath = entry.path ?? _joinRemote(remoteDir, name);
+      if (!localNames.contains(name)) {
+        try {
+          // 部分 WebDAV 服务删除目录要求路径以 / 结尾。
+          final path = entry.isDir == true && !remotePath.endsWith('/')
+              ? '$remotePath/'
+              : remotePath;
+          await client.remove(path);
+          debugPrint('已删除远端多余项：$path');
+        } catch (error) {
+          debugPrint('删除远端多余项失败 $remotePath: $error');
+          rethrow;
+        }
+        continue;
+      }
+
+      if (entry.isDir == true) {
+        await _deleteRemoteExtras(
+          client,
+          p.join(localDir, name),
+          remotePath,
+        );
+      }
+    }
   }
 
   Future<int> _downloadDir(

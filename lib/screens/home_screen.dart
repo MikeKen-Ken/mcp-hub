@@ -13,7 +13,6 @@ import '../services/directory_opener.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
-import '../webdav/webdav_sync_service.dart';
 import '../widgets/status_badge.dart';
 import 'add_server_screen.dart';
 import 'webdav_settings_screen.dart';
@@ -94,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _FeatureCard(
                   icon: Icons.sync_alt_outlined,
                   title: 'Agent 配置下载/上传',
-                  subtitle: 'WebDAV 下载 Cursor；本机转换 Codex',
+                  subtitle: '下载到缓存 → 更新/覆盖正式目录',
                   status: _resourceSummary(hub),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -114,8 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                _WebDavStatusCard(hub: hub),
                 if (hub.lastMessage != null) ...[
                   const SizedBox(height: 16),
                   Text(
@@ -309,59 +306,6 @@ class LocalMcpScreen extends StatelessWidget {
   }
 }
 
-class _WebDavStatusCard extends StatelessWidget {
-  const _WebDavStatusCard({required this.hub});
-
-  final HubController hub;
-
-  @override
-  Widget build(BuildContext context) {
-    final cfg = hub.webDavConfig;
-    final sync = hub.webDavSync;
-    final statusText = !cfg.enabled
-        ? '未启用'
-        : switch (sync.status) {
-            CatalogSyncStatus.idle => '空闲',
-            CatalogSyncStatus.syncing => '下载/上传中…',
-            CatalogSyncStatus.success => '成功',
-            CatalogSyncStatus.error => '失败',
-          };
-    final when = sync.lastSyncedAt == null
-        ? '尚未下载/上传'
-        : '上次：${sync.lastSyncedAt!.toLocal()}';
-
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.cloud_outlined),
-        title: const Text('WebDAV 配置下载/上传'),
-        subtitle: Text(
-          cfg.enabled
-              ? '$statusText · $when'
-              : '换电脑时可下载 MCP 清单；点右侧齿轮配置',
-        ),
-        trailing: IconButton(
-          tooltip: '设置',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const WebDavSettingsScreen(),
-              ),
-            );
-          },
-          icon: const Icon(Icons.chevron_right),
-        ),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const WebDavSettingsScreen(),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
 class AgentConfigSyncScreen extends StatelessWidget {
   const AgentConfigSyncScreen({super.key});
 
@@ -391,10 +335,11 @@ class AgentConfigSyncScreen extends StatelessWidget {
         children: [
           Text(
             'WebDAV 远端只保留 Cursor 目录（skills/commands/rules 的 cursor 侧）。'
-            '「下载」会把 Cursor 拉到本机后自动转换为 Codex（Skill / Rule）；'
-            '「上传」只上传本机 Cursor，不会把 Codex 当作远端源。'
-            '也可不依赖 WebDAV，用下方「一键转换」从本机 Cursor 生成 Codex。'
-            '部署到客户端目录时采用合并覆盖，不删除目标中的额外文件。',
+            '「下载」只把远端全量镜像到本机缓存，不覆盖正式配置；'
+            '「更新/覆盖」再把缓存全量镜像到正式 Cursor 目录（本地多余也会删除），'
+            '并可自动转换 Skill / Rule 到 Codex。'
+            '「上传」把本机正式 Cursor 全量镜像到远端（远端多余也会删除）。'
+            '也可不依赖 WebDAV，用下方「一键转换」从本机 Cursor 生成 Codex。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -407,12 +352,11 @@ class AgentConfigSyncScreen extends StatelessWidget {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.layers_outlined),
-                    title: const Text('整体下载/上传'),
+                    title: const Text('整体下载 / 覆盖 / 上传'),
                     subtitle: Text(
                       supported
                           ? (webDavReady
-                                ? '一次下载远端 Cursor（Skill / Command / Rule），'
-                                    '并自动转换 Skill + Rule 到本机 Codex'
+                                ? '下载→缓存；更新/覆盖→正式目录；上传→远端全量一致'
                                 : '需先启用并配置 WebDAV')
                           : '当前平台不支持目录下载/上传',
                     ),
@@ -433,21 +377,32 @@ class AgentConfigSyncScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: !supported || !webDavReady || busy
+                        child: FilledButton.icon(
+                          onPressed: !supported || busy
                               ? null
                               : () => _run(
                                     context,
-                                    hub.pushAllResourcesToWebDav,
+                                    hub.applyAllResourcesFromCache,
                                   ),
-                          icon: const Icon(Icons.cloud_upload_outlined),
-                          label: const Text('上传全部'),
+                          icon: const Icon(Icons.install_desktop_outlined),
+                          label: const Text('更新/覆盖全部'),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  FilledButton.icon(
+                  OutlinedButton.icon(
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                              context,
+                              hub.pushAllResourcesToWebDav,
+                            ),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('上传全部'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonalIcon(
                     onPressed: !supported || busy
                         ? null
                         : () => _run(
@@ -461,6 +416,19 @@ class AgentConfigSyncScreen extends StatelessWidget {
                   Text(
                     '不访问 WebDAV：以本机 Cursor 为源，生成 Codex Skills 与 AGENTS.md',
                     style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  _DirectoryPathRow(
+                    label: 'Skill 缓存根目录',
+                    displayPath: McpPaths.skillsCacheRoot,
+                    directoryPath: McpPaths.skillsCacheRoot,
+                    enabled: supported,
+                  ),
+                  _DirectoryPathRow(
+                    label: '其他资源缓存根目录',
+                    displayPath: McpPaths.agentResourcesCacheRoot,
+                    directoryPath: McpPaths.agentResourcesCacheRoot,
+                    enabled: supported,
                   ),
                 ],
               ),
@@ -549,21 +517,32 @@ class _ResourceSyncCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: !supported || !webDavReady || busy
+                  child: FilledButton.icon(
+                    onPressed: !supported || busy
                         ? null
                         : () => _run(
                             context,
-                            () => hub.pushResourceToAllTargets(resource),
+                            () => hub.applyResourceFromCache(resource),
                           ),
-                    icon: const Icon(Icons.cloud_upload_outlined),
-                    label: const Text('上传'),
+                    icon: const Icon(Icons.install_desktop_outlined),
+                    label: const Text('更新/覆盖'),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            FilledButton.icon(
+            OutlinedButton.icon(
+              onPressed: !supported || !webDavReady || busy
+                  ? null
+                  : () => _run(
+                      context,
+                      () => hub.pushResourceToAllTargets(resource),
+                    ),
+              icon: const Icon(Icons.cloud_upload_outlined),
+              label: const Text('上传'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
               onPressed: !supported || busy || !_canConvert
                   ? null
                   : () => _run(
@@ -584,7 +563,7 @@ class _ResourceSyncCard extends StatelessWidget {
             for (final target in SkillTarget.values)
               _DirectoryPathRow(
                 label: target == SkillTarget.cursor
-                    ? '${target.label}（WebDAV）'
+                    ? '${target.label}（正式目录）'
                     : '${target.label}（本机转换）',
                 displayPath: _pathLabelFor(target),
                 directoryPath: _directoryFor(target),
@@ -618,10 +597,10 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
         AgentResourceKind.skill =>
-          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（下载 Cursor 后也会自动执行）',
+          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（更新/覆盖后也会自动执行）',
         AgentResourceKind.rule =>
           '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
-              '（下载 Cursor 后也会自动执行）',
+              '（更新/覆盖后也会自动执行）',
         AgentResourceKind.command =>
           'Codex 暂无与 Cursor 全局 Command 对等的目录',
       };
@@ -642,12 +621,13 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String _supportDescription() {
     if (resource == AgentResourceKind.command) {
-      return 'WebDAV 仅下载/上传 Cursor；Codex 暂无对等的全局 Command 目录';
+      return '下载到缓存 → 更新/覆盖到正式目录 → 上传全量镜像远端；'
+          'Codex 暂无对等 Command 目录';
     }
     if (resource == AgentResourceKind.rule) {
-      return 'WebDAV 仅下载/上传 Cursor；下载后自动（或一键）转换为 Codex AGENTS.md';
+      return '下载到缓存 → 更新/覆盖到正式目录（可自动转 AGENTS.md）→ 上传全量镜像远端';
     }
-    return 'WebDAV 仅下载/上传 Cursor；下载后自动（或一键）转换到本机 Codex';
+    return '下载到缓存 → 更新/覆盖到正式目录（可自动转 Codex）→ 上传全量镜像远端';
   }
 }
 
