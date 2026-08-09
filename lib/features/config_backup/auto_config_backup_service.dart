@@ -42,6 +42,7 @@ class AutoConfigBackupService extends ChangeNotifier {
 
   Timer? _timer;
   bool _inFlight = false;
+  String? _lastContentFingerprint;
 
   String? get defaultDirectory =>
       _defaultDirectory ??
@@ -55,6 +56,7 @@ class AutoConfigBackupService extends ChangeNotifier {
 
   Future<void> initialize() async {
     settings = await _settingsStore.load();
+    _lastContentFingerprint = await _loadContentFingerprint();
     initialized = true;
     _reschedule();
     notifyListeners();
@@ -67,7 +69,7 @@ class AutoConfigBackupService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 生成一次自动备份；定时触发和界面“立即备份”共用该入口。
+  /// 立即生成备份，不受内容是否变化限制。
   Future<ConfigBackupResult> backupNow() async {
     if (_inFlight) {
       return const ConfigBackupResult(ok: false, message: '自动备份正在进行中，请稍候');
@@ -87,11 +89,19 @@ class AutoConfigBackupService extends ChangeNotifier {
       await cleanupExpiredBackups(directoryPath);
       final at = _now();
       final zipPath = p.join(directoryPath, _autoFileName(at));
+      final servers = await _loadServers();
       final result = await _backupService.exportToZip(
         zipPath: zipPath,
-        servers: await _loadServers(),
+        servers: servers,
       );
       if (result.ok) {
+        try {
+          _lastContentFingerprint = await _backupService.contentFingerprint(
+            servers: servers,
+          );
+        } catch (error) {
+          debugPrint('更新自动备份内容指纹失败: $error');
+        }
         lastBackupAt = at;
         lastBackupPath = result.path;
         status = AutoBackupStatus.success;
@@ -108,6 +118,39 @@ class AutoConfigBackupService extends ChangeNotifier {
       return ConfigBackupResult(ok: false, message: '自动备份失败：$error');
     } finally {
       _inFlight = false;
+    }
+  }
+
+  /// 定时备份入口：仅在 MCP 清单或实际导出的 Agent 配置发生变化时导出。
+  Future<ConfigBackupResult> backupIfChanged() async {
+    if (_inFlight) {
+      return const ConfigBackupResult(ok: false, message: '自动备份正在进行中，请稍候');
+    }
+    List<McpServerEntry> servers;
+    String fingerprint;
+    try {
+      servers = await _loadServers();
+      fingerprint = await _backupService.contentFingerprint(servers: servers);
+    } catch (error) {
+      lastError = '读取自动备份内容失败：$error';
+      status = AutoBackupStatus.error;
+      notifyListeners();
+      return ConfigBackupResult(ok: false, message: lastError!);
+    }
+    if (_lastContentFingerprint == fingerprint) {
+      return const ConfigBackupResult(ok: true, message: '配置未变化，已跳过自动备份');
+    }
+    return backupNow();
+  }
+
+  Future<String?> _loadContentFingerprint() async {
+    try {
+      return await _backupService.contentFingerprint(
+        servers: await _loadServers(),
+      );
+    } catch (error) {
+      debugPrint('读取自动备份内容指纹失败: $error');
+      return null;
     }
   }
 
@@ -148,7 +191,7 @@ class AutoConfigBackupService extends ChangeNotifier {
     if (!settings.enabled || !McpPaths.isDesktopSupported) return;
     _timer = Timer.periodic(
       Duration(minutes: settings.intervalMinutes),
-      (_) => unawaited(backupNow()),
+      (_) => unawaited(backupIfChanged()),
     );
   }
 

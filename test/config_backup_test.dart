@@ -139,6 +139,61 @@ void main() {
       final manifestEntry = archive.findFile('manifest.json');
       expect(manifestEntry, isNotNull);
     });
+
+    test('内容指纹覆盖 MCP、资源文件和 AGENTS.md，且不含原文', () async {
+      final temp = await Directory.systemTemp.createTemp('backup_hash_test_');
+      addTearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+      final resources = Directory(p.join(temp.path, 'skills'));
+      await resources.create();
+      final skill = File(p.join(resources.path, 'example.md'));
+      await skill.writeAsString('first');
+      final agents = File(p.join(temp.path, 'AGENTS.md'));
+      await agents.writeAsString('agent first');
+      final service = ConfigBackupService(
+        resourceSourcesProvider: () => [
+          ConfigBackupResourceSource(
+            sourcePath: resources.path,
+            zipPath: 'resources/skills/cursor',
+          ),
+        ],
+        codexAgentsMdPathProvider: () => agents.path,
+      );
+      const servers = [
+        McpServerEntry(id: 'demo', name: 'Demo', transport: McpTransport.stdio),
+      ];
+
+      final original = await service.contentFingerprint(servers: servers);
+      expect(await service.contentFingerprint(servers: servers), original);
+      expect(original, isNot(contains('first')));
+
+      await skill.writeAsString('changed');
+      expect(
+        await service.contentFingerprint(servers: servers),
+        isNot(original),
+      );
+
+      await skill.writeAsString('first');
+      await agents.writeAsString('agent changed');
+      expect(
+        await service.contentFingerprint(servers: servers),
+        isNot(original),
+      );
+
+      await agents.writeAsString('agent first');
+      const changedServers = [
+        McpServerEntry(
+          id: 'demo',
+          name: 'Changed',
+          transport: McpTransport.stdio,
+        ),
+      ];
+      expect(
+        await service.contentFingerprint(servers: changedServers),
+        isNot(original),
+      );
+    });
   });
 
   group('AutoConfigBackupService', () {
@@ -174,6 +229,40 @@ void main() {
       );
       expect(service.lastBackupPath, fake.lastPath);
       expect(service.status, AutoBackupStatus.success);
+    });
+
+    test('定时备份只在内容变化时导出，立即备份始终导出', () async {
+      final temp = await Directory.systemTemp.createTemp('auto_changed_test_');
+      addTearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+      var serverName = 'Demo';
+      final fake = _FakeConfigBackupService();
+      final service = AutoConfigBackupService(
+        backupService: fake,
+        settingsStore: _MemoryAutoBackupSettingsStore(),
+        defaultDirectory: temp.path,
+        loadServers: () async => [
+          McpServerEntry(
+            id: 'demo',
+            name: serverName,
+            transport: McpTransport.stdio,
+          ),
+        ],
+      );
+      addTearDown(service.dispose);
+
+      await service.initialize();
+      final skipped = await service.backupIfChanged();
+      expect(skipped.message, '配置未变化，已跳过自动备份');
+      expect(fake.exportCalls, 0);
+
+      serverName = 'Changed';
+      expect((await service.backupIfChanged()).ok, isTrue);
+      expect(fake.exportCalls, 1);
+
+      expect((await service.backupNow()).ok, isTrue);
+      expect(fake.exportCalls, 2);
     });
 
     test('只清理超过 7 天的自动备份', () async {
@@ -215,12 +304,14 @@ void main() {
 class _FakeConfigBackupService extends ConfigBackupService {
   String? lastPath;
   List<McpServerEntry> lastServers = const [];
+  int exportCalls = 0;
 
   @override
   Future<ConfigBackupResult> exportToZip({
     required String zipPath,
     required List<McpServerEntry> servers,
   }) async {
+    exportCalls += 1;
     lastPath = zipPath;
     lastServers = servers;
     await File(zipPath).writeAsString('backup');

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -33,13 +34,21 @@ class ConfigBackupResult {
 
 /// 导入解析结果：资源已写盘；[servers] 需由 Hub 合并进 catalog。
 class ConfigBackupImportPayload {
-  const ConfigBackupImportPayload({
-    required this.result,
-    this.servers,
-  });
+  const ConfigBackupImportPayload({required this.result, this.servers});
 
   final ConfigBackupResult result;
   final List<McpServerEntry>? servers;
+}
+
+/// 一项实际会写入备份包的 Agent 资源目录。
+class ConfigBackupResourceSource {
+  const ConfigBackupResourceSource({
+    required this.sourcePath,
+    required this.zipPath,
+  });
+
+  final String sourcePath;
+  final String zipPath;
 }
 
 /// 把 MCP 清单与本机 Agent 配置打成 zip，或从 zip 恢复。
@@ -48,9 +57,18 @@ class ConfigBackupImportPayload {
 class ConfigBackupService {
   ConfigBackupService({
     SkillFolderCopy? folderCopy,
-  }) : _folderCopy = folderCopy ?? const SkillFolderCopy();
+    Iterable<ConfigBackupResourceSource> Function()? resourceSourcesProvider,
+    String? Function()? codexAgentsMdPathProvider,
+  }) : _folderCopy = folderCopy ?? const SkillFolderCopy(),
+       _resourceSourcesProvider =
+           resourceSourcesProvider ?? _defaultResourceSources,
+       _codexAgentsMdPathProvider =
+           codexAgentsMdPathProvider ?? (() => McpPaths.codexAgentsMdPath);
 
   final SkillFolderCopy _folderCopy;
+  final Iterable<ConfigBackupResourceSource> Function()
+  _resourceSourcesProvider;
+  final String? Function() _codexAgentsMdPathProvider;
 
   /// 建议的备份文件名（含时间戳）。
   String suggestedFileName([DateTime? at]) {
@@ -67,10 +85,7 @@ class ConfigBackupService {
     required List<McpServerEntry> servers,
   }) async {
     if (!McpPaths.isDesktopSupported) {
-      return const ConfigBackupResult(
-        ok: false,
-        message: '当前平台不支持配置备份',
-      );
+      return const ConfigBackupResult(ok: false, message: '当前平台不支持配置备份');
     }
 
     final staging = await _createStagingDir('export');
@@ -81,32 +96,27 @@ class ConfigBackupService {
         'version': 1,
         'servers': servers.map((s) => s.toJson()).toList(),
       };
-      final catalogFile =
-          File(p.join(staging.path, ConfigBackupPaths.catalogFile));
+      final catalogFile = File(
+        p.join(staging.path, ConfigBackupPaths.catalogFile),
+      );
       await catalogFile.writeAsString(
         const JsonEncoder.withIndent('  ').convert(catalogPayload),
       );
       fileCount += 1;
 
       // 与 WebDAV 约定一致：资源权威源为 Cursor；Codex 由转换生成（另存 AGENTS.md）。
-      for (final resource in AgentResourceKind.values) {
-        for (final target in resource.webDavTargets) {
-          final source = ConfigBackupPaths.localDeployPath(resource, target);
-          if (source == null) continue;
-          final sourceDir = Directory(source);
-          if (!await sourceDir.exists()) continue;
+      for (final source in _resourceSourcesProvider()) {
+        final sourceDir = Directory(source.sourcePath);
+        if (!await sourceDir.exists()) continue;
 
-          final destRel = ConfigBackupPaths.resourceZipDir(resource, target);
-          final destAbs = p.join(staging.path, destRel);
-          final copied = await _folderCopy.copyContents(
-            sourceDir: source,
-            targetDir: destAbs,
-          );
-          fileCount += copied.copiedFiles;
-        }
+        final copied = await _folderCopy.copyContents(
+          sourceDir: source.sourcePath,
+          targetDir: p.join(staging.path, source.zipPath),
+        );
+        fileCount += copied.copiedFiles;
       }
 
-      final agentsMd = McpPaths.codexAgentsMdPath;
+      final agentsMd = _codexAgentsMdPathProvider();
       if (agentsMd != null) {
         final src = File(agentsMd);
         if (await src.exists()) {
@@ -124,11 +134,13 @@ class ConfigBackupService {
         exportedAt: DateTime.now().toUtc(),
         appName: AppBrand.displayName,
         fileCount: fileCount,
-        notes: '含 MCP 清单与本机 Cursor Skill/Command/Rule，以及 Codex AGENTS.md；'
+        notes:
+            '含 MCP 清单与本机 Cursor Skill/Command/Rule，以及 Codex AGENTS.md；'
             '不含 WebDAV 密码与 servers 仓库克隆。Codex Skills 请由 Cursor 转换生成。',
       );
-      await File(p.join(staging.path, ConfigBackupManifest.fileName))
-          .writeAsString(
+      await File(
+        p.join(staging.path, ConfigBackupManifest.fileName),
+      ).writeAsString(
         const JsonEncoder.withIndent('  ').convert(manifest.toJson()),
       );
 
@@ -148,33 +160,111 @@ class ConfigBackupService {
       );
     } catch (error) {
       debugPrint('配置导出失败: $error');
-      return ConfigBackupResult(
-        ok: false,
-        message: '导出失败：$error',
-      );
+      return ConfigBackupResult(ok: false, message: '导出失败：$error');
     } finally {
       await _safeDeleteDir(staging);
     }
   }
 
+  /// 计算所有实际导出来源的内容指纹，不写入原文、密钥或文件路径。
+  ///
+  /// 自动备份只在该指纹变化时创建 zip；手动导出不依赖此方法。
+  Future<String> contentFingerprint({
+    required List<McpServerEntry> servers,
+  }) async {
+    Digest? digest;
+    final converter = sha256.startChunkedConversion(
+      ChunkedConversionSink.withCallback((digests) => digest = digests.single),
+    );
+
+    void addText(String value) {
+      final bytes = utf8.encode(value);
+      converter.add(utf8.encode('${bytes.length}:'));
+      converter.add(bytes);
+    }
+
+    addText('catalog.json');
+    addText(
+      const JsonEncoder.withIndent('  ').convert({
+        'version': 1,
+        'servers': servers.map((server) => server.toJson()).toList(),
+      }),
+    );
+
+    for (final source in _resourceSourcesProvider()) {
+      final sourceDir = Directory(source.sourcePath);
+      if (!await sourceDir.exists()) continue;
+      final files = <File>[];
+      await for (final entity in sourceDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File ||
+            _hasDotPathSegment(entity.path, sourceDir.path)) {
+          continue;
+        }
+        files.add(entity);
+      }
+      files.sort(
+        (a, b) => p
+            .relative(a.path, from: sourceDir.path)
+            .compareTo(p.relative(b.path, from: sourceDir.path)),
+      );
+      for (final file in files) {
+        final relativePath = p.posix.joinAll(
+          p.split(p.relative(file.path, from: sourceDir.path)),
+        );
+        addText('${source.zipPath}/$relativePath');
+        await for (final bytes in file.openRead()) {
+          converter.add(bytes);
+        }
+      }
+    }
+
+    final agentsMd = _codexAgentsMdPathProvider();
+    if (agentsMd != null) {
+      final file = File(agentsMd);
+      if (await file.exists()) {
+        addText(ConfigBackupPaths.codexAgentsMdZipPath);
+        await for (final bytes in file.openRead()) {
+          converter.add(bytes);
+        }
+      }
+    }
+
+    converter.close();
+    return digest!.toString();
+  }
+
+  static Iterable<ConfigBackupResourceSource> _defaultResourceSources() sync* {
+    for (final resource in AgentResourceKind.values) {
+      for (final target in resource.webDavTargets) {
+        final path = ConfigBackupPaths.localDeployPath(resource, target);
+        if (path == null) continue;
+        yield ConfigBackupResourceSource(
+          sourcePath: path,
+          zipPath: ConfigBackupPaths.resourceZipDir(resource, target),
+        );
+      }
+    }
+  }
+
+  static bool _hasDotPathSegment(String path, String from) => p
+      .split(p.relative(path, from: from))
+      .any((segment) => segment.startsWith('.'));
+
   /// 从备份 zip 恢复。返回解析出的 servers（由调用方写入 catalog）与资源恢复计数。
   Future<ConfigBackupImportPayload> importFromZip(String zipPath) async {
     if (!McpPaths.isDesktopSupported) {
       return const ConfigBackupImportPayload(
-        result: ConfigBackupResult(
-          ok: false,
-          message: '当前平台不支持配置备份',
-        ),
+        result: ConfigBackupResult(ok: false, message: '当前平台不支持配置备份'),
       );
     }
 
     final zipFile = File(zipPath);
     if (!await zipFile.exists()) {
       return ConfigBackupImportPayload(
-        result: ConfigBackupResult(
-          ok: false,
-          message: '备份文件不存在：$zipPath',
-        ),
+        result: ConfigBackupResult(ok: false, message: '备份文件不存在：$zipPath'),
       );
     }
 
@@ -183,8 +273,9 @@ class ConfigBackupService {
       await extractFileToDisk(zipPath, staging.path);
 
       final root = await _resolveBackupRoot(staging);
-      final manifestFile =
-          File(p.join(root.path, ConfigBackupManifest.fileName));
+      final manifestFile = File(
+        p.join(root.path, ConfigBackupManifest.fileName),
+      );
       if (!await manifestFile.exists()) {
         return const ConfigBackupImportPayload(
           result: ConfigBackupResult(
@@ -208,8 +299,9 @@ class ConfigBackupService {
       }
 
       List<McpServerEntry>? servers;
-      final catalogFile =
-          File(p.join(root.path, ConfigBackupPaths.catalogFile));
+      final catalogFile = File(
+        p.join(root.path, ConfigBackupPaths.catalogFile),
+      );
       if (await catalogFile.exists()) {
         final decoded = jsonDecode(await catalogFile.readAsString());
         if (decoded is Map<String, dynamic>) {
@@ -242,10 +334,7 @@ class ConfigBackupService {
             restoredFiles += copied.copiedFiles;
           }
           if (cache != null) {
-            await _folderCopy.copyContents(
-              sourceDir: zipAbs,
-              targetDir: cache,
-            );
+            await _folderCopy.copyContents(sourceDir: zipAbs, targetDir: cache);
           }
         }
       }
@@ -300,10 +389,7 @@ class ConfigBackupService {
     } catch (error) {
       debugPrint('配置导入失败: $error');
       return ConfigBackupImportPayload(
-        result: ConfigBackupResult(
-          ok: false,
-          message: '导入失败：$error',
-        ),
+        result: ConfigBackupResult(ok: false, message: '导入失败：$error'),
       );
     } finally {
       await _safeDeleteDir(staging);
