@@ -75,9 +75,9 @@ class _AddServerScreenState extends State<AddServerScreen> {
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -198,7 +198,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
             title: const Text('启用'),
             subtitle: _transport == McpTransport.http
                 ? const Text('启用后，若填写了启动命令，Hub 会自动拉起进程')
-                : null,
+                : const Text('启用后，若填写了 command，Hub 会自动拉起进程'),
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),

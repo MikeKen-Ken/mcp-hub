@@ -81,7 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 _FeatureCard(
                   icon: Icons.hub_outlined,
                   title: '客户端 MCP',
-                  subtitle: '一键配置 Cursor / Codex，并管理 ${hub.servers.length} 个本地 MCP',
+                  subtitle:
+                      '一键配置 Cursor / Codex，并管理 ${hub.servers.length} 个本地 MCP',
                   status: _clientSummary(hub),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -146,11 +147,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
-        SkillSyncStatus.idle => '尚未下载/上传',
-        SkillSyncStatus.syncing => '下载/上传中…',
-        SkillSyncStatus.success => '最近下载/上传成功',
-        SkillSyncStatus.error => '最近下载/上传失败',
-      };
+    SkillSyncStatus.idle => '尚未下载/上传',
+    SkillSyncStatus.syncing => '下载/上传中…',
+    SkillSyncStatus.success => '最近下载/上传成功',
+    SkillSyncStatus.error => '最近下载/上传失败',
+  };
 }
 
 class _FeatureCard extends StatelessWidget {
@@ -173,7 +174,10 @@ class _FeatureCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 10,
+        ),
         leading: CircleAvatar(child: Icon(icon)),
         title: Text(title),
         subtitle: Text('$subtitle\n$status'),
@@ -195,9 +199,9 @@ class ClientMcpScreen extends StatelessWidget {
     await action();
     if (!context.mounted) return;
     final hub = context.read<HubController>();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(hub.lastMessage ?? '完成')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(hub.lastMessage ?? '完成')));
   }
 
   @override
@@ -210,18 +214,14 @@ class ClientMcpScreen extends StatelessWidget {
         title: const Text('客户端 MCP'),
         actions: [
           IconButton(
-            tooltip: webDavReady
-                ? '从 WebDAV 下载 MCP 清单'
-                : '需先启用并配置 WebDAV',
+            tooltip: webDavReady ? '从 WebDAV 下载 MCP 清单' : '需先启用并配置 WebDAV',
             onPressed: !webDavReady || syncing
                 ? null
                 : () => _runWebDavSync(context, hub.pullWebDavNow),
             icon: const Icon(Icons.cloud_download_outlined),
           ),
           IconButton(
-            tooltip: webDavReady
-                ? '上传 MCP 清单到 WebDAV'
-                : '需先启用并配置 WebDAV',
+            tooltip: webDavReady ? '上传 MCP 清单到 WebDAV' : '需先启用并配置 WebDAV',
             onPressed: !webDavReady || syncing
                 ? null
                 : () => _runWebDavSync(context, hub.pushWebDavNow),
@@ -368,9 +368,9 @@ class AgentConfigSyncScreen extends StatelessWidget {
                           onPressed: !supported || !webDavReady || busy
                               ? null
                               : () => _run(
-                                    context,
-                                    hub.syncAllResourcesFromWebDav,
-                                  ),
+                                  context,
+                                  hub.syncAllResourcesFromWebDav,
+                                ),
                           icon: const Icon(Icons.cloud_download_outlined),
                           label: const Text('下载全部'),
                         ),
@@ -381,9 +381,9 @@ class AgentConfigSyncScreen extends StatelessWidget {
                           onPressed: !supported || busy
                               ? null
                               : () => _run(
-                                    context,
-                                    hub.applyAllResourcesFromCache,
-                                  ),
+                                  context,
+                                  hub.applyAllResourcesFromCache,
+                                ),
                           icon: const Icon(Icons.install_desktop_outlined),
                           label: const Text('更新/覆盖全部'),
                         ),
@@ -394,10 +394,7 @@ class AgentConfigSyncScreen extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: !supported || !webDavReady || busy
                         ? null
-                        : () => _run(
-                              context,
-                              hub.pushAllResourcesToWebDav,
-                            ),
+                        : () => _run(context, hub.pushAllResourcesToWebDav),
                     icon: const Icon(Icons.cloud_upload_outlined),
                     label: const Text('上传全部'),
                   ),
@@ -405,10 +402,8 @@ class AgentConfigSyncScreen extends StatelessWidget {
                   FilledButton.tonalIcon(
                     onPressed: !supported || busy
                         ? null
-                        : () => _run(
-                              context,
-                              hub.convertAllResourcesFromCursor,
-                            ),
+                        : () =>
+                              _run(context, hub.convertAllResourcesFromCursor),
                     icon: const Icon(Icons.transform_outlined),
                     label: const Text('转换全部（Skill + Rule）'),
                   ),
@@ -590,20 +585,19 @@ class _ResourceSyncCard extends StatelessWidget {
   bool get _canConvert => resource.canConvertToCodex;
 
   String get _convertButtonLabel => switch (resource) {
-        AgentResourceKind.skill => '一键转换 Cursor → Codex',
-        AgentResourceKind.rule => '一键转换 Cursor → AGENTS.md',
-        AgentResourceKind.command => '一键转换（Codex 暂不支持）',
-      };
+    AgentResourceKind.skill => '一键转换 Cursor → Codex',
+    AgentResourceKind.rule => '一键转换 Cursor → AGENTS.md',
+    AgentResourceKind.command => '一键转换（Codex 暂不支持）',
+  };
 
   String? get _convertHint => switch (resource) {
-        AgentResourceKind.skill =>
-          '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（更新/覆盖后也会自动执行）',
-        AgentResourceKind.rule =>
-          '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
-              '（更新/覆盖后也会自动执行）',
-        AgentResourceKind.command =>
-          'Codex 暂无与 Cursor 全局 Command 对等的目录',
-      };
+    AgentResourceKind.skill =>
+      '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（更新/覆盖后也会自动执行）',
+    AgentResourceKind.rule =>
+      '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
+          '（更新/覆盖后也会自动执行）',
+    AgentResourceKind.command => 'Codex 暂无与 Cursor 全局 Command 对等的目录',
+  };
 
   String? _pathLabelFor(SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
@@ -857,21 +851,7 @@ class _ServerTile extends StatelessWidget {
                 subtitle: isHub && hub.hubMcpHost.lastError != null
                     ? Text(hub.hubMcpHost.lastError!)
                     : null,
-                trailing: Wrap(
-                  spacing: 4,
-                  children: [
-                    IconButton(
-                      tooltip: '启动',
-                      onPressed: () => hub.startServer(server.id),
-                      icon: const Icon(Icons.play_arrow),
-                    ),
-                    IconButton(
-                      tooltip: '停止',
-                      onPressed: () => hub.stopServer(server.id),
-                      icon: const Icon(Icons.stop),
-                    ),
-                  ],
-                ),
+                trailing: null,
               )
             else
               ListTile(
@@ -888,6 +868,18 @@ class _ServerTile extends StatelessWidget {
               child: Wrap(
                 spacing: 4,
                 children: [
+                  if (!isHub && server.canHubStartProcess) ...[
+                    TextButton.icon(
+                      onPressed: () => hub.startServer(server.id),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('启动'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => hub.stopServer(server.id),
+                      icon: const Icon(Icons.stop),
+                      label: const Text('停止'),
+                    ),
+                  ],
                   if (!isHub && server.localPath != null)
                     TextButton.icon(
                       onPressed: () async {

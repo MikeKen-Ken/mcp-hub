@@ -28,6 +28,7 @@ class McpServerEntry {
   final String? command;
   final List<String> args;
   final Map<String, String> env;
+
   /// stdio 工作目录（写入 Cursor/Codex；本机字段，不进 WebDAV）
   final String? cwd;
   final String? url;
@@ -39,10 +40,9 @@ class McpServerEntry {
   /// Epoch ms; used for WebDAV conflict resolution.
   final int updatedAt;
 
-  /// Hub 是否可驻留拉起该进程（非内置 HTTP，且有启动命令）。
+  /// Hub 是否可拉起该进程（非内置，且有启动命令）。
   bool get canHubStartProcess {
     if (builtIn) return false;
-    if (transport != McpTransport.http) return false;
     final cmd = command?.trim();
     return cmd != null && cmd.isNotEmpty;
   }
@@ -91,22 +91,22 @@ class McpServerEntry {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'transport': transport.wireName,
-        if (repoUrl != null) 'repoUrl': repoUrl,
-        if (localPath != null) 'localPath': localPath,
-        if (command != null) 'command': command,
-        if (args.isNotEmpty) 'args': args,
-        if (env.isNotEmpty) 'env': env,
-        if (cwd != null) 'cwd': cwd,
-        if (url != null) 'url': url,
-        'enabled': enabled,
-        'autoStart': autoStart,
-        'builtIn': builtIn,
-        if (notes != null) 'notes': notes,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'name': name,
+    'transport': transport.wireName,
+    if (repoUrl != null) 'repoUrl': repoUrl,
+    if (localPath != null) 'localPath': localPath,
+    if (command != null) 'command': command,
+    if (args.isNotEmpty) 'args': args,
+    if (env.isNotEmpty) 'env': env,
+    if (cwd != null) 'cwd': cwd,
+    if (url != null) 'url': url,
+    'enabled': enabled,
+    'autoStart': autoStart,
+    'builtIn': builtIn,
+    if (notes != null) 'notes': notes,
+    'updatedAt': updatedAt,
+  };
 
   factory McpServerEntry.fromJson(Map<String, dynamic> json) {
     final argsRaw = json['args'];

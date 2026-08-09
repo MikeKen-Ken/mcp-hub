@@ -30,11 +30,11 @@ class HubController extends ChangeNotifier {
     McpProcessManager? processManager,
     WebDavConfigStore? webDavConfigStore,
     bool initiallyLoading = true,
-  })  : _catalogStore = catalogStore ?? McpCatalogStore(),
-        _repoService = repoService ?? McpRepoService(),
-        _processManager = processManager ?? McpProcessManager(),
-        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
-        _loading = initiallyLoading {
+  }) : _catalogStore = catalogStore ?? McpCatalogStore(),
+       _repoService = repoService ?? McpRepoService(),
+       _processManager = processManager ?? McpProcessManager(),
+       _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
+       _loading = initiallyLoading {
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
     webDavSync = WebDavSyncService(
@@ -43,9 +43,7 @@ class HubController extends ChangeNotifier {
       applyDocument: _applySyncDocument,
     );
     webDavSync.addListener(_onWebDavChanged);
-    skillSync = SkillSyncService(
-      loadConfig: () async => webDavConfig,
-    );
+    skillSync = SkillSyncService(loadConfig: () async => webDavConfig);
     skillSync.addListener(_onSkillSyncChanged);
     configBackup = ConfigBackupService();
     autoConfigBackup = AutoConfigBackupService(
@@ -79,8 +77,10 @@ class HubController extends ChangeNotifier {
   String? get lastMessage => _lastMessage;
   McpClientAlignReport? get cursorAlignReport => _cursorAlignReport;
   McpClientAlignReport? get codexAlignReport => _codexAlignReport;
+
   /// `null` 表示检测中；兼容旧 UI。
   bool? get cursorConfigured => _cursorAlignReport?.isAligned;
+
   /// `null` 表示检测中；兼容旧 UI。
   bool? get codexConfigured => _codexAlignReport?.isAligned;
   bool get isDesktopSupported => McpPaths.isDesktopSupported;
@@ -106,12 +106,13 @@ class HubController extends ChangeNotifier {
     webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
     await _ensureBuiltInHubMcp();
-    await _migrateAutoStartForEnabledHttp();
+    await _repairInvalidWorkingDirectories();
+    await _migrateAutoStartForEnabledServers();
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
     await _syncHubMcpHost();
-    await autoStartEnabledHttpServers();
+    await autoStartEnabledServers();
     await autoConfigBackup.initialize();
     if (webDavConfig.enabled &&
         webDavConfig.autoPull &&
@@ -121,8 +122,8 @@ class HubController extends ChangeNotifier {
     await webDavSync.startPolling();
   }
 
-  /// 旧目录里「已启用 HTTP 但 autoStart=false」会导致不启动；迁移为一致标记。
-  Future<void> _migrateAutoStartForEnabledHttp() async {
+  /// 旧目录里「已启用但 autoStart=false」会导致不启动；迁移为一致标记。
+  Future<void> _migrateAutoStartForEnabledServers() async {
     var changed = false;
     final next = <McpServerEntry>[];
     for (final server in _servers) {
@@ -138,20 +139,48 @@ class HubController extends ChangeNotifier {
     await _persist(scheduleRemote: false);
   }
 
+  /// 客户端会直接使用目录中的 cwd；失效目录会令 Windows 无法创建 stdio
+  /// 进程。优先回退到已存在的本地仓库，否则清空 cwd 让客户端继承自身目录。
+  Future<void> _repairInvalidWorkingDirectories() async {
+    var changed = false;
+    final next = <McpServerEntry>[];
+    for (final server in _servers) {
+      final configured = server.cwd;
+      if (configured == null || configured.trim().isEmpty) {
+        next.add(server);
+        continue;
+      }
+      final resolved = await _processManager.resolveWorkingDirectory(server);
+      if (resolved == configured) {
+        next.add(server);
+        continue;
+      }
+      changed = true;
+      next.add(
+        resolved == null
+            ? server.copyWith(clearCwd: true)
+            : server.copyWith(cwd: resolved),
+      );
+    }
+    if (!changed) return;
+    _servers = next;
+    await _persist(scheduleRemote: false);
+  }
+
   Future<void> _applySyncDocument(CatalogSyncDocument doc) async {
     _servers = CatalogSyncMapper.applyDocument(local: _servers, doc: doc);
     await _ensureBuiltInHubMcp(persist: false);
+    await _repairInvalidWorkingDirectories();
     await _catalogStore.save(_servers);
     _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
     notifyListeners();
     await refreshClientStatus();
-    // 合并后补拉本机已启用的 HTTP MCP（可能新增了 command）
-    await autoStartEnabledHttpServers();
+    // 合并后补拉本机已启用且有启动命令的 MCP。
+    await autoStartEnabledServers();
   }
 
   Future<void> _ensureBuiltInHubMcp({bool persist = true}) async {
-    final index =
-        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    final index = _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
     final builtIn = McpServerEntry(
       id: HubMcpConstants.serverKey,
       name: AppBrand.displayName,
@@ -180,8 +209,7 @@ class HubController extends ChangeNotifier {
   }
 
   void _syncBuiltInUrl() {
-    final index =
-        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    final index = _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
     if (index < 0) return;
     if (_servers[index].url == hubEndpointUrl) return;
     _servers = [..._servers];
@@ -216,9 +244,9 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 已启用的 HTTP MCP（有启动命令）在 Hub 启动时自动拉起。
+  /// 已启用且有启动命令的 MCP 在 Hub 启动时自动拉起。
   /// 不再依赖单独的 autoStart 开关，避免「已启用却不启动」。
-  Future<void> autoStartEnabledHttpServers() async {
+  Future<void> autoStartEnabledServers() async {
     for (final server in _servers) {
       if (!server.shouldAutoStartByHub) continue;
       await _processManager.start(server);
@@ -234,7 +262,7 @@ class HubController extends ChangeNotifier {
     final current = _servers[index];
     _servers[index] = current.copyWith(
       enabled: enabled,
-      // 启用可拉起的 HTTP 时同步标记，便于列表展示「自动」
+      // 启用可拉起的 MCP 时同步标记，便于列表展示「自动」
       autoStart: enabled && current.canHubStartProcess
           ? true
           : current.autoStart,
@@ -242,7 +270,7 @@ class HubController extends ChangeNotifier {
     await _persist();
     if (id == HubMcpConstants.serverKey) {
       await _syncHubMcpHost();
-    } else if (_servers[index].transport == McpTransport.http) {
+    } else if (_servers[index].canHubStartProcess) {
       if (enabled && _servers[index].shouldAutoStartByHub) {
         await _processManager.start(_servers[index]);
       } else if (!enabled) {
@@ -267,8 +295,7 @@ class HubController extends ChangeNotifier {
     bool cloneRepo = true,
   }) async {
     final fromUrl = RepoName.fromGitUrl(repoUrl);
-    final resolvedName =
-        name.trim().isNotEmpty ? name.trim() : (fromUrl ?? '');
+    final resolvedName = name.trim().isNotEmpty ? name.trim() : (fromUrl ?? '');
     final id = _slug(resolvedName.isNotEmpty ? resolvedName : fromUrl ?? '');
     if (id == HubMcpConstants.serverKey) {
       throw StateError('不能使用保留名 ${HubMcpConstants.serverKey}');
@@ -291,13 +318,11 @@ class HubController extends ChangeNotifier {
     }
 
     final trimmedCommand = command?.trim();
-    final resolvedCommand =
-        (trimmedCommand == null || trimmedCommand.isEmpty) ? null : trimmedCommand;
-    // HTTP 且可拉起时默认自动启动；stdio 无进程可驻留，标记无关
-    final resolvedAutoStart = autoStart ??
-        (enabled &&
-            transport == McpTransport.http &&
-            resolvedCommand != null);
+    final resolvedCommand = (trimmedCommand == null || trimmedCommand.isEmpty)
+        ? null
+        : trimmedCommand;
+    // 有启动命令的 MCP 默认自动启动。
+    final resolvedAutoStart = autoStart ?? (enabled && resolvedCommand != null);
 
     final entry = McpServerEntry(
       id: id,
@@ -359,10 +384,7 @@ class HubController extends ChangeNotifier {
   Future<void> updateAllServers() async {
     final withPath = _servers
         .where(
-          (s) =>
-              !s.builtIn &&
-              s.localPath != null &&
-              s.localPath!.isNotEmpty,
+          (s) => !s.builtIn && s.localPath != null && s.localPath!.isNotEmpty,
         )
         .toList();
     if (withPath.isEmpty) {
@@ -407,8 +429,7 @@ class HubController extends ChangeNotifier {
     webDavSync.rememberTombstone(id);
     _servers = _servers.where((s) => s.id != id).toList();
     await _persist();
-    _lastMessage =
-        deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
+    _lastMessage = deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
     notifyListeners();
     await refreshClientStatus();
   }
@@ -468,10 +489,7 @@ class HubController extends ChangeNotifier {
     final message = '${cursor.message}；${codex.message}';
     _lastMessage = message;
     notifyListeners();
-    return McpConfigureResult(
-      ok: cursor.ok && codex.ok,
-      message: message,
-    );
+    return McpConfigureResult(ok: cursor.ok && codex.ok, message: message);
   }
 
   Future<bool> testWebDav(WebDavConfig config) =>
@@ -494,11 +512,9 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get isWebDavReady =>
-      webDavConfig.enabled && webDavConfig.isConfigured;
+  bool get isWebDavReady => webDavConfig.enabled && webDavConfig.isConfigured;
 
-  bool get isWebDavSyncing =>
-      webDavSync.status == CatalogSyncStatus.syncing;
+  bool get isWebDavSyncing => webDavSync.status == CatalogSyncStatus.syncing;
 
   Future<void> syncWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
@@ -671,7 +687,7 @@ class HubController extends ChangeNotifier {
 
     if (payload.servers != null) {
       await _applyImportedServers(payload.servers!);
-      await autoStartEnabledHttpServers();
+      await autoStartEnabledServers();
     }
 
     await refreshClientStatus();
@@ -695,8 +711,9 @@ class HubController extends ChangeNotifier {
 
   /// 用备份清单替换非内置 MCP，并按本机 servers 根目录重写 localPath。
   Future<void> _applyImportedServers(List<McpServerEntry> imported) async {
-    final hubIndex =
-        _servers.indexWhere((s) => s.id == HubMcpConstants.serverKey);
+    final hubIndex = _servers.indexWhere(
+      (s) => s.id == HubMcpConstants.serverKey,
+    );
     final hub = hubIndex >= 0 ? _servers[hubIndex] : null;
     final root = McpPaths.serversRoot;
     _servers = [

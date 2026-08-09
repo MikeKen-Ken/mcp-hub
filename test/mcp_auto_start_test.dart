@@ -44,7 +44,7 @@ void main() {
       expect(server.shouldAutoStartByHub, isFalse);
     });
 
-    test('stdio 由客户端按需拉起，Hub 不自动启动', () {
+    test('已启用 stdio 且有 command 时应自动启动', () {
       const server = McpServerEntry(
         id: 'stdio-demo',
         name: 'Stdio Demo',
@@ -53,8 +53,8 @@ void main() {
         enabled: true,
         autoStart: true,
       );
-      expect(server.canHubStartProcess, isFalse);
-      expect(server.shouldAutoStartByHub, isFalse);
+      expect(server.canHubStartProcess, isTrue);
+      expect(server.shouldAutoStartByHub, isTrue);
     });
 
     test('内置 hubMCP 不走进程管理器自动启动', () {

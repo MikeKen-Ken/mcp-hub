@@ -2,24 +2,18 @@ import 'dart:async';
 import 'dart:io';
 
 import '../models/mcp_server_entry.dart';
-import '../models/mcp_transport.dart';
 
 enum McpProcessStatus { stopped, starting, running, error }
 
 class McpProcessState {
-  const McpProcessState({
-    required this.status,
-    this.pid,
-    this.lastError,
-  });
+  const McpProcessState({required this.status, this.pid, this.lastError});
 
   final McpProcessStatus status;
   final int? pid;
   final String? lastError;
 }
 
-/// Minimal process supervisor for HTTP MCP servers Hub starts itself.
-/// stdio servers are left to Cursor / Codex.
+/// Hub 拉起的 MCP 进程的最小进程管理器。
 class McpProcessManager {
   final Map<String, Process> _processes = {};
   final Map<String, McpProcessState> _states = {};
@@ -27,13 +21,16 @@ class McpProcessManager {
   McpProcessState stateFor(String id) =>
       _states[id] ?? const McpProcessState(status: McpProcessStatus.stopped);
 
-  Future<McpProcessState> start(McpServerEntry server) async {
-    if (server.transport != McpTransport.http) {
-      return const McpProcessState(
-        status: McpProcessStatus.stopped,
-        lastError: 'stdio MCP 由 Cursor/Codex 按需拉起，Hub 不驻留进程',
-      );
+  /// 只使用真实存在的目录，避免 Windows 因失效 cwd 报找不到路径。
+  Future<String?> resolveWorkingDirectory(McpServerEntry server) async {
+    for (final candidate in [server.cwd, server.localPath]) {
+      if (candidate == null || candidate.trim().isEmpty) continue;
+      if (await Directory(candidate).exists()) return candidate;
     }
+    return null;
+  }
+
+  Future<McpProcessState> start(McpServerEntry server) async {
     final command = server.command;
     if (command == null || command.trim().isEmpty) {
       final state = const McpProcessState(
@@ -45,17 +42,17 @@ class McpProcessManager {
     }
 
     await stop(server.id);
-    _states[server.id] = const McpProcessState(status: McpProcessStatus.starting);
+    _states[server.id] = const McpProcessState(
+      status: McpProcessStatus.starting,
+    );
 
     try {
+      final workingDirectory = await resolveWorkingDirectory(server);
       final process = await Process.start(
         command,
         server.args,
-        workingDirectory: server.cwd ?? server.localPath,
-        environment: {
-          ...Platform.environment,
-          ...server.env,
-        },
+        workingDirectory: workingDirectory,
+        environment: {...Platform.environment, ...server.env},
         runInShell: true,
       );
       _processes[server.id] = process;
@@ -64,15 +61,17 @@ class McpProcessManager {
         pid: process.pid,
       );
       _states[server.id] = state;
-      unawaited(process.exitCode.then((code) {
-        if (_processes[server.id] == process) {
-          _processes.remove(server.id);
-          _states[server.id] = McpProcessState(
-            status: McpProcessStatus.stopped,
-            lastError: code == 0 ? null : '进程退出 code $code',
-          );
-        }
-      }));
+      unawaited(
+        process.exitCode.then((code) {
+          if (_processes[server.id] == process) {
+            _processes.remove(server.id);
+            _states[server.id] = McpProcessState(
+              status: McpProcessStatus.stopped,
+              lastError: code == 0 ? null : '进程退出 code $code',
+            );
+          }
+        }),
+      );
       return state;
     } catch (error) {
       final state = McpProcessState(
