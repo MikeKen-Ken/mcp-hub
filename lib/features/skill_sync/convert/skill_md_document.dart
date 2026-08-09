@@ -17,6 +17,19 @@ class SkillMdDocument {
   String? get name => _nonEmpty(frontmatter['name']);
   String? get description => _nonEmpty(frontmatter['description']);
 
+  /// Cursor Skill frontmatter：禁止模型隐式调用。
+  ///
+  /// 对应 Codex `agents/openai.yaml` 的 `allow_implicit_invocation: false`。
+  bool? get disableModelInvocation =>
+      _parseBool(frontmatter['disable-model-invocation']);
+
+  /// 由 Cursor frontmatter 推导的 Codex 隐式调用策略；无该字段时返回 null。
+  bool? get allowImplicitInvocationFromFrontmatter {
+    final disable = disableModelInvocation;
+    if (disable == null) return null;
+    return !disable;
+  }
+
   /// 正文第一个一级标题（不含 `#`）。
   String? get title {
     for (final line in body.split('\n')) {
@@ -83,6 +96,16 @@ class SkillMdDocument {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
+  }
+
+  static bool? _parseBool(String? value) {
+    final trimmed = value?.trim().toLowerCase();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return switch (trimmed) {
+      'true' || 'yes' || '1' => true,
+      'false' || 'no' || '0' => false,
+      _ => null,
+    };
   }
 }
 

@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 自动配置备份设置。
 class AutoBackupSettings {
   const AutoBackupSettings({
-    this.enabled = false,
+    this.enabled = true,
     this.directory,
     this.intervalMinutes = defaultIntervalMinutes,
   });
@@ -42,7 +42,7 @@ class AutoBackupSettings {
   factory AutoBackupSettings.fromJson(Map<String, dynamic> json) {
     final rawDirectory = json['directory'] as String?;
     return AutoBackupSettings(
-      enabled: json['enabled'] as bool? ?? false,
+      enabled: json['enabled'] as bool? ?? true,
       directory: rawDirectory?.trim().isEmpty == true
           ? null
           : rawDirectory?.trim(),

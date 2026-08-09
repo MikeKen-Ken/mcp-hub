@@ -65,7 +65,7 @@ Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command �
 | Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` | 去掉 frontmatter，合并写入全局 `AGENTS.md`（整文件覆盖） |
 | Command | `~/.cursor/commands/` | — | Codex 暂无对等目录，按钮禁用 |
 
-界面提供「转换全部（Skill + Rule）」以及按资源的「一键转换」。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。若目标包已有 `openai.yaml`，会保留其中的 `allow_implicit_invocation`。
+界面提供「转换全部（Skill + Rule）」以及按资源的「一键转换」。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。若目标包已有 `openai.yaml`，会保留其中的 `allow_implicit_invocation`；否则根据 Cursor frontmatter 的 `disable-model-invocation` 推导（`true` → `allow_implicit_invocation: false`）。
 
 ## 发布 / 更新
 推送到 `main` 会触发 GitHub Actions（`Push Build`）：

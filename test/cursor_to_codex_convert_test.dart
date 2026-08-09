@@ -24,6 +24,32 @@ description: 根据提交生成日报。用户要求生成日报时使用。
       expect(doc.description, contains('根据提交生成日报'));
       expect(doc.title, '生成工作日报');
       expect(doc.body, startsWith('# 生成工作日报'));
+      expect(doc.disableModelInvocation, isNull);
+      expect(doc.allowImplicitInvocationFromFrontmatter, isNull);
+    });
+
+    test('解析 disable-model-invocation 并推导 Codex 策略', () {
+      final disabled = SkillMdDocument.parse('''
+---
+name: gated
+disable-model-invocation: true
+---
+
+# 需显式调用
+''');
+      expect(disabled.disableModelInvocation, isTrue);
+      expect(disabled.allowImplicitInvocationFromFrontmatter, isFalse);
+
+      final enabled = SkillMdDocument.parse('''
+---
+name: open
+disable-model-invocation: false
+---
+
+# 可隐式调用
+''');
+      expect(enabled.disableModelInvocation, isFalse);
+      expect(enabled.allowImplicitInvocationFromFrontmatter, isTrue);
     });
   });
 
@@ -82,6 +108,32 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
       expect(yaml, contains('allow_implicit_invocation: true'));
     });
 
+    test('首次转换时映射 disable-model-invocation', () async {
+      final cursor = Directory(p.join(temp.path, 'cursor-disable'));
+      final codex = Directory(p.join(temp.path, 'codex-disable'));
+      final pack = Directory(p.join(cursor.path, 'gated-skill'));
+      await pack.create(recursive: true);
+      await File(p.join(pack.path, 'SKILL.md')).writeAsString('''
+---
+name: gated-skill
+description: 仅显式调用
+disable-model-invocation: true
+---
+
+# 需显式调用
+''');
+
+      await const CursorToCodexSkillConverter().convertAll(
+        cursorSkillsDir: cursor.path,
+        codexSkillsDir: codex.path,
+      );
+
+      final yaml = await File(
+        p.join(codex.path, 'gated-skill', 'agents', 'openai.yaml'),
+      ).readAsString();
+      expect(yaml, contains('allow_implicit_invocation: false'));
+    });
+
     test('保留已有 allow_implicit_invocation', () async {
       final cursor = Directory(p.join(temp.path, 'cursor2'));
       final codex = Directory(p.join(temp.path, 'codex2'));
@@ -91,6 +143,7 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
 ---
 name: demo
 description: 演示技能
+disable-model-invocation: true
 ---
 
 # 演示
@@ -101,7 +154,7 @@ description: 演示技能
 interface:
   display_name: "旧"
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true
 ''');
 
       await const CursorToCodexSkillConverter().convertAll(
@@ -110,7 +163,8 @@ policy:
       );
 
       final yaml = await existing.readAsString();
-      expect(yaml, contains('allow_implicit_invocation: false'));
+      // 已有 Codex 策略优先于 Cursor frontmatter。
+      expect(yaml, contains('allow_implicit_invocation: true'));
       expect(yaml, contains('display_name: "演示"'));
     });
   });

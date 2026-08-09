@@ -15,6 +15,8 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  static Win32Window::Size LoadSavedSize(const Win32Window::Size& fallback);
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -23,6 +25,8 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  void SaveWindowSize(HWND window) const;
+
   // The project to run.
   flutter::DartProject project_;
 

@@ -16,9 +16,9 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('AutoBackupSettings', () {
-    test('默认每 10 分钟且关闭', () {
+    test('默认每 10 分钟且启用', () {
       const settings = AutoBackupSettings();
-      expect(settings.enabled, isFalse);
+      expect(settings.enabled, isTrue);
       expect(settings.intervalMinutes, 10);
       expect(settings.directory, isNull);
     });

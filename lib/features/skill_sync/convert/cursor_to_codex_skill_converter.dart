@@ -79,11 +79,13 @@ class CursorToCodexSkillConverter {
 
     final skillMdPath = p.join(targetDir, 'SKILL.md');
     final doc = await SkillMdDocument.parseFile(skillMdPath);
-    final existingPolicy = await _readExistingAllowImplicit(targetDir);
+    // 已有 Codex 策略优先；否则用 Cursor `disable-model-invocation` 推导。
+    final allowImplicit = await _readExistingAllowImplicit(targetDir) ??
+        doc.allowImplicitInvocationFromFrontmatter;
     final yaml = buildOpenAiYaml(
       packageName: packageName,
       document: doc,
-      allowImplicitInvocation: existingPolicy,
+      allowImplicitInvocation: allowImplicit,
     );
 
     final yamlPath = p.join(targetDir, 'agents', 'openai.yaml');

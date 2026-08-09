@@ -77,9 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   '集中查看 Agent Hub 状态，并进入常用管理功能。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 16),
-                _HomeSummaryCard(hub: hub),
-                const SizedBox(height: 24),
                 const _SectionHeader('常用入口'),
                 const SizedBox(height: 8),
                 _FeatureCard(
@@ -105,40 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                if (hub.lastMessage != null) ...[
-                  const SizedBox(height: 24),
-                  const _SectionHeader('最近状态'),
-                  const SizedBox(height: 8),
-                  _StatusMessageCard(message: hub.lastMessage!),
-                ],
-                const SizedBox(height: 24),
-                const _SectionHeader('连接状态'),
-                const SizedBox(height: 8),
-                _FeatureCard(
-                  icon: Icons.hub_outlined,
-                  title: '客户端 MCP',
-                  subtitle: '配置 Cursor / Codex 的 MCP 连接',
-                  status: _clientSummary(hub),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ClientMcpScreen(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const _SectionHeader('MCP 列表'),
-                const SizedBox(height: 8),
-                _FeatureCard(
-                  icon: Icons.storage_outlined,
-                  title: '本地 MCP',
-                  subtitle: '添加、启停和更新已管理的 MCP',
-                  status: '共 ${hub.servers.length} 个',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const LocalMcpScreen(),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text(
                   '数据目录：${McpPaths.hubDataRoot ?? "(不可用)"}',
@@ -147,21 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
     );
-  }
-
-  String _clientSummary(HubController hub) {
-    final cursor = hub.cursorAlignReport;
-    final codex = hub.codexAlignReport;
-    if (cursor == null || codex == null) {
-      return '正在检测…';
-    }
-    if (cursor.isAligned && codex.isAligned) {
-      return 'Cursor / Codex 已对齐';
-    }
-    final parts = <String>[];
-    if (!cursor.isAligned) parts.add(cursor.prefixedReason);
-    if (!codex.isAligned) parts.add(codex.prefixedReason);
-    return parts.join('；');
   }
 
   String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
@@ -207,51 +155,6 @@ class _FeatureCard extends StatelessWidget {
   }
 }
 
-class _HomeSummaryCard extends StatelessWidget {
-  const _HomeSummaryCard({required this.hub});
-
-  final HubController hub;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              child: const Icon(Icons.account_tree_outlined),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('当前摘要', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text('已管理 ${hub.servers.length} 个本地 MCP'),
-                  Text(
-                    'Agent 资源：${_resourceSummary(hub)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
-    SkillSyncStatus.idle => '尚未下载/上传',
-    SkillSyncStatus.syncing => '下载/上传中…',
-    SkillSyncStatus.success => '最近下载/上传成功',
-    SkillSyncStatus.error => '最近下载/上传失败',
-  };
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.title);
 
@@ -260,23 +163,6 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(title, style: Theme.of(context).textTheme.titleSmall);
-  }
-}
-
-class _StatusMessageCard extends StatelessWidget {
-  const _StatusMessageCard({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Text(message, style: Theme.of(context).textTheme.bodySmall),
-      ),
-    );
   }
 }
 
@@ -706,6 +592,15 @@ class _BulkResourceSyncCard extends StatelessWidget {
                   label: const Text('3  上传全部'),
                 ),
                 OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ClientMcpScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.hub_outlined),
+                  label: const Text('MCP 连接状态'),
+                ),
+                OutlinedButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () => run(hub.convertAllResourcesFromCursor),
@@ -925,7 +820,7 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（更新/覆盖后也会自动执行）',
+      '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（映射 disable-model-invocation；已有策略优先）',
     AgentResourceKind.rule =>
       '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
           '（更新/覆盖后也会自动执行）',
