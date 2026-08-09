@@ -48,6 +48,11 @@ class HubController extends ChangeNotifier {
     );
     skillSync.addListener(_onSkillSyncChanged);
     configBackup = ConfigBackupService();
+    autoConfigBackup = AutoConfigBackupService(
+      backupService: configBackup,
+      loadServers: () async => List<McpServerEntry>.from(_servers),
+    );
+    autoConfigBackup.addListener(_onAutoConfigBackupChanged);
   }
 
   final McpCatalogStore _catalogStore;
@@ -60,6 +65,7 @@ class HubController extends ChangeNotifier {
   late final WebDavSyncService webDavSync;
   late final SkillSyncService skillSync;
   late final ConfigBackupService configBackup;
+  late final AutoConfigBackupService autoConfigBackup;
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
@@ -92,6 +98,8 @@ class HubController extends ChangeNotifier {
 
   void _onSkillSyncChanged() => notifyListeners();
 
+  void _onAutoConfigBackupChanged() => notifyListeners();
+
   Future<void> load() async {
     _loading = true;
     notifyListeners();
@@ -104,6 +112,7 @@ class HubController extends ChangeNotifier {
     await refreshClientStatus();
     await _syncHubMcpHost();
     await autoStartEnabledHttpServers();
+    await autoConfigBackup.initialize();
     if (webDavConfig.enabled &&
         webDavConfig.autoPull &&
         webDavConfig.isConfigured) {
@@ -671,6 +680,19 @@ class HubController extends ChangeNotifier {
     return payload.result;
   }
 
+  Future<void> saveAutoBackupSettings(AutoBackupSettings settings) async {
+    await autoConfigBackup.updateSettings(settings);
+    _lastMessage = settings.enabled ? '自动备份已启用' : '自动备份已关闭';
+    notifyListeners();
+  }
+
+  Future<ConfigBackupResult> runAutoBackupNow() async {
+    final result = await autoConfigBackup.backupNow();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
   /// 用备份清单替换非内置 MCP，并按本机 servers 根目录重写 localPath。
   Future<void> _applyImportedServers(List<McpServerEntry> imported) async {
     final hubIndex =
@@ -705,9 +727,11 @@ class HubController extends ChangeNotifier {
     hubMcpHost.removeListener(_onHostChanged);
     webDavSync.removeListener(_onWebDavChanged);
     skillSync.removeListener(_onSkillSyncChanged);
+    autoConfigBackup.removeListener(_onAutoConfigBackupChanged);
     hubMcpHost.dispose();
     webDavSync.dispose();
     skillSync.dispose();
+    autoConfigBackup.dispose();
     _processManager.stopAll();
     super.dispose();
   }

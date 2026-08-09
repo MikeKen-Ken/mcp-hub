@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mcp_hub/features/config_backup/auto_backup_settings.dart';
+import 'package:mcp_hub/features/config_backup/auto_config_backup_service.dart';
 import 'package:mcp_hub/features/config_backup/config_backup_manifest.dart';
 import 'package:mcp_hub/features/config_backup/config_backup_paths.dart';
 import 'package:mcp_hub/features/config_backup/config_backup_service.dart';
@@ -13,6 +15,26 @@ import 'package:mcp_hub/models/mcp_transport.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  group('AutoBackupSettings', () {
+    test('默认每 10 分钟且关闭', () {
+      const settings = AutoBackupSettings();
+      expect(settings.enabled, isFalse);
+      expect(settings.intervalMinutes, 10);
+      expect(settings.directory, isNull);
+    });
+
+    test('读取设置时把过短间隔限制为 1 分钟', () {
+      final settings = AutoBackupSettings.fromJson({
+        'enabled': true,
+        'directory': '  D:/backups  ',
+        'intervalMinutes': 0,
+      });
+      expect(settings.enabled, isTrue);
+      expect(settings.directory, 'D:/backups');
+      expect(settings.intervalMinutes, 1);
+    });
+  });
+
   group('ConfigBackupManifest', () {
     test('json roundtrip', () {
       final original = ConfigBackupManifest(
@@ -22,8 +44,7 @@ void main() {
         fileCount: 3,
         notes: 'test',
       );
-      final restored =
-          ConfigBackupManifest.fromJson(original.toJson());
+      final restored = ConfigBackupManifest.fromJson(original.toJson());
       expect(restored.formatVersion, original.formatVersion);
       expect(restored.appName, original.appName);
       expect(restored.fileCount, 3);
@@ -64,7 +85,9 @@ void main() {
     });
 
     test('export/import roundtrip catalog', () async {
-      final temp = await Directory.systemTemp.createTemp('mcp_hub_backup_test_');
+      final temp = await Directory.systemTemp.createTemp(
+        'mcp_hub_backup_test_',
+      );
       addTearDown(() async {
         if (await temp.exists()) await temp.delete(recursive: true);
       });
@@ -117,4 +140,107 @@ void main() {
       expect(manifestEntry, isNotNull);
     });
   });
+
+  group('AutoConfigBackupService', () {
+    test('自动备份使用指定目录和当前 MCP 清单', () async {
+      final temp = await Directory.systemTemp.createTemp('auto_backup_test_');
+      addTearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+      final fake = _FakeConfigBackupService();
+      final service = AutoConfigBackupService(
+        backupService: fake,
+        settingsStore: _MemoryAutoBackupSettingsStore(),
+        defaultDirectory: temp.path,
+        now: () => DateTime(2026, 8, 9, 12, 30),
+        loadServers: () async => const [
+          McpServerEntry(
+            id: 'demo',
+            name: 'Demo',
+            transport: McpTransport.stdio,
+          ),
+        ],
+      );
+      addTearDown(service.dispose);
+
+      await service.initialize();
+      final result = await service.backupNow();
+
+      expect(result.ok, isTrue);
+      expect(fake.lastServers.single.id, 'demo');
+      expect(
+        p.basename(fake.lastPath!),
+        'AgentHub-auto-backup-20260809-123000.zip',
+      );
+      expect(service.lastBackupPath, fake.lastPath);
+      expect(service.status, AutoBackupStatus.success);
+    });
+
+    test('只清理超过 7 天的自动备份', () async {
+      final temp = await Directory.systemTemp.createTemp('auto_cleanup_test_');
+      addTearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+      final oldAuto = File(
+        p.join(temp.path, 'AgentHub-auto-backup-20260801-000000.zip'),
+      );
+      final recentAuto = File(
+        p.join(temp.path, 'AgentHub-auto-backup-20260808-000000.zip'),
+      );
+      final manual = File(p.join(temp.path, 'AgentHub-backup-manual.zip'));
+      for (final file in [oldAuto, recentAuto, manual]) {
+        await file.writeAsString('test');
+      }
+      await oldAuto.setLastModified(DateTime(2026, 8, 1));
+      await recentAuto.setLastModified(DateTime(2026, 8, 8));
+      await manual.setLastModified(DateTime(2026, 8, 1));
+
+      final service = AutoConfigBackupService(
+        loadServers: () async => const [],
+        settingsStore: _MemoryAutoBackupSettingsStore(),
+        now: () => DateTime(2026, 8, 9),
+      );
+      addTearDown(service.dispose);
+
+      final deleted = await service.cleanupExpiredBackups(temp.path);
+
+      expect(deleted, 1);
+      expect(await oldAuto.exists(), isFalse);
+      expect(await recentAuto.exists(), isTrue);
+      expect(await manual.exists(), isTrue);
+    });
+  });
+}
+
+class _FakeConfigBackupService extends ConfigBackupService {
+  String? lastPath;
+  List<McpServerEntry> lastServers = const [];
+
+  @override
+  Future<ConfigBackupResult> exportToZip({
+    required String zipPath,
+    required List<McpServerEntry> servers,
+  }) async {
+    lastPath = zipPath;
+    lastServers = servers;
+    await File(zipPath).writeAsString('backup');
+    return ConfigBackupResult(
+      ok: true,
+      message: '自动备份完成',
+      path: zipPath,
+      serverCount: servers.length,
+    );
+  }
+}
+
+class _MemoryAutoBackupSettingsStore extends AutoBackupSettingsStore {
+  AutoBackupSettings value = const AutoBackupSettings();
+
+  @override
+  Future<AutoBackupSettings> load() async => value;
+
+  @override
+  Future<void> save(AutoBackupSettings settings) async {
+    value = settings;
+  }
 }

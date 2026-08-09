@@ -5,3 +5,5 @@ export 'config_backup_manifest.dart';
 export 'config_backup_paths.dart';
 export 'config_backup_screen.dart';
 export 'config_backup_service.dart';
+export 'auto_backup_settings.dart';
+export 'auto_config_backup_service.dart';

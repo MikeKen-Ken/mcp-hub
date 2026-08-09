@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/hub_controller.dart';
 import '../../services/directory_opener.dart';
 import '../../services/mcp_paths.dart';
+import 'auto_config_backup_service.dart';
 
 /// 配置备份：导出 zip / 从 zip 恢复。
 class ConfigBackupScreen extends StatefulWidget {
@@ -39,9 +40,9 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       _busy = false;
       _lastPath = result.path;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<void> _import() async {
@@ -86,9 +87,9 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       _busy = false;
       _lastPath = result.path;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<void> _openLast() async {
@@ -98,9 +99,101 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       await DirectoryOpener.open(p.dirname(path));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('打开目录失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
+    }
+  }
+
+  Future<void> _setAutoBackupEnabled(bool enabled) async {
+    final hub = context.read<HubController>();
+    await hub.saveAutoBackupSettings(
+      hub.autoConfigBackup.settings.copyWith(enabled: enabled),
+    );
+  }
+
+  Future<void> _chooseAutoBackupDirectory() async {
+    final hub = context.read<HubController>();
+    final selected = await getDirectoryPath(
+      initialDirectory: hub.autoConfigBackup.effectiveDirectory,
+      confirmButtonText: '选择目录',
+    );
+    if (selected == null || !mounted) return;
+    await hub.saveAutoBackupSettings(
+      hub.autoConfigBackup.settings.copyWith(directory: selected),
+    );
+  }
+
+  Future<void> _useDefaultAutoBackupDirectory() async {
+    final hub = context.read<HubController>();
+    await hub.saveAutoBackupSettings(
+      hub.autoConfigBackup.settings.copyWith(clearDirectory: true),
+    );
+  }
+
+  Future<void> _editAutoBackupInterval() async {
+    final hub = context.read<HubController>();
+    final controller = TextEditingController(
+      text: '${hub.autoConfigBackup.settings.intervalMinutes}',
+    );
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('自动备份间隔'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '分钟',
+            helperText: '最短 1 分钟，默认 10 分钟',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              Navigator.pop(ctx, value);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (minutes == null || !mounted) return;
+    await hub.saveAutoBackupSettings(
+      hub.autoConfigBackup.settings.copyWith(intervalMinutes: minutes),
+    );
+  }
+
+  Future<void> _runAutoBackupNow() async {
+    final hub = context.read<HubController>();
+    final result = await hub.runAutoBackupNow();
+    if (!mounted) return;
+    setState(() => _lastPath = result.path);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
+  Future<void> _openAutoBackupDirectory() async {
+    final path = context
+        .read<HubController>()
+        .autoConfigBackup
+        .effectiveDirectory;
+    if (path == null) return;
+    try {
+      await DirectoryOpener.open(path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
     }
   }
 
@@ -108,6 +201,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
   Widget build(BuildContext context) {
     final hub = context.watch<HubController>();
     final supported = hub.isDesktopSupported;
+    final automatic = hub.autoConfigBackup;
 
     return Scaffold(
       appBar: AppBar(title: const Text('配置备份')),
@@ -131,9 +225,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                     leading: const Icon(Icons.folder_zip_outlined),
                     title: const Text('导出 / 导入'),
                     subtitle: Text(
-                      supported
-                          ? '建议定期保存到网盘或移动硬盘'
-                          : '当前平台不支持配置备份',
+                      supported ? '建议定期保存到网盘或移动硬盘' : '当前平台不支持配置备份',
                     ),
                   ),
                   if (_busy) ...[
@@ -175,6 +267,98 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                           icon: const Icon(Icons.folder_open_outlined),
                         ),
                       ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.schedule_outlined),
+                    title: const Text('自动备份'),
+                    subtitle: Text(
+                      automatic.settings.enabled
+                          ? '每 ${automatic.settings.intervalMinutes} 分钟备份一次，自动文件保留 7 天'
+                          : '关闭时不会在后台生成备份',
+                    ),
+                    value: automatic.settings.enabled,
+                    onChanged: supported && automatic.initialized
+                        ? _setAutoBackupEnabled
+                        : null,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.timer_outlined),
+                    title: const Text('备份间隔'),
+                    subtitle: Text('${automatic.settings.intervalMinutes} 分钟'),
+                    trailing: const Icon(Icons.edit_outlined),
+                    onTap: supported ? _editAutoBackupInterval : null,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.folder_outlined),
+                    title: Text(
+                      automatic.settings.directory == null
+                          ? '备份目录（默认）'
+                          : '备份目录（自定义）',
+                    ),
+                    subtitle: SelectableText(
+                      automatic.effectiveDirectory ?? '当前平台不可用',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: supported ? _chooseAutoBackupDirectory : null,
+                  ),
+                  if (automatic.settings.directory != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: _useDefaultAutoBackupDirectory,
+                        child: const Text('恢复默认目录'),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed:
+                              !supported ||
+                                  automatic.status == AutoBackupStatus.backingUp
+                              ? null
+                              : _runAutoBackupNow,
+                          icon: const Icon(Icons.backup_outlined),
+                          label: const Text('立即备份'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: '打开自动备份目录',
+                        onPressed: supported ? _openAutoBackupDirectory : null,
+                        icon: const Icon(Icons.folder_open_outlined),
+                      ),
+                    ],
+                  ),
+                  if (automatic.lastBackupAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '最近备份：${automatic.lastBackupAt!.toLocal()}',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ],
+                  if (automatic.lastError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      automatic.lastError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ],
                 ],
