@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
-import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
 import '../services/directory_opener.dart';
@@ -79,29 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const _SectionHeader('常用入口'),
                 const SizedBox(height: 8),
-                _FeatureCard(
-                  icon: Icons.sync_alt_outlined,
-                  title: 'Agent 配置下载/上传',
-                  subtitle: '下载到缓存 → 更新/覆盖正式目录',
-                  status: _resourceSummary(hub),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AgentConfigSyncScreen(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _FeatureCard(
-                  icon: Icons.folder_zip_outlined,
-                  title: '配置备份',
-                  subtitle: '导出 / 恢复本机 MCP 与 Agent 配置',
-                  status: '建议定期保存到网盘或移动硬盘',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ConfigBackupScreen(),
-                    ),
-                  ),
-                ),
+                _AgentConfigHomeSection(hub: hub),
                 const SizedBox(height: 20),
                 Text(
                   '数据目录：${McpPaths.hubDataRoot ?? "(不可用)"}',
@@ -111,46 +88,52 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
     );
   }
-
-  String _resourceSummary(HubController hub) => switch (hub.skillSync.status) {
-    SkillSyncStatus.idle => '尚未下载/上传',
-    SkillSyncStatus.syncing => '下载/上传中…',
-    SkillSyncStatus.success => '最近下载/上传成功',
-    SkillSyncStatus.error => '最近下载/上传失败',
-  };
 }
 
-class _FeatureCard extends StatelessWidget {
-  const _FeatureCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.status,
-    required this.onTap,
-  });
+class _AgentConfigHomeSection extends StatelessWidget {
+  const _AgentConfigHomeSection({required this.hub});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String status;
-  final VoidCallback onTap;
+  final HubController hub;
+
+  Future<void> _run(
+    BuildContext context,
+    Future<SkillSyncResult> Function() action,
+  ) async {
+    final result = await action();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 10,
+    final supported = hub.isDesktopSupported;
+    final webDavReady =
+        hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
+    final busy = hub.skillSync.status == SkillSyncStatus.syncing;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionHeader('Agent 配置'),
+        const SizedBox(height: 8),
+        _BulkResourceSyncCard(
+          hub: hub,
+          supported: supported,
+          webDavReady: webDavReady,
+          busy: busy,
+          run: (action) => _run(context, action),
         ),
-        leading: CircleAvatar(child: Icon(icon)),
-        title: Text(title),
-        subtitle: Text('$subtitle\n$status'),
-        isThreeLine: true,
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
+        const SizedBox(height: 16),
+        const _SectionHeader('按资源管理'),
+        const SizedBox(height: 8),
+        _McpResourceSyncCard(hub: hub),
+        for (final resource in AgentResourceKind.values) ...[
+          const SizedBox(height: 12),
+          _ResourceSyncCard(hub: hub, resource: resource),
+        ],
+      ],
     );
   }
 }

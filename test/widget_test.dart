@@ -15,10 +15,6 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Agent 配置下载/上传'));
-    await tester.pumpAndSettle();
-    expect(find.text('按资源管理'), findsOneWidget);
-
     await tester.tap(find.text('2  更新/覆盖全部'));
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
@@ -26,12 +22,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsNothing);
-    expect(find.text('按资源管理'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('WebDAV 设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('WebDAV 下载/上传'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('配置中心'), findsOneWidget);
-    expect(find.text('按资源管理'), findsNothing);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -46,11 +44,11 @@ void main() {
     );
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
-    expect(find.text('Agent 配置下载/上传'), findsOneWidget);
+    expect(find.text('Agent 配置'), findsOneWidget);
+    expect(find.text('2  更新/覆盖全部'), findsOneWidget);
+    expect(find.text('配置备份'), findsNothing);
     expect(find.text('本地 MCP'), findsNothing);
 
-    await tester.tap(find.text('Agent 配置下载/上传'));
-    await tester.pumpAndSettle();
     expect(find.text('按资源管理'), findsOneWidget);
     expect(find.text('MCP'), findsOneWidget);
     expect(find.text('Skill'), findsOneWidget);
@@ -74,6 +72,17 @@ void main() {
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
     expect(find.textContaining('当前已启用的 MCP'), findsOneWidget);
     await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('WebDAV 设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('配置备份'), findsOneWidget);
+    await tester.tap(find.text('配置备份'));
+    await tester.pumpAndSettle();
+    expect(find.text('导出 / 导入'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
     final mcpSettings = find.text('打开 MCP 设置');

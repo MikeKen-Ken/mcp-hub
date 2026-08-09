@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controllers/hub_controller.dart';
+import '../features/config_backup/config_backup.dart';
 import '../webdav/webdav_config.dart';
 
 class WebDavSettingsScreen extends StatefulWidget {
@@ -35,10 +36,12 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
     _enabled = config.enabled;
     _autoSync = config.autoSync;
     _autoPull = config.autoPull;
-    _pollSeconds =
-        WebDavConfig.clampPollIntervalSeconds(config.pollIntervalSeconds);
-    _pushDebounceSeconds =
-        WebDavConfig.clampPushDebounceSeconds(config.pushDebounceSeconds);
+    _pollSeconds = WebDavConfig.clampPollIntervalSeconds(
+      config.pollIntervalSeconds,
+    );
+    _pushDebounceSeconds = WebDavConfig.clampPushDebounceSeconds(
+      config.pushDebounceSeconds,
+    );
     _urlController = TextEditingController(text: config.serverUrl);
     _userController = TextEditingController(text: config.username);
     _passController = TextEditingController(text: config.password);
@@ -66,8 +69,9 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
       autoSync: _autoSync,
       autoPull: _autoPull,
       pollIntervalSeconds: WebDavConfig.clampPollIntervalSeconds(_pollSeconds),
-      pushDebounceSeconds:
-          WebDavConfig.clampPushDebounceSeconds(_pushDebounceSeconds),
+      pushDebounceSeconds: WebDavConfig.clampPushDebounceSeconds(
+        _pushDebounceSeconds,
+      ),
     );
   }
 
@@ -97,8 +101,8 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
           !_enabled
               ? '已保存'
               : (!_autoSync && !_autoPull)
-                  ? '已保存；仅手动下载/上传'
-                  : '已保存',
+              ? '已保存；仅手动下载/上传'
+              : '已保存',
         ),
       ),
     );
@@ -114,6 +118,21 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(Icons.folder_zip_outlined),
+                title: const Text('配置备份'),
+                subtitle: const Text('导出、恢复与自动备份本机 MCP 和 Agent 配置'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ConfigBackupScreen(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Card(
               child: SwitchListTile(
                 title: const Text('启用 WebDAV 下载/上传'),
