@@ -128,11 +128,30 @@ class _AgentConfigHomeSection extends StatelessWidget {
         const SizedBox(height: 16),
         const _SectionHeader('按资源管理'),
         const SizedBox(height: 8),
-        _McpResourceSyncCard(hub: hub),
-        for (final resource in AgentResourceKind.values) ...[
-          const SizedBox(height: 12),
-          _ResourceSyncCard(hub: hub, resource: resource),
-        ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final twoColumns = constraints.maxWidth >= 820;
+            final cardWidth = twoColumns
+                ? (constraints.maxWidth - 12) / 2
+                : constraints.maxWidth;
+
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: cardWidth,
+                  child: _McpResourceSyncCard(hub: hub),
+                ),
+                for (final resource in AgentResourceKind.values)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _ResourceSyncCard(hub: hub, resource: resource),
+                  ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }
