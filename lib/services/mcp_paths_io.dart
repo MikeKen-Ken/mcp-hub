@@ -42,8 +42,8 @@ abstract final class McpPaths {
 
   static String resourceCachePath(String resource, String target) =>
       resource == 'skills'
-          ? p.join(skillsCacheRoot, target)
-          : p.join(agentResourcesCacheRoot, resource, target);
+      ? p.join(skillsCacheRoot, target)
+      : p.join(agentResourcesCacheRoot, resource, target);
 
   /// Cursor 个人 Skill 目录（勿写入 skills-cursor，那是内置目录）。
   static String get cursorSkillsPath =>
@@ -57,14 +57,26 @@ abstract final class McpPaths {
 
   static String? get codexCommandsPath => null;
 
-  static String get cursorRulesPath =>
-      p.join(_userProfile, '.cursor', 'rules');
+  static String get cursorRulesPath => p.join(_userProfile, '.cursor', 'rules');
 
   static String get codexRulesPath => p.join(_userProfile, '.codex', 'rules');
 
   /// Codex 全局 Agent 指引（由 Cursor `~/.cursor/rules` 一键转换写入）。
   static String get codexAgentsMdPath =>
       p.join(_userProfile, '.codex', 'AGENTS.md');
+
+  /// OpenCode 全局配置目录（Windows：`%USERPROFILE%\\.config\\opencode`）。
+  static String get openCodeConfigDirectory =>
+      p.join(_userProfile, '.config', 'opencode');
+
+  static String get openCodeSkillsPath =>
+      p.join(openCodeConfigDirectory, 'skills');
+
+  static String get openCodeRulesPath =>
+      p.join(openCodeConfigDirectory, 'AGENTS.md');
+
+  static String get openCodeCommandsPath =>
+      p.join(openCodeConfigDirectory, 'commands');
 
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;

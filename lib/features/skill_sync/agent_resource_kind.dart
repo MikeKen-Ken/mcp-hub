@@ -33,11 +33,11 @@ enum AgentResourceKind {
   /// 兼容旧名：等同 [supportsWebDav]。
   bool supports(SkillTarget target) => supportsWebDav(target);
 
-  /// 本机是否展示该客户端路径（含 Codex 转换产物）。
+  /// 本机是否展示该客户端路径（含 Codex / OpenCode 转换产物）。
   bool supportsLocalPath(SkillTarget target) => switch ((this, target)) {
     (_, SkillTarget.cursor) => true,
     (_, SkillTarget.codex) => this != AgentResourceKind.command,
-    (_, SkillTarget.openCode) => false,
+    (_, SkillTarget.openCode) => true,
   };
 
   /// 是否支持以本机 Cursor 为源一键转换到 Codex。
@@ -47,6 +47,9 @@ enum AgentResourceKind {
   };
 
   /// 是否有已确认格式的 Cursor 转换器。
-  bool canConvertTo(SkillTarget target) =>
-      target == SkillTarget.codex && canConvertToCodex;
+  bool canConvertTo(SkillTarget target) => switch (target) {
+    SkillTarget.codex => canConvertToCodex,
+    SkillTarget.openCode => true,
+    SkillTarget.cursor => false,
+  };
 }

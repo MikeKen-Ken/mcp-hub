@@ -55,17 +55,17 @@
 
 Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command 对等的入口，因此 Command 不下载/上传、不转换到 Codex。
 
-### 一键转换（Cursor → Codex）
+### 一键转换（Cursor → Codex / OpenCode）
 
 以本机 Cursor 目录为唯一编辑源，批量转换到 Codex（不依赖 WebDAV）。从 WebDAV **下载 Cursor 成功后也会自动执行** Skill / Rule 转换：
 
 | 资源 | 源 | 目标 | 转换内容 |
 |------|----|------|----------|
-| Skill | `~/.cursor/skills/` | `~/.codex/skills/` | 合并复制 Skill 包，并为每个包生成/更新 `agents/openai.yaml` |
-| Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` | 去掉 frontmatter，合并写入全局 `AGENTS.md`（整文件覆盖） |
-| Command | `~/.cursor/commands/` | — | Codex 暂无对等目录，按钮禁用 |
+| Skill | `~/.cursor/skills/` | `~/.codex/skills/` 与 `%USERPROFILE%\\.config\\opencode\\skills/` | Codex 生成 `agents/openai.yaml`；OpenCode 写入 `skills/<name>/SKILL.md` |
+| Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，分别写入对应全局 `AGENTS.md` |
+| Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 保留 Markdown 命令 |
 
-界面提供「转换全部（Skill + Rule）」以及按资源的「一键转换」。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。若目标包已有 `openai.yaml`，会保留其中的 `allow_implicit_invocation`；否则根据 Cursor frontmatter 的 `disable-model-invocation` 推导（`true` → `allow_implicit_invocation: false`）。
+界面统一提供「一键转换全部目标」，一次处理 Codex 与 OpenCode 的 Skill / Rule / Command。OpenCode 转换只写入上述 Markdown 文件，不读取、合并或覆盖其余 JSON/JSONC 配置，也不删除目标目录中的其他文件。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。
 
 ## 发布 / 更新
 推送到 `main` 会触发 GitHub Actions（`Push Build`）：

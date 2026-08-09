@@ -609,7 +609,7 @@ class _BulkResourceSyncCard extends StatelessWidget {
                       ? null
                       : () => run(hub.convertAllResourcesFromCursor),
                   icon: const Icon(Icons.transform_outlined),
-                  label: const Text('仅本机转换'),
+                  label: const Text('一键转换全部目标'),
                 ),
               ],
             ),
@@ -916,35 +916,6 @@ class _ResourceSyncCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: !supported || busy || !_canConvert
-                      ? null
-                      : () => _run(
-                          context,
-                          () => hub.convertResourceFromCursor(resource),
-                        ),
-                  icon: const Icon(Icons.transform_outlined),
-                  label: Text(_convertButtonLabel),
-                ),
-                OutlinedButton.icon(
-                  onPressed: !supported || busy
-                      ? null
-                      : () => _run(
-                          context,
-                          () => hub.convertResourceFromCursor(
-                            resource,
-                            target: SkillTarget.openCode,
-                          ),
-                        ),
-                  icon: const Icon(Icons.open_in_new_outlined),
-                  label: const Text('一键转换 Cursor → Open Code'),
-                ),
-              ],
-            ),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
@@ -991,22 +962,18 @@ class _ResourceSyncCard extends StatelessWidget {
     );
   }
 
-  bool get _canConvert => resource.canConvertTo(SkillTarget.codex);
-
-  String get _convertButtonLabel => switch (resource) {
-    AgentResourceKind.skill => '一键转换 Cursor → Codex',
-    AgentResourceKind.rule => '一键转换 Cursor → AGENTS.md',
-    AgentResourceKind.command => '一键转换（Codex 暂不支持）',
-  };
-
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
       '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（映射 disable-model-invocation；已有策略优先）',
     AgentResourceKind.rule =>
       '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
           '（更新/覆盖后也会自动执行）',
-    AgentResourceKind.command => 'Codex 暂无与 Cursor 全局 Command 对等的目录',
+    AgentResourceKind.command => 'Codex 暂无对等目录；OpenCode 写入 commands/<name>.md',
   };
+
+  bool get _canConvert =>
+      resource.canConvertTo(SkillTarget.codex) ||
+      resource.canConvertTo(SkillTarget.openCode);
 
   String? _pathLabelFor(SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {

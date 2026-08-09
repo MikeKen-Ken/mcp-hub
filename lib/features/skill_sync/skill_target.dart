@@ -18,12 +18,12 @@ enum SkillTarget {
     SkillTarget.openCode,
   ];
 
-  /// 只有仓库已确认目标格式时才允许真正写入。
-  bool get hasConfirmedConversionFormat => this == SkillTarget.codex;
+  /// 只有已确认目标格式时才允许真正写入。
+  bool get hasConfirmedConversionFormat =>
+      this == SkillTarget.codex || this == SkillTarget.openCode;
 
-  String? get conversionBlockReason => hasConfirmedConversionFormat
-      ? null
-      : '仓库未确认 Open Code 的本地配置格式，当前仅提供入口，不会写入文件';
+  String? get conversionBlockReason =>
+      hasConfirmedConversionFormat ? null : '仓库未确认该目标的本地配置格式，当前仅提供入口，不会写入文件';
 
   static SkillTarget? tryParse(String? raw) {
     final value = raw?.trim().toLowerCase();

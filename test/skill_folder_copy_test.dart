@@ -14,8 +14,8 @@ void main() {
       expect(SkillTarget.tryParse('open_code'), SkillTarget.openCode);
       expect(SkillTarget.tryParse('all'), isNull);
       expect(SkillTarget.conversionTargets, contains(SkillTarget.openCode));
-      expect(SkillTarget.openCode.hasConfirmedConversionFormat, isFalse);
-      expect(SkillTarget.openCode.conversionBlockReason, contains('未确认'));
+      expect(SkillTarget.openCode.hasConfirmedConversionFormat, isTrue);
+      expect(SkillTarget.openCode.conversionBlockReason, isNull);
     });
   });
 
@@ -46,7 +46,7 @@ void main() {
       );
       expect(
         AgentResourceKind.skill.supportsLocalPath(SkillTarget.openCode),
-        isFalse,
+        isTrue,
       );
     });
   });

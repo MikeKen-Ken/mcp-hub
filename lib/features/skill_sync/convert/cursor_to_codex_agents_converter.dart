@@ -52,9 +52,7 @@ class CursorToCodexAgentsConverter {
     final parsed = <({CodexAgentsRuleItem item, String section})>[];
 
     for (final file in files) {
-      final relative = p.normalize(
-        p.relative(file.path, from: cursorRulesDir),
-      );
+      final relative = p.normalize(p.relative(file.path, from: cursorRulesDir));
       final doc = await SkillMdDocument.parseFile(file.path);
       final alwaysApply =
           (doc.frontmatter['alwaysApply'] ?? '').toLowerCase() == 'true';
