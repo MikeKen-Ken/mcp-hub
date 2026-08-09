@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/app.dart';
 import 'package:mcp_hub/app_brand.dart';
@@ -6,6 +7,37 @@ import 'package:mcp_hub/controllers/hub_controller.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  testWidgets('Esc 依次关闭弹窗和返回上一页，根页面保持打开', (tester) async {
+    final hub = HubController(initiallyLoading: false);
+    addTearDown(hub.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(value: hub, child: const McpHubApp()),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Agent 配置下载/上传'));
+    await tester.pumpAndSettle();
+    expect(find.text('按资源管理'), findsOneWidget);
+
+    await tester.tap(find.text('2  更新/覆盖全部'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认更新/覆盖？'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('确认更新/覆盖？'), findsNothing);
+    expect(find.text('按资源管理'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('配置中心'), findsOneWidget);
+    expect(find.text('按资源管理'), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('配置中心'), findsOneWidget);
+  });
+
   testWidgets('home shows Agent Hub title', (tester) async {
     final hub = HubController(initiallyLoading: false);
     addTearDown(hub.dispose);
