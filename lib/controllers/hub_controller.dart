@@ -612,9 +612,10 @@ class HubController extends ChangeNotifier {
   }
 
   Future<SkillSyncResult> convertResourceFromCursor(
-    AgentResourceKind resource,
-  ) async {
-    final result = await skillSync.convertFromCursor(resource);
+    AgentResourceKind resource, {
+    SkillTarget target = SkillTarget.codex,
+  }) async {
+    final result = await skillSync.convertFromCursor(resource, target: target);
     _lastMessage = result.message;
     notifyListeners();
     return result;

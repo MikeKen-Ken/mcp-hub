@@ -9,8 +9,10 @@ abstract final class ConfigBackupPaths {
 
   /// zip 内：`resources/{skills|commands|rules}/cursor/`（权威源与 WebDAV 一致）。
   /// 旧包中可能仍有 `.../codex/`，导入时可选兼容恢复。
-  static String resourceZipDir(AgentResourceKind resource, SkillTarget target) =>
-      '$resourcesRoot/${resource.wireName}/${target.wireName}';
+  static String resourceZipDir(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) => '$resourcesRoot/${resource.wireName}/${target.wireName}';
 
   /// zip 内：Codex `AGENTS.md`（Rule 一键转换产物）。
   static const codexAgentsMdZipPath = '$resourcesRoot/codex/AGENTS.md';
@@ -18,22 +20,20 @@ abstract final class ConfigBackupPaths {
   static String? localDeployPath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      switch ((resource, target)) {
-        (AgentResourceKind.skill, SkillTarget.cursor) =>
-          McpPaths.cursorSkillsPath,
-        (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
-        (AgentResourceKind.command, SkillTarget.cursor) =>
-          McpPaths.cursorCommandsPath,
-        (AgentResourceKind.command, SkillTarget.codex) =>
-          McpPaths.codexCommandsPath,
-        (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
-        (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
-      };
+  ) => switch ((resource, target)) {
+    (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
+    (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
+    (AgentResourceKind.command, SkillTarget.cursor) =>
+      McpPaths.cursorCommandsPath,
+    (AgentResourceKind.command, SkillTarget.codex) =>
+      McpPaths.codexCommandsPath,
+    (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
+    (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
+    (_, SkillTarget.openCode) => null,
+  };
 
   static String? localCachePath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      McpPaths.resourceCachePath(resource.wireName, target.wireName);
+  ) => McpPaths.resourceCachePath(resource.wireName, target.wireName);
 }

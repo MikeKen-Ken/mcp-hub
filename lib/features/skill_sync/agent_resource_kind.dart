@@ -10,16 +10,16 @@ enum AgentResourceKind {
   rule;
 
   String get wireName => switch (this) {
-        AgentResourceKind.skill => 'skills',
-        AgentResourceKind.command => 'commands',
-        AgentResourceKind.rule => 'rules',
-      };
+    AgentResourceKind.skill => 'skills',
+    AgentResourceKind.command => 'commands',
+    AgentResourceKind.rule => 'rules',
+  };
 
   String get label => switch (this) {
-        AgentResourceKind.skill => 'Skill',
-        AgentResourceKind.command => 'Command',
-        AgentResourceKind.rule => 'Rule',
-      };
+    AgentResourceKind.skill => 'Skill',
+    AgentResourceKind.command => 'Command',
+    AgentResourceKind.rule => 'Rule',
+  };
 
   /// WebDAV 是否下载/上传该客户端目录（仅 Cursor）。
   bool supportsWebDav(SkillTarget target) => target == SkillTarget.cursor;
@@ -35,14 +35,18 @@ enum AgentResourceKind {
 
   /// 本机是否展示该客户端路径（含 Codex 转换产物）。
   bool supportsLocalPath(SkillTarget target) => switch ((this, target)) {
-        (_, SkillTarget.cursor) => true,
-        (AgentResourceKind.command, SkillTarget.codex) => false,
-        (_, SkillTarget.codex) => true,
-      };
+    (_, SkillTarget.cursor) => true,
+    (_, SkillTarget.codex) => this != AgentResourceKind.command,
+    (_, SkillTarget.openCode) => false,
+  };
 
   /// 是否支持以本机 Cursor 为源一键转换到 Codex。
   bool get canConvertToCodex => switch (this) {
-        AgentResourceKind.command => false,
-        AgentResourceKind.skill || AgentResourceKind.rule => true,
-      };
+    AgentResourceKind.command => false,
+    AgentResourceKind.skill || AgentResourceKind.rule => true,
+  };
+
+  /// 是否有已确认格式的 Cursor 转换器。
+  bool canConvertTo(SkillTarget target) =>
+      target == SkillTarget.codex && canConvertToCodex;
 }

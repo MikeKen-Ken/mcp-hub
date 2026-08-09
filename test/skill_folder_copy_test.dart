@@ -11,7 +11,11 @@ void main() {
     test('tryParse', () {
       expect(SkillTarget.tryParse('cursor'), SkillTarget.cursor);
       expect(SkillTarget.tryParse('CODEX'), SkillTarget.codex);
+      expect(SkillTarget.tryParse('open_code'), SkillTarget.openCode);
       expect(SkillTarget.tryParse('all'), isNull);
+      expect(SkillTarget.conversionTargets, contains(SkillTarget.openCode));
+      expect(SkillTarget.openCode.hasConfirmedConversionFormat, isFalse);
+      expect(SkillTarget.openCode.conversionBlockReason, contains('未确认'));
     });
   });
 
@@ -32,10 +36,18 @@ void main() {
       expect(AgentResourceKind.skill.canConvertToCodex, isTrue);
       expect(AgentResourceKind.rule.canConvertToCodex, isTrue);
       expect(AgentResourceKind.command.canConvertToCodex, isFalse);
-      expect(AgentResourceKind.command.supportsLocalPath(SkillTarget.codex),
-          isFalse);
-      expect(AgentResourceKind.skill.supportsLocalPath(SkillTarget.codex),
-          isTrue);
+      expect(
+        AgentResourceKind.command.supportsLocalPath(SkillTarget.codex),
+        isFalse,
+      );
+      expect(
+        AgentResourceKind.skill.supportsLocalPath(SkillTarget.codex),
+        isTrue,
+      );
+      expect(
+        AgentResourceKind.skill.supportsLocalPath(SkillTarget.openCode),
+        isFalse,
+      );
     });
   });
 
@@ -59,8 +71,7 @@ void main() {
 
       final skillDir = Directory(p.join(source.path, 'demo-skill'));
       await skillDir.create();
-      await File(p.join(skillDir.path, 'SKILL.md'))
-          .writeAsString('# demo\n');
+      await File(p.join(skillDir.path, 'SKILL.md')).writeAsString('# demo\n');
       await File(p.join(skillDir.path, 'notes.txt')).writeAsString('x');
 
       final hidden = Directory(p.join(source.path, '.system'));
@@ -74,8 +85,10 @@ void main() {
       );
 
       expect(result.copiedFiles, 2);
-      expect(await File(p.join(target.path, 'demo-skill', 'SKILL.md')).exists(),
-          isTrue);
+      expect(
+        await File(p.join(target.path, 'demo-skill', 'SKILL.md')).exists(),
+        isTrue,
+      );
       expect(await Directory(p.join(target.path, '.system')).exists(), isFalse);
       expect(await copy.countSkillPackages(target.path), 1);
     });
@@ -106,8 +119,14 @@ void main() {
 
       expect(result.copiedFiles, 1);
       expect(result.deletedEntries, 1);
-      expect(await Directory(p.join(target.path, 'keep-skill')).exists(), isTrue);
-      expect(await Directory(p.join(target.path, 'stale-skill')).exists(), isFalse);
+      expect(
+        await Directory(p.join(target.path, 'keep-skill')).exists(),
+        isTrue,
+      );
+      expect(
+        await Directory(p.join(target.path, 'stale-skill')).exists(),
+        isFalse,
+      );
       expect(await Directory(p.join(target.path, '.system')).exists(), isTrue);
       expect(await copy.countSkillPackages(target.path), 1);
     });

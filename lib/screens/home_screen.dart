@@ -916,15 +916,34 @@ class _ResourceSyncCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
-            FilledButton.tonalIcon(
-              onPressed: !supported || busy || !_canConvert
-                  ? null
-                  : () => _run(
-                      context,
-                      () => hub.convertResourceFromCursor(resource),
-                    ),
-              icon: const Icon(Icons.transform_outlined),
-              label: Text(_convertButtonLabel),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: !supported || busy || !_canConvert
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.convertResourceFromCursor(resource),
+                        ),
+                  icon: const Icon(Icons.transform_outlined),
+                  label: Text(_convertButtonLabel),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || busy
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.convertResourceFromCursor(
+                            resource,
+                            target: SkillTarget.openCode,
+                          ),
+                        ),
+                  icon: const Icon(Icons.open_in_new_outlined),
+                  label: const Text('一键转换 Cursor → Open Code'),
+                ),
+              ],
             ),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
@@ -972,7 +991,7 @@ class _ResourceSyncCard extends StatelessWidget {
     );
   }
 
-  bool get _canConvert => resource.canConvertToCodex;
+  bool get _canConvert => resource.canConvertTo(SkillTarget.codex);
 
   String get _convertButtonLabel => switch (resource) {
     AgentResourceKind.skill => '一键转换 Cursor → Codex',

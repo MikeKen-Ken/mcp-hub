@@ -43,13 +43,12 @@ class SkillSyncService extends ChangeNotifier {
     SkillFolderCopy? folderCopy,
     CursorToCodexSkillConverter? skillConverter,
     CursorToCodexAgentsConverter? agentsConverter,
-  })  : _loadConfig = loadConfig,
-        _folderSync = folderSync ?? SkillWebDavFolderSync(),
-        _folderCopy = folderCopy ?? const SkillFolderCopy(),
-        _skillConverter =
-            skillConverter ?? const CursorToCodexSkillConverter(),
-        _agentsConverter =
-            agentsConverter ?? const CursorToCodexAgentsConverter();
+  }) : _loadConfig = loadConfig,
+       _folderSync = folderSync ?? SkillWebDavFolderSync(),
+       _folderCopy = folderCopy ?? const SkillFolderCopy(),
+       _skillConverter = skillConverter ?? const CursorToCodexSkillConverter(),
+       _agentsConverter =
+           agentsConverter ?? const CursorToCodexAgentsConverter();
   final Future<WebDavConfig> Function() _loadConfig;
   final SkillWebDavFolderSync _folderSync;
   final SkillFolderCopy _folderCopy;
@@ -66,33 +65,34 @@ class SkillSyncService extends ChangeNotifier {
       'WebDAV 仅下载/上传 Cursor 目录；Codex 由本机从 Cursor 转换生成，'
       '请使用「一键转换」或先下载 Cursor（下载后会自动转换）';
   String? cachePathFor(SkillTarget target) => switch (target) {
-        SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
-        SkillTarget.codex => McpPaths.codexSkillsCachePath,
-      };
+    SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
+    SkillTarget.codex => McpPaths.codexSkillsCachePath,
+    SkillTarget.openCode => null,
+  };
   String? deployPathFor(SkillTarget target) => switch (target) {
-        SkillTarget.cursor => McpPaths.cursorSkillsPath,
-        SkillTarget.codex => McpPaths.codexSkillsPath,
-      };
+    SkillTarget.cursor => McpPaths.cursorSkillsPath,
+    SkillTarget.codex => McpPaths.codexSkillsPath,
+    SkillTarget.openCode => null,
+  };
   String? resourceCachePathFor(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      McpPaths.resourceCachePath(resource.wireName, target.wireName);
+  ) => McpPaths.resourceCachePath(resource.wireName, target.wireName);
   String? resourceDeployPathFor(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      switch ((resource, target)) {
-        (AgentResourceKind.skill, SkillTarget.cursor) =>
-          McpPaths.cursorSkillsPath,
-        (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
-        (AgentResourceKind.command, SkillTarget.cursor) =>
-          McpPaths.cursorCommandsPath,
-        (AgentResourceKind.command, SkillTarget.codex) =>
-          McpPaths.codexCommandsPath,
-        (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
-        (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
-      };
+  ) => switch ((resource, target)) {
+    (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
+    (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
+    (AgentResourceKind.command, SkillTarget.cursor) =>
+      McpPaths.cursorCommandsPath,
+    (AgentResourceKind.command, SkillTarget.codex) =>
+      McpPaths.codexCommandsPath,
+    (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
+    (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
+    (_, SkillTarget.openCode) => null,
+  };
+
   /// 从 WebDAV 下载 Cursor Skill 到本机缓存（不覆盖正式目录）。
   Future<SkillSyncResult> syncFromWebDav(SkillTarget target) async {
     return syncResourceFromWebDav(AgentResourceKind.skill, target);
@@ -280,11 +280,7 @@ class SkillSyncService extends ChangeNotifier {
         message: _codexNotOnWebDavMessage,
       );
     }
-    return _run(
-      resource,
-      target,
-      () => _doApplyOne(resource, target),
-    );
+    return _run(resource, target, () => _doApplyOne(resource, target));
   }
 
   /// 把全部资源的 Cursor 缓存全量镜像到正式目录，并可转换 Codex。
@@ -322,19 +318,29 @@ class SkillSyncService extends ChangeNotifier {
   ///
   /// 不依赖 WebDAV。Skill → skills + openai.yaml；Rule → `AGENTS.md`。
   /// Command 暂无 Codex 对等目录。
-  Future<SkillSyncResult> convertFromCursor(AgentResourceKind resource) async {
-    return _run(resource, SkillTarget.cursor, () async {
+  Future<SkillSyncResult> convertFromCursor(
+    AgentResourceKind resource, {
+    SkillTarget target = SkillTarget.codex,
+  }) async {
+    return _run(resource, target, () async {
       if (!McpPaths.isDesktopSupported) {
         throw StateError('当前平台不支持目录转换');
+      }
+      if (!target.hasConfirmedConversionFormat) {
+        return SkillSyncResult(
+          ok: false,
+          target: target,
+          message: target.conversionBlockReason!,
+        );
       }
       return switch (resource) {
         AgentResourceKind.skill => _convertSkillsFromCursor(),
         AgentResourceKind.rule => _convertRulesFromCursor(),
-        AgentResourceKind.command => const SkillSyncResult(
-            ok: false,
-            target: SkillTarget.cursor,
-            message: 'Command 暂无 Codex 对等目录，无法一键转换',
-          ),
+        AgentResourceKind.command => SkillSyncResult(
+          ok: false,
+          target: target,
+          message: 'Command 暂无 Codex 对等目录，无法一键转换',
+        ),
       };
     });
   }
@@ -356,9 +362,9 @@ class SkillSyncService extends ChangeNotifier {
             AgentResourceKind.skill => await _convertSkillsFromCursor(),
             AgentResourceKind.rule => await _convertRulesFromCursor(),
             AgentResourceKind.command => const SkillSyncResult(
-                ok: false,
-                message: 'Command 暂无 Codex 对等目录',
-              ),
+              ok: false,
+              message: 'Command 暂无 Codex 对等目录',
+            ),
           };
           deployedFiles += one.deployedFiles;
           packageCount += one.packageCount;
@@ -412,7 +418,7 @@ class SkillSyncService extends ChangeNotifier {
       message: items.isEmpty
           ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
           : '已从 Cursor 批量转换 ${items.length} 个 Skill 到 Codex'
-              '（复制 $copied 个文件，并写入 agents/openai.yaml$removeHint）→ $target',
+                '（复制 $copied 个文件，并写入 agents/openai.yaml$removeHint）→ $target',
     );
   }
 
@@ -550,7 +556,8 @@ class SkillSyncService extends ChangeNotifier {
       target: target,
       pulledFiles: pulled,
       packageCount: packages,
-      message: '已下载 Cursor ${resource.label} 到缓存：'
+      message:
+          '已下载 Cursor ${resource.label} 到缓存：'
           '$pulled 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $cachePath（未覆盖正式目录，请使用「更新/覆盖」）',
@@ -583,7 +590,8 @@ class SkillSyncService extends ChangeNotifier {
       target: target,
       deployedFiles: deploy.copiedFiles,
       packageCount: packages,
-      message: '已用缓存全量覆盖正式 Cursor ${resource.label}：'
+      message:
+          '已用缓存全量覆盖正式 Cursor ${resource.label}：'
           '写入 ${deploy.copiedFiles} 个文件，删除多余 ${deploy.deletedEntries} 项'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $deployPath',
@@ -640,7 +648,8 @@ class SkillSyncService extends ChangeNotifier {
       target: target,
       pushedFiles: pushed,
       packageCount: packages,
-      message: '已全量上传 Cursor ${resource.label}：$pushed 个文件'
+      message:
+          '已全量上传 Cursor ${resource.label}：$pushed 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $remote（远端已与本机一致）',
     );
@@ -652,10 +661,7 @@ class SkillSyncService extends ChangeNotifier {
     Future<SkillSyncResult> Function() action,
   ) async {
     if (status == SkillSyncStatus.syncing) {
-      return const SkillSyncResult(
-        ok: false,
-        message: '配置下载/上传进行中，请稍候',
-      );
+      return const SkillSyncResult(ok: false, message: '配置下载/上传进行中，请稍候');
     }
     status = SkillSyncStatus.syncing;
     lastTarget = target;
@@ -676,11 +682,7 @@ class SkillSyncService extends ChangeNotifier {
       status = SkillSyncStatus.error;
       debugPrint('Skill 下载/上传失败: $error');
       notifyListeners();
-      return SkillSyncResult(
-        ok: false,
-        target: target,
-        message: lastError!,
-      );
+      return SkillSyncResult(ok: false, target: target, message: lastError!);
     }
   }
 }
