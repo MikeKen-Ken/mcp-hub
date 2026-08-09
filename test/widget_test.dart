@@ -25,7 +25,29 @@ void main() {
     expect(find.text('MCP 设置'), findsOneWidget);
     expect(find.text('打开 MCP 设置'), findsOneWidget);
 
-    await tester.tap(find.text('打开 MCP 设置'));
+    await tester.tap(find.text('2  更新/覆盖全部'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认更新/覆盖？'), findsOneWidget);
+    expect(find.text('继续覆盖'), findsOneWidget);
+    expect(
+      find.textContaining('缓存中不存在的本地文件和目录也会被删除。'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认更新/覆盖？'), findsNothing);
+
+    final applyOne = find.text('更新/覆盖').first;
+    await tester.ensureVisible(applyOne);
+    await tester.tap(applyOne);
+    await tester.pumpAndSettle();
+    expect(find.text('确认更新/覆盖？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    final mcpSettings = find.text('打开 MCP 设置');
+    await tester.ensureVisible(mcpSettings);
+    await tester.tap(mcpSettings);
     await tester.pumpAndSettle();
     expect(find.text('客户端 MCP'), findsOneWidget);
     expect(find.text('本地 MCP'), findsOneWidget);

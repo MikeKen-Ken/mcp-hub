@@ -582,7 +582,14 @@ class _BulkResourceSyncCard extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
-                      : () => run(hub.applyAllResourcesFromCache),
+                      : () async {
+                          final confirmed = await _confirmLocalOverwrite(
+                            context,
+                            scope: '全部 Agent 配置',
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await run(hub.applyAllResourcesFromCache);
+                        },
                   icon: const Icon(Icons.install_desktop_outlined),
                   label: const Text('2  更新/覆盖全部'),
                 ),
@@ -760,10 +767,17 @@ class _ResourceSyncCard extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
-                      : () => _run(
-                          context,
-                          () => hub.applyResourceFromCache(resource),
-                        ),
+                      : () async {
+                          final confirmed = await _confirmLocalOverwrite(
+                            context,
+                            scope: resource.label,
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(
+                            context,
+                            () => hub.applyResourceFromCache(resource),
+                          );
+                        },
                   icon: const Icon(Icons.install_desktop_outlined),
                   label: const Text('更新/覆盖'),
                 ),
@@ -877,6 +891,34 @@ class _ResourceSyncCard extends StatelessWidget {
     }
     return '下载到缓存 → 更新/覆盖到正式目录（可自动转 Codex）→ 上传全量镜像远端';
   }
+}
+
+Future<bool> _confirmLocalOverwrite(
+  BuildContext context, {
+  required String scope,
+}) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认更新/覆盖？'),
+          content: Text(
+            '即将用缓存中的$scope全量镜像正式目录。\n\n'
+            '缓存中不存在的本地文件和目录也会被删除。Skill 和 Rule 更新后还可能同步转换 Codex 配置。\n\n'
+            '请确认缓存内容已检查无误。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('继续覆盖'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 class _ClientConfigCard extends StatelessWidget {
