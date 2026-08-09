@@ -39,6 +39,17 @@ class McpServerEntry {
   /// Epoch ms; used for WebDAV conflict resolution.
   final int updatedAt;
 
+  /// Hub 是否可驻留拉起该进程（非内置 HTTP，且有启动命令）。
+  bool get canHubStartProcess {
+    if (builtIn) return false;
+    if (transport != McpTransport.http) return false;
+    final cmd = command?.trim();
+    return cmd != null && cmd.isNotEmpty;
+  }
+
+  /// 已启用且可由 Hub 拉起时，应在应用启动/启用时自动启动。
+  bool get shouldAutoStartByHub => enabled && canHubStartProcess;
+
   McpServerEntry copyWith({
     String? id,
     String? name,

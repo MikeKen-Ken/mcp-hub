@@ -21,7 +21,6 @@ class _AddServerScreenState extends State<AddServerScreen> {
   McpTransport _transport = McpTransport.stdio;
   bool _clone = true;
   bool _enabled = true;
-  bool _autoStart = false;
   bool _busy = false;
   bool _nameEdited = false;
 
@@ -70,7 +69,6 @@ class _AddServerScreenState extends State<AddServerScreen> {
         args: args,
         url: _url.text,
         enabled: _enabled,
-        autoStart: _autoStart,
         cloneRepo: _clone,
       );
       if (!mounted) return;
@@ -194,16 +192,13 @@ class _AddServerScreenState extends State<AddServerScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Hub 启动时自动拉起'),
-              value: _autoStart,
-              onChanged: (v) => setState(() => _autoStart = v),
-            ),
           ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('启用'),
+            subtitle: _transport == McpTransport.http
+                ? const Text('启用后，若填写了启动命令，Hub 会自动拉起进程')
+                : null,
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),

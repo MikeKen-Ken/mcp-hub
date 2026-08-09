@@ -832,7 +832,7 @@ class _ServerTile extends StatelessWidget {
                     const SizedBox(width: 8),
                     const StatusBadge(label: '内置', tonal: true),
                   ],
-                  if (server.autoStart) ...[
+                  if (server.shouldAutoStartByHub) ...[
                     const SizedBox(width: 6),
                     const StatusBadge(label: '自动'),
                   ],

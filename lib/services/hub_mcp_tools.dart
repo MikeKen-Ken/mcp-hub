@@ -62,7 +62,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'enabled': JsonSchema.boolean(description: '默认 true'),
         'cloneRepo': JsonSchema.boolean(description: '是否 git clone，默认 true'),
         'autoStart': JsonSchema.boolean(
-          description: '仅 HTTP：Hub 启动时是否拉起进程',
+          description:
+              '仅 HTTP：Hub 启动时是否拉起进程；省略时对可拉起的 HTTP 默认 true',
         ),
       },
     ),
@@ -78,6 +79,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         final transport = transportRaw == 'http'
             ? McpTransport.http
             : McpTransport.stdio;
+        final autoStartExplicit = args.containsKey('autoStart');
         final id = await hub.addServer(
           name: mcpTrimmedString(args['name']) ?? '',
           transport: transport,
@@ -88,7 +90,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           cwd: mcpTrimmedString(args['cwd']),
           url: mcpTrimmedString(args['url']),
           enabled: mcpBool(args['enabled'], fallback: true),
-          autoStart: mcpBool(args['autoStart']),
+          autoStart: autoStartExplicit ? mcpBool(args['autoStart']) : null,
           cloneRepo: mcpBool(args['cloneRepo'], fallback: true),
         );
         return mcpJsonResult({

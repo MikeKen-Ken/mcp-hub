@@ -98,6 +98,7 @@ class HubController extends ChangeNotifier {
     webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
     await _ensureBuiltInHubMcp();
+    await _migrateAutoStartForEnabledHttp();
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
@@ -111,6 +112,23 @@ class HubController extends ChangeNotifier {
     await webDavSync.startPolling();
   }
 
+  /// 旧目录里「已启用 HTTP 但 autoStart=false」会导致不启动；迁移为一致标记。
+  Future<void> _migrateAutoStartForEnabledHttp() async {
+    var changed = false;
+    final next = <McpServerEntry>[];
+    for (final server in _servers) {
+      if (server.shouldAutoStartByHub && !server.autoStart) {
+        changed = true;
+        next.add(server.copyWith(autoStart: true));
+      } else {
+        next.add(server);
+      }
+    }
+    if (!changed) return;
+    _servers = next;
+    await _persist(scheduleRemote: false);
+  }
+
   Future<void> _applySyncDocument(CatalogSyncDocument doc) async {
     _servers = CatalogSyncMapper.applyDocument(local: _servers, doc: doc);
     await _ensureBuiltInHubMcp(persist: false);
@@ -118,6 +136,8 @@ class HubController extends ChangeNotifier {
     _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
     notifyListeners();
     await refreshClientStatus();
+    // 合并后补拉本机已启用的 HTTP MCP（可能新增了 command）
+    await autoStartEnabledHttpServers();
   }
 
   Future<void> _ensureBuiltInHubMcp({bool persist = true}) async {
@@ -187,15 +207,12 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 已启用的 HTTP MCP（有启动命令）在 Hub 启动时自动拉起。
+  /// 不再依赖单独的 autoStart 开关，避免「已启用却不启动」。
   Future<void> autoStartEnabledHttpServers() async {
     for (final server in _servers) {
-      if (server.builtIn) continue;
-      if (server.enabled &&
-          server.autoStart &&
-          server.transport == McpTransport.http &&
-          server.command != null) {
-        await _processManager.start(server);
-      }
+      if (!server.shouldAutoStartByHub) continue;
+      await _processManager.start(server);
     }
     notifyListeners();
   }
@@ -205,12 +222,23 @@ class HubController extends ChangeNotifier {
     if (index < 0) return;
     _servers = [..._servers];
     // 开/关不 bump updatedAt，避免 WebDAV 把本机开关当成清单变更
-    _servers[index] = _servers[index].copyWith(enabled: enabled);
+    final current = _servers[index];
+    _servers[index] = current.copyWith(
+      enabled: enabled,
+      // 启用可拉起的 HTTP 时同步标记，便于列表展示「自动」
+      autoStart: enabled && current.canHubStartProcess
+          ? true
+          : current.autoStart,
+    );
     await _persist();
     if (id == HubMcpConstants.serverKey) {
       await _syncHubMcpHost();
-    } else if (!enabled && _servers[index].transport == McpTransport.http) {
-      await _processManager.stop(id);
+    } else if (_servers[index].transport == McpTransport.http) {
+      if (enabled && _servers[index].shouldAutoStartByHub) {
+        await _processManager.start(_servers[index]);
+      } else if (!enabled) {
+        await _processManager.stop(id);
+      }
     }
     notifyListeners();
     await refreshClientStatus();
@@ -226,7 +254,7 @@ class HubController extends ChangeNotifier {
     String? cwd,
     String? url,
     bool enabled = true,
-    bool autoStart = false,
+    bool? autoStart,
     bool cloneRepo = true,
   }) async {
     final fromUrl = RepoName.fromGitUrl(repoUrl);
@@ -253,19 +281,28 @@ class HubController extends ChangeNotifier {
       localPath = result.localPath ?? localPath;
     }
 
+    final trimmedCommand = command?.trim();
+    final resolvedCommand =
+        (trimmedCommand == null || trimmedCommand.isEmpty) ? null : trimmedCommand;
+    // HTTP 且可拉起时默认自动启动；stdio 无进程可驻留，标记无关
+    final resolvedAutoStart = autoStart ??
+        (enabled &&
+            transport == McpTransport.http &&
+            resolvedCommand != null);
+
     final entry = McpServerEntry(
       id: id,
       name: resolvedName.isNotEmpty ? resolvedName : id,
       transport: transport,
       repoUrl: repoUrl?.trim(),
       localPath: localPath,
-      command: command?.trim(),
+      command: resolvedCommand,
       args: args,
       env: env,
       cwd: cwd?.trim().isEmpty == true ? null : cwd?.trim(),
       url: url?.trim(),
       enabled: enabled,
-      autoStart: autoStart,
+      autoStart: resolvedAutoStart,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -275,6 +312,9 @@ class HubController extends ChangeNotifier {
 
     _servers = [..._servers, entry];
     await _persist();
+    if (entry.shouldAutoStartByHub) {
+      await _processManager.start(entry);
+    }
     _lastMessage = '已添加 ${entry.name}';
     notifyListeners();
     await refreshClientStatus();
@@ -605,6 +645,7 @@ class HubController extends ChangeNotifier {
 
     if (payload.servers != null) {
       await _applyImportedServers(payload.servers!);
+      await autoStartEnabledHttpServers();
     }
 
     await refreshClientStatus();
