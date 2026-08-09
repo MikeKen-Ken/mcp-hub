@@ -17,12 +17,17 @@ void main() {
     );
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
-    expect(find.text('客户端 MCP'), findsOneWidget);
     expect(find.text('Agent 配置下载/上传'), findsOneWidget);
     expect(find.text('本地 MCP'), findsNothing);
 
-    await tester.tap(find.text('客户端 MCP'));
+    await tester.tap(find.text('Agent 配置下载/上传'));
     await tester.pumpAndSettle();
+    expect(find.text('MCP 设置'), findsOneWidget);
+    expect(find.text('打开 MCP 设置'), findsOneWidget);
+
+    await tester.tap(find.text('打开 MCP 设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('客户端 MCP'), findsOneWidget);
     expect(find.text('本地 MCP'), findsOneWidget);
 
     await tester.tap(find.text('本地 MCP'));

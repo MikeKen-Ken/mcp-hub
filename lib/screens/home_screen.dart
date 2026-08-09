@@ -349,6 +349,8 @@ class AgentConfigSyncScreen extends StatelessWidget {
                         busy: busy,
                         run: (action) => _run(context, action),
                       ),
+                      const SizedBox(height: 12),
+                      const _McpSettingsCard(),
                       const SizedBox(height: 24),
                       const _SectionHeader('按资源管理'),
                       const SizedBox(height: 4),
@@ -592,15 +594,6 @@ class _BulkResourceSyncCard extends StatelessWidget {
                   label: const Text('3  上传全部'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ClientMcpScreen(),
-                    ),
-                  ),
-                  icon: const Icon(Icons.hub_outlined),
-                  label: const Text('MCP 连接状态'),
-                ),
-                OutlinedButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () => run(hub.convertAllResourcesFromCursor),
@@ -631,6 +624,39 @@ class _BulkResourceSyncCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _McpSettingsCard extends StatelessWidget {
+  const _McpSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 10,
+        ),
+        leading: const CircleAvatar(
+          child: Icon(Icons.hub_outlined),
+        ),
+        title: const Text('MCP 设置'),
+        subtitle: const Text(
+          '管理 MCP 清单、启停和更新，并写入 Cursor / Codex 配置。',
+        ),
+        trailing: FilledButton.tonal(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ClientMcpScreen()),
+          ),
+          child: const Text('打开 MCP 设置'),
+        ),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ClientMcpScreen()),
         ),
       ),
     );
