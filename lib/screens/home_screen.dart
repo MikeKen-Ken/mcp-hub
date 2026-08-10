@@ -455,7 +455,7 @@ class _AgentSyncOverview extends StatelessWidget {
                 Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
                 const _FlowLabel(index: 2, label: '更新到正式目录'),
                 Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
-                const _FlowLabel(index: 3, label: '按需上传远端'),
+                const _FlowLabel(index: 3, label: '从 Cursor 上传'),
                 const SizedBox(width: 4),
                 _SyncStatusPill(
                   icon: Icons.history_outlined,
@@ -991,13 +991,13 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String _supportDescription() {
     if (resource == AgentResourceKind.command) {
-      return '下载到缓存 → 更新/覆盖到正式目录 → 上传全量镜像远端；'
+      return '下载到缓存 → 更新/覆盖到正式 Cursor → 从 Cursor 上传远端；'
           'Codex 暂无对等 Command 目录';
     }
     if (resource == AgentResourceKind.rule) {
-      return '下载到缓存 → 更新/覆盖到正式目录（可自动转 AGENTS.md）→ 上传全量镜像远端';
+      return '下载到缓存 → 更新/覆盖到正式 Cursor（可自动转 AGENTS.md）→ 从 Cursor 上传远端';
     }
-    return '下载到缓存 → 更新/覆盖到正式目录（可自动转 Codex）→ 上传全量镜像远端';
+    return '下载到缓存 → 更新/覆盖到正式 Cursor（可自动转 Codex）→ 从 Cursor 上传远端';
   }
 }
 

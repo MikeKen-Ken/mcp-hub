@@ -261,7 +261,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                 '在「客户端 MCP」右上角可下载/上传；'
                 'Skill / Command / Rule 文件夹在 {远端}/{skills|commands|rules}/{客户端}/，'
                 '在「Agent 配置下载/上传」：下载仅写入本机缓存，'
-                '「更新/覆盖」再全量镜像到正式目录，上传则让远端与本机正式目录一致。\n'
+                '「更新/覆盖」再全量镜像到正式 Cursor；上传直接从本机 Cursor 正式目录推到远端（不经缓存）。\n'
                 '不下载/上传：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
                 '换电脑后：配置好同一 WebDAV → 在客户端 MCP 下载清单 → '
                 '下载 Agent 配置到缓存 → 更新/覆盖到正式目录 → 再按需 clone / 一键写入客户端。',

@@ -287,7 +287,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'WebDAV 仅下载/上传 Cursor Skill。'
         'direction=pull：远端全量镜像到本机缓存（不覆盖正式目录）；'
         'direction=apply：缓存全量镜像到正式 Cursor 目录（本地多余删除，成功后可自动转 Codex）；'
-        'direction=push：本机正式目录全量镜像到远端（远端多余删除）。'
+        'direction=push：本机 Cursor 正式目录直接全量镜像到远端（不经缓存；远端多余删除）。'
         'target=codex 且 direction=pull/apply 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
     inputSchema: JsonSchema.object(
       properties: {

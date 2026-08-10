@@ -35,8 +35,11 @@ class SkillSyncResult {
   final int packageCount;
 }
 
-/// Agent 资源：WebDAV 仅下载 Cursor → 本机缓存；
-/// 「更新/覆盖」再把缓存全量镜像到正式目录，并可转换 Codex。
+/// Agent 资源同步：
+/// - 下载：远端 Cursor → 本机缓存（不碰正式目录）
+/// - 覆盖：缓存 → 正式 Cursor
+/// - 上传：正式 Cursor → 远端（不经缓存）
+/// - 转换：正式 Cursor → Codex / OpenCode
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
     required Future<WebDavConfig> Function() loadConfig,
@@ -157,7 +160,7 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 把本机目标目录全量镜像上传到 WebDAV（先镜像到缓存再推送）。
+  /// 把本机 Cursor 正式目录全量镜像上传到 WebDAV（不经缓存）。
   Future<SkillSyncResult> pushToWebDav(SkillTarget target) async {
     return pushResourceToWebDav(AgentResourceKind.skill, target);
   }
@@ -242,7 +245,7 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 一次性把全部 Agent 资源的本机 Cursor 目录全量镜像上传到 WebDAV。
+  /// 一次性把全部 Agent 资源的本机 Cursor 正式目录直接上传到 WebDAV（不经缓存）。
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
     return _run(null, null, () async {
       var pushedFiles = 0;
@@ -689,6 +692,7 @@ class SkillSyncService extends ChangeNotifier {
     return applyResult;
   }
 
+  /// 直接从本机 Cursor 正式目录上传到远端（缓存只用于下载暂存，不参与上传）。
   Future<SkillSyncResult> _doPushOne(
     AgentResourceKind resource,
     SkillTarget target,
@@ -697,21 +701,12 @@ class SkillSyncService extends ChangeNotifier {
     if (!config.enabled || !config.isConfigured) {
       throw StateError('请先配置并启用 WebDAV');
     }
-    final cachePath = resourceCachePathFor(resource, target);
     final deployPath = resourceDeployPathFor(resource, target);
-    if (cachePath == null || deployPath == null) {
+    if (deployPath == null) {
       throw StateError('${target.label} 不支持 ${resource.label} 上传');
     }
-    // 以正式目录为准全量镜像到缓存；若尚无正式目录则确保缓存存在后推送。
-    final deployDir = Directory(deployPath);
-    if (await deployDir.exists()) {
-      await _folderCopy.mirrorContents(
-        sourceDir: deployPath,
-        targetDir: cachePath,
-      );
-    } else {
-      await Directory(cachePath).create(recursive: true);
-    }
+    // 正式目录不存在时创建空目录再上传，使远端与「空的本机 Cursor」一致。
+    await Directory(deployPath).create(recursive: true);
     final client = _folderSync.clientFor(config);
     if (client == null) {
       throw StateError('WebDAV 未配置完整');
@@ -725,10 +720,10 @@ class SkillSyncService extends ChangeNotifier {
     final pushed = await _folderSync.pushFolder(
       client: client,
       remoteDir: remote,
-      localDir: cachePath,
+      localDir: deployPath,
     );
     final packages = resource == AgentResourceKind.skill
-        ? await _folderCopy.countSkillPackages(cachePath)
+        ? await _folderCopy.countSkillPackages(deployPath)
         : 0;
     return SkillSyncResult(
       ok: true,
@@ -736,9 +731,9 @@ class SkillSyncService extends ChangeNotifier {
       pushedFiles: pushed,
       packageCount: packages,
       message:
-          '已全量上传 Cursor ${resource.label}：$pushed 个文件'
+          '已从 Cursor 正式目录全量上传 ${resource.label}：$pushed 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-          ' → $remote（远端已与本机一致）',
+          ' → $remote（远端已与本机 Cursor 一致）',
     );
   }
 

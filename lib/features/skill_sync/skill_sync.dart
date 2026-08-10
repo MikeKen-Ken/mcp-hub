@@ -1,4 +1,4 @@
-/// Skill 文件夹下载/上传（WebDAV 仅 Cursor → 本机缓存；覆盖正式目录；Codex 由 Cursor 转换）。
+/// Skill 文件夹同步：下载进缓存、覆盖到 Cursor、从 Cursor 上传远端；Codex/OpenCode 由 Cursor 转换。
 library;
 
 export 'agent_resource_kind.dart';
