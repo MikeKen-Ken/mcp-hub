@@ -637,12 +637,11 @@ class HubController extends ChangeNotifier {
     await _refreshGitManagedFlags();
   }
 
-  static String? _joinMessages(List<String?> parts) {
+  static String _joinMessages(List<String?> parts) {
     final filtered = [
       for (final p in parts)
         if (p != null && p.trim().isNotEmpty) p.trim(),
     ];
-    if (filtered.isEmpty) return null;
     return filtered.join('；');
   }
 
