@@ -1,5 +1,6 @@
 import 'package:mcp_dart/mcp_dart.dart';
 
+import '../common/agent_platforms.dart';
 import '../controllers/hub_controller.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
@@ -199,11 +200,12 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'configure_clients',
-    description: '一键把已启用的 MCP 写入 Cursor 和/或 Codex',
+    description: '一键把已启用的 MCP 写入已登记的客户端（Cursor / Codex / Open Code）',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
-          description: 'all | cursor | codex，默认 all',
+          description:
+              'all | cursor | codex | openCode | opencode，默认 all',
         ),
       },
     ),
@@ -216,16 +218,20 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       final target =
           mcpTrimmedString(args['target'])?.toLowerCase() ?? 'all';
       try {
-        if (target == 'cursor') {
-          final r = await hub.configureClient(McpClientKind.cursor);
-          return mcpJsonResult({'ok': r.ok, 'message': r.message, 'path': r.path});
+        if (target == 'all') {
+          final r = await hub.configureAllClients();
+          return mcpJsonResult({'ok': r.ok, 'message': r.message});
         }
-        if (target == 'codex') {
-          final r = await hub.configureClient(McpClientKind.codex);
-          return mcpJsonResult({'ok': r.ok, 'message': r.message, 'path': r.path});
+        final platform = AgentPlatformDefinition.tryParse(target);
+        if (platform == null) {
+          return mcpErrorResult('未知 target：$target');
         }
-        final r = await hub.configureAllClients();
-        return mcpJsonResult({'ok': r.ok, 'message': r.message});
+        final definition = AgentPlatforms.of(platform);
+        if (!definition.supportsMcpConfigure) {
+          return mcpErrorResult('${definition.label} 暂不支持 MCP 配置写入');
+        }
+        final r = await hub.configureClient(platform);
+        return mcpJsonResult({'ok': r.ok, 'message': r.message, 'path': r.path});
       } catch (error) {
         return mcpErrorResult('$error');
       }

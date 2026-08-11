@@ -21,6 +21,7 @@ abstract final class McpPaths {
   static String? get codexRulesPath => null;
   static String? get codexAgentsMdPath => null;
   static String? get openCodeConfigDirectory => null;
+  static String? get openCodeMcpConfigPath => null;
   static String? get openCodeSkillsPath => null;
   static String? get openCodeRulesPath => null;
   static String? get openCodeCommandsPath => null;

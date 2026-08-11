@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../common/agent_platforms.dart';
 import '../app_brand.dart';
 import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
@@ -69,20 +70,36 @@ class HubController extends ChangeNotifier {
   WebDavConfig webDavConfig = WebDavConfig.empty;
   bool _loading;
   String? _lastMessage;
-  McpClientAlignReport? _cursorAlignReport;
-  McpClientAlignReport? _codexAlignReport;
+  final Map<AgentPlatformId, McpClientAlignReport?> _clientAlignReports = {};
 
   List<McpServerEntry> get servers => List.unmodifiable(_servers);
   bool get loading => _loading;
   String? get lastMessage => _lastMessage;
-  McpClientAlignReport? get cursorAlignReport => _cursorAlignReport;
-  McpClientAlignReport? get codexAlignReport => _codexAlignReport;
+
+  McpClientAlignReport? clientAlignReport(AgentPlatformId platform) =>
+      _clientAlignReports[platform];
+
+  /// 兼容旧 UI。
+  McpClientAlignReport? get cursorAlignReport =>
+      _clientAlignReports[AgentPlatformId.cursor];
+
+  /// 兼容旧 UI。
+  McpClientAlignReport? get codexAlignReport =>
+      _clientAlignReports[AgentPlatformId.codex];
+
+  McpClientAlignReport? get openCodeAlignReport =>
+      _clientAlignReports[AgentPlatformId.openCode];
+
+  Iterable<McpClientAlignReport?> get mcpClientAlignReports =>
+      AgentPlatforms.mcpConfigurable.map((p) => _clientAlignReports[p.id]);
 
   /// `null` 表示检测中；兼容旧 UI。
-  bool? get cursorConfigured => _cursorAlignReport?.isAligned;
+  bool? get cursorConfigured =>
+      _clientAlignReports[AgentPlatformId.cursor]?.isAligned;
 
   /// `null` 表示检测中；兼容旧 UI。
-  bool? get codexConfigured => _codexAlignReport?.isAligned;
+  bool? get codexConfigured =>
+      _clientAlignReports[AgentPlatformId.codex]?.isAligned;
   bool get isDesktopSupported => McpPaths.isDesktopSupported;
 
   String get hubEndpointUrl => hubMcpHost.endpointUrl;
@@ -230,17 +247,17 @@ class HubController extends ChangeNotifier {
   }
 
   Future<void> refreshClientStatus() async {
-    _cursorAlignReport = null;
-    _codexAlignReport = null;
+    for (final platform in AgentPlatforms.mcpConfigurable) {
+      _clientAlignReports[platform.id] = null;
+    }
     notifyListeners();
-    _cursorAlignReport = await McpClientConfigurator.diagnoseEnabled(
-      McpClientKind.cursor,
-      servers: _servers,
-    );
-    _codexAlignReport = await McpClientConfigurator.diagnoseEnabled(
-      McpClientKind.codex,
-      servers: _servers,
-    );
+    for (final platform in AgentPlatforms.mcpConfigurable) {
+      _clientAlignReports[platform.id] =
+          await McpClientConfigurator.diagnoseEnabled(
+        platform.id,
+        servers: _servers,
+      );
+    }
     notifyListeners();
   }
 
@@ -472,9 +489,9 @@ class HubController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<McpConfigureResult> configureClient(McpClientKind kind) async {
+  Future<McpConfigureResult> configureClient(AgentPlatformId platform) async {
     final result = await McpClientConfigurator.configure(
-      kind,
+      platform,
       servers: _servers,
     );
     _lastMessage = result.message;
@@ -484,12 +501,15 @@ class HubController extends ChangeNotifier {
   }
 
   Future<McpConfigureResult> configureAllClients() async {
-    final cursor = await configureClient(McpClientKind.cursor);
-    final codex = await configureClient(McpClientKind.codex);
-    final message = '${cursor.message}；${codex.message}';
+    final results = <McpConfigureResult>[];
+    for (final platform in AgentPlatforms.mcpConfigurable) {
+      results.add(await configureClient(platform.id));
+    }
+    final message = results.map((r) => r.message).join('；');
+    final ok = results.every((r) => r.ok);
     _lastMessage = message;
     notifyListeners();
-    return McpConfigureResult(ok: cursor.ok && codex.ok, message: message);
+    return McpConfigureResult(ok: ok, message: message);
   }
 
   Future<bool> testWebDav(WebDavConfig config) =>

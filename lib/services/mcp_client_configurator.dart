@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../common/agent_platforms.dart';
 import '../models/mcp_server_entry.dart';
 import 'mcp_client_config.dart';
 import 'mcp_paths.dart';
 
-enum McpClientKind { cursor, codex }
+/// 兼容旧名；新代码请使用 [AgentPlatformId]。
+typedef McpClientKind = AgentPlatformId;
 
 /// 客户端 MCP 配置对齐状态类别。
 enum McpClientAlignStatus {
@@ -34,7 +36,7 @@ enum McpClientAlignStatus {
 /// 一次客户端配置检测的结构化诊断报告。
 class McpClientAlignReport {
   const McpClientAlignReport({
-    required this.kind,
+    required this.platform,
     required this.status,
     this.configPath,
     this.parseErrorMessage,
@@ -43,7 +45,11 @@ class McpClientAlignReport {
     this.rmcpClientMissing = false,
   });
 
-  final McpClientKind kind;
+  final AgentPlatformId platform;
+
+  /// 兼容旧字段名。
+  AgentPlatformId get kind => platform;
+
   final McpClientAlignStatus status;
   final String? configPath;
   final String? parseErrorMessage;
@@ -55,10 +61,7 @@ class McpClientAlignReport {
 
   bool get isAligned => status == McpClientAlignStatus.aligned;
 
-  String get clientLabel => switch (kind) {
-        McpClientKind.cursor => 'Cursor',
-        McpClientKind.codex => 'Codex',
-      };
+  String get clientLabel => AgentPlatforms.labelOf(platform);
 
   /// 按钮等短标签。
   String get shortLabel => switch (status) {
@@ -143,25 +146,33 @@ class McpConfigureResult {
   final String? path;
 }
 
-/// Write enabled Hub servers into Cursor / Codex global config.
-/// Pattern mirrored from kanban's McpClientConfigurator.
+/// Write enabled Hub servers into registered client global configs.
 abstract final class McpClientConfigurator {
   /// 结构化诊断：说明是否对齐及具体原因。
   static Future<McpClientAlignReport> diagnoseEnabled(
-    McpClientKind kind, {
+    AgentPlatformId platform, {
     required List<McpServerEntry> servers,
   }) async {
     if (!McpPaths.isDesktopSupported) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.platformUnsupported,
       );
     }
 
-    final path = _pathFor(kind);
+    final definition = AgentPlatforms.of(platform);
+    final mcpConfig = definition.mcpConfig;
+    if (mcpConfig == null) {
+      return McpClientAlignReport(
+        platform: platform,
+        status: McpClientAlignStatus.platformUnsupported,
+      );
+    }
+
+    final path = mcpConfig.configFilePath();
     if (path == null) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.pathUnresolved,
       );
     }
@@ -169,7 +180,7 @@ abstract final class McpClientConfigurator {
     final enabled = servers.where((s) => s.enabled).toList();
     if (enabled.isEmpty) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.noEnabledServers,
         configPath: path,
       );
@@ -178,7 +189,7 @@ abstract final class McpClientConfigurator {
     final file = File(path);
     if (!await file.exists()) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.fileMissing,
         configPath: path,
         missingServerIds: enabled.map((s) => s.id).toList(),
@@ -190,19 +201,19 @@ abstract final class McpClientConfigurator {
       text = await file.readAsString();
     } catch (error) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.parseError,
         configPath: path,
         parseErrorMessage: error.toString(),
       );
     }
 
-    if (kind == McpClientKind.cursor && text.trim().isNotEmpty) {
+    if (_usesJsonRootValidation(mcpConfig.format) && text.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(text);
         if (decoded is! Map) {
           return McpClientAlignReport(
-            kind: kind,
+            platform: platform,
             status: McpClientAlignStatus.parseError,
             configPath: path,
             parseErrorMessage: '根节点必须是对象',
@@ -210,7 +221,7 @@ abstract final class McpClientConfigurator {
         }
       } on FormatException catch (error) {
         return McpClientAlignReport(
-          kind: kind,
+          platform: platform,
           status: McpClientAlignStatus.parseError,
           configPath: path,
           parseErrorMessage: error.message,
@@ -221,12 +232,7 @@ abstract final class McpClientConfigurator {
     final missing = <String>[];
     final diffs = <McpClientFieldDiff>[];
     for (final server in enabled) {
-      final diagnosis = switch (kind) {
-        McpClientKind.cursor =>
-          McpClientConfig.diagnoseCursorServer(text, server: server),
-        McpClientKind.codex =>
-          McpClientConfig.diagnoseCodexServer(text, server: server),
-      };
+      final diagnosis = _diagnoseServer(mcpConfig.format, text, server);
       if (diagnosis.missing) {
         missing.add(server.id);
       } else {
@@ -234,19 +240,19 @@ abstract final class McpClientConfigurator {
       }
     }
 
-    final rmcpMissing =
-        kind == McpClientKind.codex && !McpClientConfig.hasCodexRmcpClient(text);
+    final rmcpMissing = platform == AgentPlatformId.codex &&
+        !McpClientConfig.hasCodexRmcpClient(text);
 
     if (missing.isEmpty && diffs.isEmpty && !rmcpMissing) {
       return McpClientAlignReport(
-        kind: kind,
+        platform: platform,
         status: McpClientAlignStatus.aligned,
         configPath: path,
       );
     }
 
     return McpClientAlignReport(
-      kind: kind,
+      platform: platform,
       status: McpClientAlignStatus.incomplete,
       configPath: path,
       missingServerIds: missing,
@@ -257,15 +263,15 @@ abstract final class McpClientConfigurator {
 
   /// 兼容封装：是否全部启用项已对齐。
   static Future<bool> areEnabledConfigured(
-    McpClientKind kind, {
+    AgentPlatformId platform, {
     required List<McpServerEntry> servers,
   }) async {
-    final report = await diagnoseEnabled(kind, servers: servers);
+    final report = await diagnoseEnabled(platform, servers: servers);
     return report.isAligned;
   }
 
   static Future<McpConfigureResult> configure(
-    McpClientKind kind, {
+    AgentPlatformId platform, {
     required List<McpServerEntry> servers,
   }) async {
     if (!McpPaths.isDesktopSupported) {
@@ -275,7 +281,16 @@ abstract final class McpClientConfigurator {
       );
     }
 
-    final path = _pathFor(kind);
+    final definition = AgentPlatforms.of(platform);
+    final mcpConfig = definition.mcpConfig;
+    if (mcpConfig == null) {
+      return McpConfigureResult(
+        ok: false,
+        message: '${definition.label} 暂不支持 MCP 配置写入',
+      );
+    }
+
+    final path = mcpConfig.configFilePath();
     if (path == null) {
       return const McpConfigureResult(
         ok: false,
@@ -288,25 +303,18 @@ abstract final class McpClientConfigurator {
       await file.parent.create(recursive: true);
       final existing = await file.exists() ? await file.readAsString() : null;
       final managedIds = servers.map((s) => s.id).toSet();
-      final next = switch (kind) {
-        McpClientKind.cursor => McpClientConfig.upsertCursorJson(
-            existing,
-            servers: servers,
-            managedIds: managedIds,
-          ),
-        McpClientKind.codex => McpClientConfig.upsertCodexToml(
-            existing,
-            servers: servers,
-            managedIds: managedIds,
-          ),
-      };
+      final next = _upsertConfig(
+        mcpConfig.format,
+        existing,
+        servers: servers,
+        managedIds: managedIds,
+      );
       await file.writeAsString(next);
-      final label = kind == McpClientKind.cursor ? 'Cursor' : 'Codex';
       final count = servers.where((s) => s.enabled).length;
       return McpConfigureResult(
         ok: true,
         path: path,
-        message: '已写入 $label（$count 个启用的 MCP），请重启 $label',
+        message: '已写入 ${definition.label}（$count 个启用的 MCP），请重启 ${definition.label}',
       );
     } catch (error) {
       return McpConfigureResult(
@@ -317,8 +325,45 @@ abstract final class McpClientConfigurator {
     }
   }
 
-  static String? _pathFor(McpClientKind kind) => switch (kind) {
-        McpClientKind.cursor => McpPaths.cursorMcpJsonPath,
-        McpClientKind.codex => McpPaths.codexConfigTomlPath,
+  static bool _usesJsonRootValidation(AgentMcpConfigFormat format) =>
+      format == AgentMcpConfigFormat.cursorJson ||
+      format == AgentMcpConfigFormat.openCodeJson;
+
+  static McpServerConfigDiagnosis _diagnoseServer(
+    AgentMcpConfigFormat format,
+    String text,
+    McpServerEntry server,
+  ) =>
+      switch (format) {
+        AgentMcpConfigFormat.cursorJson =>
+          McpClientConfig.diagnoseCursorServer(text, server: server),
+        AgentMcpConfigFormat.codexToml =>
+          McpClientConfig.diagnoseCodexServer(text, server: server),
+        AgentMcpConfigFormat.openCodeJson =>
+          McpClientConfig.diagnoseOpenCodeServer(text, server: server),
+      };
+
+  static String _upsertConfig(
+    AgentMcpConfigFormat format,
+    String? existing, {
+    required List<McpServerEntry> servers,
+    required Set<String> managedIds,
+  }) =>
+      switch (format) {
+        AgentMcpConfigFormat.cursorJson => McpClientConfig.upsertCursorJson(
+            existing,
+            servers: servers,
+            managedIds: managedIds,
+          ),
+        AgentMcpConfigFormat.codexToml => McpClientConfig.upsertCodexToml(
+            existing,
+            servers: servers,
+            managedIds: managedIds,
+          ),
+        AgentMcpConfigFormat.openCodeJson => McpClientConfig.upsertOpenCodeJson(
+            existing,
+            servers: servers,
+            managedIds: managedIds,
+          ),
       };
 }

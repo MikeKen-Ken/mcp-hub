@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mcp_hub/common/agent_platforms.dart';
 import 'package:mcp_hub/features/skill_sync/skill_folder_copy.dart';
 import 'package:mcp_hub/features/skill_sync/agent_resource_kind.dart';
 import 'package:mcp_hub/features/skill_sync/skill_target.dart';
@@ -9,11 +10,14 @@ import 'package:path/path.dart' as p;
 void main() {
   group('SkillTarget', () {
     test('tryParse', () {
-      expect(SkillTarget.tryParse('cursor'), SkillTarget.cursor);
-      expect(SkillTarget.tryParse('CODEX'), SkillTarget.codex);
-      expect(SkillTarget.tryParse('open_code'), SkillTarget.openCode);
-      expect(SkillTarget.tryParse('all'), isNull);
-      expect(SkillTarget.conversionTargets, contains(SkillTarget.openCode));
+      expect(AgentPlatformDefinition.tryParse('cursor'), SkillTarget.cursor);
+      expect(AgentPlatformDefinition.tryParse('CODEX'), SkillTarget.codex);
+      expect(AgentPlatformDefinition.tryParse('open_code'), SkillTarget.openCode);
+      expect(AgentPlatformDefinition.tryParse('all'), isNull);
+      expect(
+        AgentPlatforms.skillConversionTargets.map((p) => p.id),
+        contains(SkillTarget.openCode),
+      );
       expect(SkillTarget.openCode.hasConfirmedConversionFormat, isTrue);
       expect(SkillTarget.openCode.conversionBlockReason, isNull);
     });

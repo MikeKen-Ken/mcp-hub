@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../common/agent_platforms.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
@@ -747,18 +748,13 @@ class _McpResourceSyncCard extends StatelessWidget {
               title: const Text('说明与目录'),
               subtitle: const Text('下载/上传 MCP 清单；更新/覆盖将已启用 MCP 写入客户端。'),
               children: [
-                _DirectoryPathRow(
-                  label: 'Cursor',
-                  displayPath: McpPaths.cursorMcpJsonPath,
-                  directoryPath: McpPaths.cursorConfigDirectory,
-                  enabled: supported,
-                ),
-                _DirectoryPathRow(
-                  label: 'Codex',
-                  displayPath: McpPaths.codexConfigTomlPath,
-                  directoryPath: McpPaths.codexConfigDirectory,
-                  enabled: supported,
-                ),
+                for (final platform in AgentPlatforms.mcpConfigurable)
+                  _DirectoryPathRow(
+                    label: platform.label,
+                    displayPath: platform.mcpConfigFilePath,
+                    directoryPath: platform.mcpConfigDirectoryPath,
+                    enabled: supported,
+                  ),
               ],
             ),
           ],
@@ -1042,18 +1038,29 @@ class _ClientConfigCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final supported = hub.isDesktopSupported;
-    final cursor = hub.cursorAlignReport;
-    final codex = hub.codexAlignReport;
+    final platforms = AgentPlatforms.mcpConfigurable;
     final detailLines = <String>[];
-    if (cursor == null || codex == null) {
+    final reports = platforms
+        .map((p) => hub.clientAlignReport(p.id))
+        .toList();
+    if (reports.any((r) => r == null)) {
       detailLines.add('正在检测…');
     } else {
-      if (!cursor.isAligned) detailLines.add(cursor.prefixedReason);
-      if (!codex.isAligned) detailLines.add(codex.prefixedReason);
+      for (final platform in platforms) {
+        final report = hub.clientAlignReport(platform.id);
+        if (report != null && !report.isAligned) {
+          detailLines.add(report.prefixedReason);
+        }
+      }
       if (detailLines.isEmpty) {
-        detailLines.add('Cursor / Codex 已对齐');
+        detailLines.add(
+          '${platforms.map((p) => p.label).join(' / ')} 已对齐',
+        );
       }
     }
+
+    final configureAllLabel =
+        '配置 ${platforms.map((p) => p.label).join(' + ')}';
 
     return Card(
       child: Padding(
@@ -1080,28 +1087,22 @@ class _ClientConfigCard extends StatelessWidget {
                       ).showSnackBar(SnackBar(content: Text(result.message)));
                     },
               icon: const Icon(Icons.flash_on_outlined),
-              label: const Text('配置 Cursor + Codex'),
+              label: Text(configureAllLabel),
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: OutlinedButton(
+                for (final platform in platforms)
+                  OutlinedButton(
                     onPressed: !supported
                         ? null
-                        : () => hub.configureClient(McpClientKind.cursor),
-                    child: Text('Cursor · ${_buttonLabel(cursor)}'),
+                        : () => hub.configureClient(platform.id),
+                    child: Text(
+                      '${platform.label} · ${_buttonLabel(hub.clientAlignReport(platform.id))}',
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: !supported
-                        ? null
-                        : () => hub.configureClient(McpClientKind.codex),
-                    child: Text('Codex · ${_buttonLabel(codex)}'),
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1110,18 +1111,13 @@ class _ClientConfigCard extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            _DirectoryPathRow(
-              label: 'Cursor',
-              displayPath: McpPaths.cursorMcpJsonPath,
-              directoryPath: McpPaths.cursorConfigDirectory,
-              enabled: supported,
-            ),
-            _DirectoryPathRow(
-              label: 'Codex',
-              displayPath: McpPaths.codexConfigTomlPath,
-              directoryPath: McpPaths.codexConfigDirectory,
-              enabled: supported,
-            ),
+            for (final platform in platforms)
+              _DirectoryPathRow(
+                label: platform.label,
+                displayPath: platform.mcpConfigFilePath,
+                directoryPath: platform.mcpConfigDirectoryPath,
+                enabled: supported,
+              ),
           ],
         ),
       ),

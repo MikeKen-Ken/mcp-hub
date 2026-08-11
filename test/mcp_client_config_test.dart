@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mcp_hub/common/agent_platforms.dart';
 import 'package:mcp_hub/models/mcp_server_entry.dart';
 import 'package:mcp_hub/models/mcp_transport.dart';
 import 'package:mcp_hub/services/mcp_client_config.dart';
@@ -197,10 +198,70 @@ FOO = "bar"
     });
   });
 
+  group('upsertOpenCodeJson', () {
+    test('writes local and remote entries under mcp.servers', () {
+      const existing = '''
+{
+  "mcp": {
+    "servers": {
+      "legacy": {
+        "type": "local",
+        "command": ["echo", "keep"]
+      }
+    }
+  }
+}
+''';
+      final text = McpClientConfig.upsertOpenCodeJson(
+        existing,
+        servers: [httpServer, stdioServer],
+        managedIds: {'kanbanMCP', 'filesystem'},
+      );
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      final mcp = json['mcp'] as Map<String, dynamic>;
+      final servers = mcp['servers'] as Map;
+      expect(servers['legacy'], isNotNull);
+      expect((servers['kanbanMCP'] as Map)['url'], httpServer.url);
+      expect((servers['kanbanMCP'] as Map)['type'], 'remote');
+      final fs = servers['filesystem'] as Map;
+      expect(fs['type'], 'local');
+      expect(fs['command'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '.']);
+      expect(fs['cwd'], r'C:\work\project');
+      expect((fs['environment'] as Map)['FOO'], 'bar');
+    });
+
+    test('diagnoseOpenCodeServer detects missing and mismatched fields', () {
+      const text = '''
+{
+  "mcp": {
+    "servers": {
+      "kanbanMCP": {
+        "type": "remote",
+        "url": "http://wrong"
+      }
+    }
+  }
+}
+''';
+      final missing = McpClientConfig.diagnoseOpenCodeServer(
+        '{}',
+        server: httpServer,
+      );
+      expect(missing.missing, isTrue);
+
+      final d = McpClientConfig.diagnoseOpenCodeServer(
+        text,
+        server: httpServer,
+      );
+      expect(d.missing, isFalse);
+      expect(d.diffs.single.field, 'url');
+    });
+  });
+
   group('McpClientAlignReport', () {
     test('formats missing and field reasons', () {
       const report = McpClientAlignReport(
-        kind: McpClientKind.cursor,
+        platform: AgentPlatformId.cursor,
         status: McpClientAlignStatus.incomplete,
         missingServerIds: ['hubMCP', 'filesystem'],
         fieldDiffs: [
@@ -220,14 +281,14 @@ FOO = "bar"
 
     test('formats file missing and parse error', () {
       const missing = McpClientAlignReport(
-        kind: McpClientKind.codex,
+        platform: AgentPlatformId.codex,
         status: McpClientAlignStatus.fileMissing,
       );
       expect(missing.reasonText, '配置文件不存在');
       expect(missing.shortLabel, '配置文件不存在');
 
       const parse = McpClientAlignReport(
-        kind: McpClientKind.cursor,
+        platform: AgentPlatformId.cursor,
         status: McpClientAlignStatus.parseError,
         parseErrorMessage: 'Unexpected character',
       );
@@ -237,7 +298,7 @@ FOO = "bar"
 
     test('formats rmcp_client missing', () {
       const report = McpClientAlignReport(
-        kind: McpClientKind.codex,
+        platform: AgentPlatformId.codex,
         status: McpClientAlignStatus.incomplete,
         rmcpClientMissing: true,
       );

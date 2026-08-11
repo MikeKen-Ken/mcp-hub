@@ -1,3 +1,4 @@
+import '../../common/agent_platforms.dart';
 import '../../features/skill_sync/agent_resource_kind.dart';
 import '../../features/skill_sync/skill_target.dart';
 import '../../services/mcp_paths.dart';
@@ -20,20 +21,12 @@ abstract final class ConfigBackupPaths {
   static String? localDeployPath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) => switch ((resource, target)) {
-    (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
-    (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
-    (AgentResourceKind.command, SkillTarget.cursor) =>
-      McpPaths.cursorCommandsPath,
-    (AgentResourceKind.command, SkillTarget.codex) =>
-      McpPaths.codexCommandsPath,
-    (AgentResourceKind.rule, SkillTarget.cursor) => McpPaths.cursorRulesPath,
-    (AgentResourceKind.rule, SkillTarget.codex) => McpPaths.codexRulesPath,
-    (_, SkillTarget.openCode) => null,
-  };
+  ) =>
+      AgentPlatforms.localResourcePath(resource, target);
 
   static String? localCachePath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) => McpPaths.resourceCachePath(resource.wireName, target.wireName);
+  ) =>
+      AgentPlatforms.of(target).cacheResourcePath(resource);
 }

@@ -69,6 +69,10 @@ abstract final class McpPaths {
   static String get openCodeConfigDirectory =>
       p.join(_userProfile, '.config', 'opencode');
 
+  /// OpenCode MCP 配置（`~/.config/opencode/opencode.json`）。
+  static String get openCodeMcpConfigPath =>
+      p.join(openCodeConfigDirectory, 'opencode.json');
+
   static String get openCodeSkillsPath =>
       p.join(openCodeConfigDirectory, 'skills');
 

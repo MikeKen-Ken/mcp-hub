@@ -387,6 +387,203 @@ abstract final class McpClientConfig {
     ).hasMatch(existing);
   }
 
+  /// 合并 [servers] 到 OpenCode `opencode.json` 的 `mcp.servers`。
+  static String upsertOpenCodeJson(
+    String? existing, {
+    required List<McpServerEntry> servers,
+    Set<String> managedIds = const {},
+  }) {
+    Map<String, dynamic> root;
+    if (existing == null || existing.trim().isEmpty) {
+      root = {};
+    } else {
+      final decoded = jsonDecode(existing);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('OpenCode opencode.json 根节点必须是对象');
+      }
+      root = Map<String, dynamic>.from(decoded);
+    }
+
+    final mcp = root['mcp'];
+    final mcpMap = mcp is Map
+        ? Map<String, dynamic>.from(mcp.map((k, v) => MapEntry(k.toString(), v)))
+        : <String, dynamic>{};
+
+    final existingServers = mcpMap['servers'];
+    final map = existingServers is Map
+        ? Map<String, dynamic>.from(
+            existingServers.map((k, v) => MapEntry(k.toString(), v)),
+          )
+        : <String, dynamic>{};
+
+    for (final id in managedIds) {
+      map.remove(id);
+    }
+
+    for (final server in servers.where((s) => s.enabled)) {
+      map[server.id] = _openCodeEntry(server);
+    }
+
+    mcpMap['servers'] = map;
+    root['mcp'] = mcpMap;
+    return const JsonEncoder.withIndent('  ').convert(root);
+  }
+
+  static Map<String, dynamic> _openCodeEntry(McpServerEntry server) {
+    return switch (server.transport) {
+      McpTransport.http => {
+          'type': 'remote',
+          'url': server.url ?? '',
+        },
+      McpTransport.stdio => {
+          'type': 'local',
+          'command': [
+            if (server.command != null && server.command!.isNotEmpty)
+              server.command!,
+            ...server.args,
+          ],
+          if (server.env.isNotEmpty) 'environment': server.env,
+          if (server.cwd != null && server.cwd!.isNotEmpty) 'cwd': server.cwd,
+        },
+    };
+  }
+
+  /// 诊断 OpenCode 配置中单个服务器是否与 Hub 期望一致。
+  static McpServerConfigDiagnosis diagnoseOpenCodeServer(
+    String? existing, {
+    required McpServerEntry server,
+  }) {
+    if (existing == null || existing.trim().isEmpty) {
+      return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+    }
+    try {
+      final decoded = jsonDecode(existing);
+      if (decoded is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final mcp = decoded['mcp'];
+      if (mcp is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final servers = mcp['servers'];
+      if (servers is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final entry = servers[server.id];
+      if (entry is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final map = entry.map((k, v) => MapEntry(k.toString(), v));
+      return McpServerConfigDiagnosis(
+        serverId: server.id,
+        missing: false,
+        diffs: _openCodeFieldDiffs(server, map),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+    }
+  }
+
+  static List<McpClientFieldDiff> _openCodeFieldDiffs(
+    McpServerEntry server,
+    Map<String, dynamic> entry,
+  ) {
+    final diffs = <McpClientFieldDiff>[];
+    final type = entry['type']?.toString();
+    switch (server.transport) {
+      case McpTransport.http:
+        if (type != 'remote') {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'type',
+              expected: 'remote',
+              actual: type,
+            ),
+          );
+        }
+        final expectedUrl = server.url ?? '';
+        final actualUrl = entry['url']?.toString();
+        if (actualUrl != expectedUrl) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'url',
+              expected: expectedUrl,
+              actual: actualUrl,
+            ),
+          );
+        }
+      case McpTransport.stdio:
+        if (type != 'local') {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'type',
+              expected: 'local',
+              actual: type,
+            ),
+          );
+        }
+        final expectedCommand = <String>[
+          if (server.command != null && server.command!.isNotEmpty)
+            server.command!,
+          ...server.args,
+        ];
+        final actualCommand = _asStringList(entry['command']);
+        if (!_listEquals(actualCommand, expectedCommand)) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'command',
+              expected: _formatList(expectedCommand),
+              actual: actualCommand == null ? null : _formatList(actualCommand),
+            ),
+          );
+        }
+        final actualEnv = _asStringMap(entry['environment']);
+        if (!_mapEquals(actualEnv, server.env)) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'environment',
+              expected: _formatMap(server.env),
+              actual: actualEnv == null ? null : _formatMap(actualEnv),
+            ),
+          );
+        }
+        final expectedCwd =
+            (server.cwd != null && server.cwd!.isNotEmpty) ? server.cwd : null;
+        final actualCwdRaw = entry['cwd']?.toString();
+        final actualCwd =
+            (actualCwdRaw != null && actualCwdRaw.isNotEmpty) ? actualCwdRaw : null;
+        if (actualCwd != expectedCwd) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'cwd',
+              expected: expectedCwd,
+              actual: actualCwd,
+            ),
+          );
+        }
+    }
+    return diffs;
+  }
+
+  static bool isOpenCodeServerConfigured(
+    String? existing, {
+    required McpServerEntry server,
+  }) {
+    try {
+      return diagnoseOpenCodeServer(existing, server: server).isAligned;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static _CodexServerTable? _extractCodexServerTable(String source, String id) {
     // 必须整行精确匹配，避免命中 `[mcp_servers.id.env]`
     final exact = RegExp(
