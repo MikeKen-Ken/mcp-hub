@@ -13,7 +13,7 @@
 - 一键合并写入：
   - Cursor: `%USERPROFILE%\.cursor\mcp.json`
   - Codex: `%USERPROFILE%\.codex\config.toml`（并确保 `features.rmcp_client = true`）
-  - OpenCode: `%USERPROFILE%\.config\opencode\opencode.json`（`mcp.<name>`，`{env:NAME}`）
+  - OpenCode: `%USERPROFILE%\.config\opencode\opencode.json`（`mcp.<name>`；整值密钥用 `{env:NAME}`，路径内占位符写入时展开）
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
 - **WebDAV 下载/上传**：跨电脑下载/上传 MCP 清单（坚果云等）；账号密码仅存本机

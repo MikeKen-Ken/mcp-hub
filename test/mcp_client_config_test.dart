@@ -255,7 +255,7 @@ FOO = "bar"
       expect((mcp['kanbanMCP'] as Map)['type'], 'remote');
     });
 
-    test('converts Cursor env placeholders to OpenCode {env:NAME}', () {
+    test('converts whole-value env placeholders to OpenCode {env:NAME}', () {
       final server = McpServerEntry(
         id: 'tavily',
         name: 'Tavily',
@@ -274,6 +274,36 @@ FOO = "bar"
       final env =
           ((json['mcp'] as Map)['tavily'] as Map)['environment'] as Map;
       expect(env['TAVILY_API_KEY'], '{env:TAVILY_API_KEY}');
+    });
+
+    test('expands embedded env placeholders using provided environment', () {
+      final server = McpServerEntry(
+        id: 'aseprite',
+        name: 'Aseprite',
+        transport: McpTransport.stdio,
+        command: 'uv',
+        args: const ['run', '-m', 'aseprite_mcp'],
+        env: const {
+          'ASEPRITE_PATH':
+              r'${env:USERPROFILE}/Downloads/aseprite/aseprite.exe',
+        },
+        enabled: true,
+      );
+      final text = McpClientConfig.upsertOpenCodeJson(
+        null,
+        servers: [server],
+        managedIds: {'aseprite'},
+        environment: const {'USERPROFILE': r'C:\Users\Demo'},
+      );
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      final env =
+          ((json['mcp'] as Map)['aseprite'] as Map)['environment'] as Map;
+      expect(
+        env['ASEPRITE_PATH'],
+        r'C:\Users\Demo/Downloads/aseprite/aseprite.exe',
+      );
+      // 确保 JSON 文本里反斜杠已转义，避免 OpenCode 文本替换后破坏解析
+      expect(text, contains(r'C:\\Users\\Demo/Downloads/aseprite/aseprite.exe'));
     });
 
     test('diagnoseOpenCodeServer detects missing and mismatched fields', () {

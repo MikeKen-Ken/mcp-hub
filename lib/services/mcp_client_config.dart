@@ -391,11 +391,16 @@ abstract final class McpClientConfig {
   ///
   /// 现行 OpenCode（Desktop 1.x）要求服务器直接挂在 `mcp` 下；
   /// 若发现旧版误写的 `mcp.servers`，会提升为扁平结构后删除该嵌套键。
-  /// 环境变量占位符会从 Cursor 风格 `${env:NAME}` 转为 OpenCode `{env:NAME}`。
+  ///
+  /// 环境变量处理：
+  /// - 整值占位符 `${env:NAME}` → `{env:NAME}`（留给 OpenCode 运行时展开，适合密钥）
+  /// - 嵌在路径等字符串中的占位符会用 [environment] 立即展开，避免 Windows
+  ///   反斜杠在 OpenCode 文本替换后破坏 JSON（例如 `\Users`）
   static String upsertOpenCodeJson(
     String? existing, {
     required List<McpServerEntry> servers,
     Set<String> managedIds = const {},
+    Map<String, String> environment = const {},
   }) {
     Map<String, dynamic> root;
     if (existing == null || existing.trim().isEmpty) {
@@ -420,7 +425,7 @@ abstract final class McpClientConfig {
     }
 
     for (final server in servers.where((s) => s.enabled)) {
-      mcpMap[server.id] = _openCodeEntry(server);
+      mcpMap[server.id] = _openCodeEntry(server, environment: environment);
     }
 
     root['mcp'] = mcpMap;
@@ -446,37 +451,61 @@ abstract final class McpClientConfig {
     return type == 'local' || type == 'remote';
   }
 
-  static Map<String, dynamic> _openCodeEntry(McpServerEntry server) {
+  static Map<String, dynamic> _openCodeEntry(
+    McpServerEntry server, {
+    Map<String, String> environment = const {},
+  }) {
+    String map(String value) =>
+        _toOpenCodeString(value, environment: environment);
     return switch (server.transport) {
       McpTransport.http => {
           'type': 'remote',
-          'url': _toOpenCodeEnvRefs(server.url ?? ''),
+          'url': map(server.url ?? ''),
           'enabled': true,
         },
       McpTransport.stdio => {
           'type': 'local',
           'command': [
             if (server.command != null && server.command!.isNotEmpty)
-              _toOpenCodeEnvRefs(server.command!),
-            ...server.args.map(_toOpenCodeEnvRefs),
+              map(server.command!),
+            ...server.args.map(map),
           ],
           'enabled': true,
           if (server.env.isNotEmpty)
             'environment': {
-              for (final e in server.env.entries)
-                e.key: _toOpenCodeEnvRefs(e.value),
+              for (final e in server.env.entries) e.key: map(e.value),
             },
           if (server.cwd != null && server.cwd!.isNotEmpty)
-            'cwd': _toOpenCodeEnvRefs(server.cwd!),
+            'cwd': map(server.cwd!),
         },
     };
   }
 
-  /// Cursor `${env:NAME}` → OpenCode `{env:NAME}`；已是 OpenCode 写法则保持不变。
-  static String _toOpenCodeEnvRefs(String value) {
+  /// 将 Hub/Cursor 占位符转为 OpenCode 安全字符串。
+  ///
+  /// - 整值 `${env:NAME}` / `{env:NAME}` → 保留为 `{env:NAME}`
+  /// - 内嵌占位符：用 [environment] 展开；缺失则抛错，避免写出非法 JSON 路径
+  static String _toOpenCodeString(
+    String value, {
+    Map<String, String> environment = const {},
+  }) {
+    final whole = RegExp(r'^\$?\{env:([^}]+)\}$').firstMatch(value.trim());
+    if (whole != null) {
+      return '{env:${whole[1]}}';
+    }
+
     return value.replaceAllMapped(
-      RegExp(r'\$\{env:([^}]+)\}'),
-      (match) => '{env:${match[1]}}',
+      RegExp(r'\$?\{env:([^}]+)\}'),
+      (match) {
+        final name = match[1]!;
+        final resolved = environment[name];
+        if (resolved == null) {
+          throw StateError(
+            'OpenCode 配置中的内嵌环境变量 $name 未设置，无法安全展开为路径',
+          );
+        }
+        return resolved;
+      },
     );
   }
 
@@ -484,6 +513,7 @@ abstract final class McpClientConfig {
   static McpServerConfigDiagnosis diagnoseOpenCodeServer(
     String? existing, {
     required McpServerEntry server,
+    Map<String, String> environment = const {},
   }) {
     if (existing == null || existing.trim().isEmpty) {
       return McpServerConfigDiagnosis(serverId: server.id, missing: true);
@@ -505,7 +535,7 @@ abstract final class McpClientConfig {
       return McpServerConfigDiagnosis(
         serverId: server.id,
         missing: false,
-        diffs: _openCodeFieldDiffs(server, map),
+        diffs: _openCodeFieldDiffs(server, map, environment: environment),
       );
     } on FormatException {
       rethrow;
@@ -516,10 +546,13 @@ abstract final class McpClientConfig {
 
   static List<McpClientFieldDiff> _openCodeFieldDiffs(
     McpServerEntry server,
-    Map<String, dynamic> entry,
-  ) {
+    Map<String, dynamic> entry, {
+    Map<String, String> environment = const {},
+  }) {
     final diffs = <McpClientFieldDiff>[];
     final type = entry['type']?.toString();
+    String map(String value) =>
+        _toOpenCodeString(value, environment: environment);
     switch (server.transport) {
       case McpTransport.http:
         if (type != 'remote') {
@@ -532,7 +565,7 @@ abstract final class McpClientConfig {
             ),
           );
         }
-        final expectedUrl = _toOpenCodeEnvRefs(server.url ?? '');
+        final expectedUrl = map(server.url ?? '');
         final actualUrl = entry['url']?.toString();
         if (actualUrl != expectedUrl) {
           diffs.add(
@@ -557,8 +590,8 @@ abstract final class McpClientConfig {
         }
         final expectedCommand = <String>[
           if (server.command != null && server.command!.isNotEmpty)
-            _toOpenCodeEnvRefs(server.command!),
-          ...server.args.map(_toOpenCodeEnvRefs),
+            map(server.command!),
+          ...server.args.map(map),
         ];
         final actualCommand = _asStringList(entry['command']);
         if (!_listEquals(actualCommand, expectedCommand)) {
@@ -572,8 +605,7 @@ abstract final class McpClientConfig {
           );
         }
         final expectedEnv = {
-          for (final e in server.env.entries)
-            e.key: _toOpenCodeEnvRefs(e.value),
+          for (final e in server.env.entries) e.key: map(e.value),
         };
         final actualEnv = _asStringMap(entry['environment']);
         if (!_mapEquals(actualEnv, expectedEnv)) {
@@ -587,7 +619,7 @@ abstract final class McpClientConfig {
           );
         }
         final expectedCwd = (server.cwd != null && server.cwd!.isNotEmpty)
-            ? _toOpenCodeEnvRefs(server.cwd!)
+            ? map(server.cwd!)
             : null;
         final actualCwdRaw = entry['cwd']?.toString();
         final actualCwd =
@@ -609,9 +641,14 @@ abstract final class McpClientConfig {
   static bool isOpenCodeServerConfigured(
     String? existing, {
     required McpServerEntry server,
+    Map<String, String> environment = const {},
   }) {
     try {
-      return diagnoseOpenCodeServer(existing, server: server).isAligned;
+      return diagnoseOpenCodeServer(
+        existing,
+        server: server,
+        environment: environment,
+      ).isAligned;
     } catch (_) {
       return false;
     }

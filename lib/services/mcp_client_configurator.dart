@@ -340,7 +340,11 @@ abstract final class McpClientConfigurator {
         AgentMcpConfigFormat.codexToml =>
           McpClientConfig.diagnoseCodexServer(text, server: server),
         AgentMcpConfigFormat.openCodeJson =>
-          McpClientConfig.diagnoseOpenCodeServer(text, server: server),
+          McpClientConfig.diagnoseOpenCodeServer(
+            text,
+            server: server,
+            environment: Platform.environment,
+          ),
       };
 
   static String _upsertConfig(
@@ -364,6 +368,7 @@ abstract final class McpClientConfigurator {
             existing,
             servers: servers,
             managedIds: managedIds,
+            environment: Platform.environment,
           ),
       };
 }
