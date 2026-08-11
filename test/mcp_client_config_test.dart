@@ -5,6 +5,7 @@ import 'package:mcp_hub/common/agent_platforms.dart';
 import 'package:mcp_hub/models/mcp_server_entry.dart';
 import 'package:mcp_hub/models/mcp_transport.dart';
 import 'package:mcp_hub/services/mcp_client_config.dart';
+import 'package:mcp_hub/services/mcp_client_config_reader.dart';
 import 'package:mcp_hub/services/mcp_client_configurator.dart';
 
 void main() {
@@ -330,6 +331,75 @@ FOO = "bar"
       );
       expect(d.missing, isFalse);
       expect(d.diffs.single.field, 'url');
+    });
+  });
+
+  group('McpClientConfigReader', () {
+    test('parseCursorServers reads http and stdio', () {
+      const text = '''
+{
+  "mcpServers": {
+    "kanbanMCP": { "url": "http://127.0.0.1:18765/mcp", "type": "http" },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "fs"],
+      "env": { "FOO": "bar" },
+      "cwd": "C:\\\\work"
+    },
+    "hubMCP": { "url": "http://127.0.0.1:1/mcp" }
+  }
+}
+''';
+      final servers = McpClientConfigReader.parseCursorServers(text);
+      expect(servers.map((s) => s.id), ['kanbanMCP', 'filesystem']);
+      expect(servers.first.transport, McpTransport.http);
+      expect(servers.last.command, 'npx');
+      expect(servers.last.env['FOO'], 'bar');
+    });
+
+    test('parseCodexServers reads tables', () {
+      final text = '''
+[mcp_servers.kanbanMCP]
+url = "http://127.0.0.1:18765/mcp"
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "fs"]
+cwd = "C:\\\\work"
+
+[mcp_servers.filesystem.env]
+FOO = "bar"
+''';
+      final servers = McpClientConfigReader.parseCodexServers(text);
+      expect(servers.map((s) => s.id), containsAll(['kanbanMCP', 'filesystem']));
+    });
+
+    test('parseOpenCodeServers reads local and remote', () {
+      const text = '''
+{
+  "mcp": {
+    "kanbanMCP": {
+      "type": "remote",
+      "url": "http://127.0.0.1:18765/mcp",
+      "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "fs"],
+      "environment": { "FOO": "{env:FOO}" },
+      "enabled": false
+    }
+  }
+}
+''';
+      final servers = McpClientConfigReader.parseOpenCodeServers(text);
+      expect(servers.length, 2);
+      final remote = servers.firstWhere((s) => s.id == 'kanbanMCP');
+      expect(remote.enabled, isTrue);
+      final local = servers.firstWhere((s) => s.id == 'filesystem');
+      expect(local.command, 'npx');
+      expect(local.args, ['-y', 'fs']);
+      expect(local.env['FOO'], r'${env:FOO}');
     });
   });
 

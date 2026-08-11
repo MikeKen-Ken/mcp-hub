@@ -3,7 +3,9 @@ import 'dart:io';
 
 import '../common/agent_platforms.dart';
 import '../models/mcp_server_entry.dart';
+import '../services/hub_mcp_constants.dart';
 import 'mcp_client_config.dart';
+import 'mcp_client_config_reader.dart';
 import 'mcp_paths.dart';
 
 /// 兼容旧名；新代码请使用 [AgentPlatformId]。
@@ -47,6 +49,7 @@ class McpClientAlignReport {
     this.missingServerIds = const [],
     this.fieldDiffs = const [],
     this.rmcpClientMissing = false,
+    this.extraServerIds = const [],
   });
 
   final AgentPlatformId platform;
@@ -62,6 +65,9 @@ class McpClientAlignReport {
 
   /// 仅 Codex：缺少 `rmcp_client = true`
   final bool rmcpClientMissing;
+
+  /// 客户端配置中有、Hub 目录未登记的 MCP id。
+  final List<String> extraServerIds;
 
   bool get isAligned => status == McpClientAlignStatus.aligned;
 
@@ -82,8 +88,15 @@ class McpClientAlignReport {
   String _incompleteShortLabel() {
     if (missingServerIds.isNotEmpty &&
         fieldDiffs.isEmpty &&
-        !rmcpClientMissing) {
+        !rmcpClientMissing &&
+        extraServerIds.isEmpty) {
       return '缺少 ${missingServerIds.length} 个 MCP';
+    }
+    if (extraServerIds.isNotEmpty &&
+        missingServerIds.isEmpty &&
+        fieldDiffs.isEmpty &&
+        !rmcpClientMissing) {
+      return '未登记 ${extraServerIds.length} 个';
     }
     if (fieldDiffs.isNotEmpty &&
         missingServerIds.isEmpty &&
@@ -123,6 +136,9 @@ class McpClientAlignReport {
     if (missingServerIds.isNotEmpty) {
       parts.add('缺少 ${missingServerIds.join('、')}');
     }
+    if (extraServerIds.isNotEmpty) {
+      parts.add('未登记 ${extraServerIds.join('、')}');
+    }
     if (fieldDiffs.isNotEmpty) {
       final seen = <String>{};
       final unique = <String>[];
@@ -151,6 +167,41 @@ class McpConfigureResult {
   final bool ok;
   final String message;
   final String? path;
+}
+
+/// 从客户端配置导入 Hub 未登记 MCP 的结果。
+class McpClientImportResult {
+  const McpClientImportResult({
+    required this.ok,
+    required this.message,
+    this.imported = const [],
+    this.skippedIds = const [],
+    this.extraByPlatform = const {},
+  });
+
+  final bool ok;
+  final String message;
+
+  /// 已解析并拟加入 Hub 的条目（调用方写入目录）。
+  final List<McpServerEntry> imported;
+
+  /// Hub 中已存在而跳过的 id。
+  final List<String> skippedIds;
+
+  /// 各客户端配置里存在、Hub 未登记的 id（用于诊断展示）。
+  final Map<AgentPlatformId, List<String>> extraByPlatform;
+
+  int get importedCount => imported.length;
+
+  McpClientImportResult copyWith({String? message}) {
+    return McpClientImportResult(
+      ok: ok,
+      message: message ?? this.message,
+      imported: imported,
+      skippedIds: skippedIds,
+      extraByPlatform: extraByPlatform,
+    );
+  }
 }
 
 /// Write all Hub servers into registered client global configs.
@@ -189,6 +240,7 @@ abstract final class McpClientConfigurator {
         platform: platform,
         status: McpClientAlignStatus.noServers,
         configPath: path,
+        extraServerIds: await _extraServerIds(platform, hubIds: const {}),
       );
     }
 
@@ -249,11 +301,22 @@ abstract final class McpClientConfigurator {
     final rmcpMissing = platform == AgentPlatformId.codex &&
         !McpClientConfig.hasCodexRmcpClient(text);
 
+    final hubIds = servers.map((s) => s.id).toSet();
+    final extraServerIds = await _extraServerIds(platform, hubIds: hubIds);
+
     if (missing.isEmpty && diffs.isEmpty && !rmcpMissing) {
+      if (extraServerIds.isEmpty) {
+        return McpClientAlignReport(
+          platform: platform,
+          status: McpClientAlignStatus.aligned,
+          configPath: path,
+        );
+      }
       return McpClientAlignReport(
         platform: platform,
-        status: McpClientAlignStatus.aligned,
+        status: McpClientAlignStatus.incomplete,
         configPath: path,
+        extraServerIds: extraServerIds,
       );
     }
 
@@ -264,8 +327,127 @@ abstract final class McpClientConfigurator {
       missingServerIds: missing,
       fieldDiffs: diffs,
       rmcpClientMissing: rmcpMissing,
+      extraServerIds: extraServerIds,
     );
   }
+
+  /// 读取某客户端配置文件中的全部 MCP 条目。
+  static Future<List<McpServerEntry>> readServersFromClient(
+    AgentPlatformId platform,
+  ) async {
+    final text = await _readClientConfigText(platform);
+    if (text == null) return const [];
+    final definition = AgentPlatforms.of(platform);
+    final mcpConfig = definition.mcpConfig;
+    if (mcpConfig == null) return const [];
+    return _parseClientServers(mcpConfig.format, text);
+  }
+
+  /// 从已登记客户端导入 Hub 中不存在的 MCP（不覆盖已有 id）。
+  static Future<McpClientImportResult> importMissingServers({
+    required List<McpServerEntry> hubServers,
+    List<AgentPlatformId>? sources,
+  }) async {
+    if (!McpPaths.isDesktopSupported) {
+      return const McpClientImportResult(
+        ok: false,
+        message: '仅桌面端支持从客户端导入',
+      );
+    }
+
+    final hubIds = hubServers.map((s) => s.id).toSet();
+    final platformSources = sources ?? AgentPlatforms.mcpConfigurable.map((p) => p.id).toList();
+    final extraByPlatform = <AgentPlatformId, List<String>>{};
+    final toImport = <McpServerEntry>[];
+    final skipped = <String>[];
+    final seenImportIds = <String>{};
+
+    for (final platform in platformSources) {
+      final parsed = await readServersFromClient(platform);
+      final extras = <String>[];
+      for (final server in parsed) {
+        if (server.id == HubMcpConstants.serverKey || server.builtIn) continue;
+        if (hubIds.contains(server.id)) {
+          if (!skipped.contains(server.id)) skipped.add(server.id);
+          continue;
+        }
+        extras.add(server.id);
+        if (seenImportIds.add(server.id)) {
+          toImport.add(
+            server.copyWith(
+              notes: server.notes ?? '从 ${AgentPlatforms.labelOf(platform)} 导入',
+            ),
+          );
+        }
+      }
+      if (extras.isNotEmpty) {
+        extraByPlatform[platform] = extras;
+      }
+    }
+
+    if (toImport.isEmpty) {
+      return McpClientImportResult(
+        ok: true,
+        message: '没有需要从客户端导入的新 MCP',
+        skippedIds: skipped,
+        extraByPlatform: extraByPlatform,
+      );
+    }
+
+    final labels = extraByPlatform.entries
+        .where((e) => e.value.isNotEmpty)
+        .map((e) => '${AgentPlatforms.labelOf(e.key)} ${e.value.length} 个')
+        .join('、');
+    return McpClientImportResult(
+      ok: true,
+      message: '可从客户端导入 ${toImport.length} 个 MCP（$labels）',
+      imported: toImport,
+      skippedIds: skipped,
+      extraByPlatform: extraByPlatform,
+    );
+  }
+
+  static Future<String?> _readClientConfigText(AgentPlatformId platform) async {
+    final definition = AgentPlatforms.of(platform);
+    final mcpConfig = definition.mcpConfig;
+    if (mcpConfig == null) return null;
+    final path = mcpConfig.configFilePath();
+    if (path == null) return null;
+    final file = File(path);
+    if (!await file.exists()) return null;
+    try {
+      return await file.readAsString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<List<String>> _extraServerIds(
+    AgentPlatformId platform, {
+    required Set<String> hubIds,
+  }) async {
+    final parsed = await readServersFromClient(platform);
+    return [
+      for (final s in parsed)
+        if (!hubIds.contains(s.id) &&
+            s.id != HubMcpConstants.serverKey &&
+            !s.builtIn)
+          s.id,
+    ];
+  }
+
+  static List<McpServerEntry> _parseClientServers(
+    AgentMcpConfigFormat format,
+    String text,
+  ) =>
+      switch (format) {
+        AgentMcpConfigFormat.cursorJson =>
+          McpClientConfigReader.parseCursorServers(text),
+        AgentMcpConfigFormat.codexToml =>
+          McpClientConfigReader.parseCodexServers(text),
+        AgentMcpConfigFormat.openCodeJson =>
+          McpClientConfigReader.parseOpenCodeServers(text),
+      };
 
   /// 兼容旧 API；现在检查全部 MCP，而不是仅检查启用项。
   @Deprecated('使用 diagnoseAll')

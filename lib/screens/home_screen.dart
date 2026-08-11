@@ -1076,7 +1076,9 @@ class _ClientConfigCard extends StatelessWidget {
               leading: const Icon(Icons.psychology_outlined),
               title: const Text('一键配置客户端'),
               subtitle: Text(
-                supported ? '合并写入全部 MCP，不覆盖其他服务' : '当前平台不支持写入客户端配置',
+                supported
+                    ? '写入前自动导入各客户端未登记 MCP，合并写入全部条目'
+                    : '当前平台不支持写入客户端配置',
               ),
             ),
             FilledButton.icon(
@@ -1091,6 +1093,20 @@ class _ClientConfigCard extends StatelessWidget {
                     },
               icon: const Icon(Icons.flash_on_outlined),
               label: Text(configureAllLabel),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: !supported
+                  ? null
+                  : () async {
+                      final result = await hub.importMissingFromClients();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(result.message)));
+                    },
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('从客户端导入未登记 MCP'),
             ),
             const SizedBox(height: 8),
             Wrap(

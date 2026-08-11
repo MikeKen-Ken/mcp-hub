@@ -560,26 +560,90 @@ class HubController extends ChangeNotifier {
   }
 
   Future<McpConfigureResult> configureClient(AgentPlatformId platform) async {
+    final importMsg = await _importMissingFromClients();
     final result = await McpClientConfigurator.configure(
       platform,
       servers: _servers,
     );
-    _lastMessage = result.message;
+    _lastMessage = _joinMessages([importMsg, result.message]);
     await refreshClientStatus();
     notifyListeners();
-    return result;
+    return McpConfigureResult(
+      ok: result.ok,
+      message: _lastMessage!,
+      path: result.path,
+    );
   }
 
   Future<McpConfigureResult> configureAllClients() async {
+    final importMsg = await _importMissingFromClients();
     final results = <McpConfigureResult>[];
     for (final platform in AgentPlatforms.mcpConfigurable) {
-      results.add(await configureClient(platform.id));
+      results.add(
+        await McpClientConfigurator.configure(
+          platform.id,
+          servers: _servers,
+        ),
+      );
     }
-    final message = results.map((r) => r.message).join('；');
+    final configureMsg = results.map((r) => r.message).join('；');
+    final message = _joinMessages([importMsg, configureMsg]);
     final ok = results.every((r) => r.ok);
     _lastMessage = message;
     notifyListeners();
+    await refreshClientStatus();
     return McpConfigureResult(ok: ok, message: message);
+  }
+
+  /// 从 Cursor / Codex / Open Code 配置导入 Hub 未登记的 MCP。
+  Future<McpClientImportResult> importMissingFromClients() async {
+    final result = await McpClientConfigurator.importMissingServers(
+      hubServers: _servers,
+    );
+    if (!result.ok || result.imported.isEmpty) {
+      _lastMessage = result.message;
+      notifyListeners();
+      return result;
+    }
+    await _mergeImportedServers(result.imported);
+    _lastMessage = '已导入 ${result.importedCount} 个 MCP：${result.imported.map((s) => s.id).join('、')}';
+    notifyListeners();
+    return result.copyWith(message: _lastMessage!);
+  }
+
+  Future<String?> _importMissingFromClients() async {
+    final result = await McpClientConfigurator.importMissingServers(
+      hubServers: _servers,
+    );
+    if (!result.ok) return result.message;
+    if (result.imported.isEmpty) return null;
+    await _mergeImportedServers(result.imported);
+    return '已从客户端导入 ${result.importedCount} 个 MCP（${result.imported.map((s) => s.id).join('、')}）';
+  }
+
+  Future<void> _mergeImportedServers(List<McpServerEntry> imported) async {
+    final existing = {for (final s in _servers) s.id: s};
+    final root = McpPaths.serversRoot;
+    for (final server in imported) {
+      if (existing.containsKey(server.id)) continue;
+      final localPath = root == null ? null : p.join(root, server.id);
+      _servers = [
+        ..._servers,
+        server.copyWith(localPath: localPath),
+      ];
+      existing[server.id] = server;
+    }
+    await _persist();
+    await _refreshGitManagedFlags();
+  }
+
+  static String? _joinMessages(List<String?> parts) {
+    final filtered = [
+      for (final p in parts)
+        if (p != null && p.trim().isNotEmpty) p.trim(),
+    ];
+    if (filtered.isEmpty) return null;
+    return filtered.join('；');
   }
 
   Future<bool> testWebDav(WebDavConfig config) =>

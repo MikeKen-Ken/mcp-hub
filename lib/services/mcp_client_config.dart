@@ -656,6 +656,16 @@ abstract final class McpClientConfig {
     }
   }
 
+  /// 读取 Codex 配置中单个 MCP 表（供反向导入）。
+  static CodexServerTable? readCodexServerTable(String source, String id) =>
+      _extractCodexServerTable(source, id);
+
+  static void prepareOpenCodeMcpMap(Map<String, dynamic> mcpMap) =>
+      _promoteLegacyOpenCodeServers(mcpMap);
+
+  static bool isOpenCodeServerEntry(Object? value) =>
+      _isOpenCodeServerEntry(value);
+
   static _CodexServerTable? _extractCodexServerTable(String source, String id) {
     // 必须整行精确匹配，避免命中 `[mcp_servers.id.env]`
     final exact = RegExp(
@@ -810,8 +820,8 @@ abstract final class McpClientConfig {
   }
 }
 
-class _CodexServerTable {
-  const _CodexServerTable({
+class CodexServerTable {
+  const CodexServerTable({
     this.command,
     this.url,
     this.cwd,
@@ -825,3 +835,5 @@ class _CodexServerTable {
   final List<String>? args;
   final Map<String, String>? env;
 }
+
+typedef _CodexServerTable = CodexServerTable;

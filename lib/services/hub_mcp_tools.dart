@@ -203,7 +203,9 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'configure_clients',
-    description: '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code）',
+    description:
+        '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code）。'
+        '写入前会自动从各客户端配置导入 Hub 未登记的 MCP。',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
@@ -235,6 +237,31 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         }
         final r = await hub.configureClient(platform);
         return mcpJsonResult({'ok': r.ok, 'message': r.message, 'path': r.path});
+      } catch (error) {
+        return mcpErrorResult('$error');
+      }
+    },
+  );
+
+  server.registerTool(
+    'import_from_clients',
+    description:
+        '从 Cursor / Codex / Open Code 配置文件导入 Hub 未登记的 MCP（不覆盖已有条目）',
+    inputSchema: JsonSchema.object(properties: const {}),
+    annotations: const ToolAnnotations(
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    ),
+    callback: (args, extra) async {
+      try {
+        final r = await hub.importMissingFromClients();
+        return mcpJsonResult({
+          'ok': r.ok,
+          'message': r.message,
+          'imported': r.imported.map((s) => s.id).toList(),
+          'skippedIds': r.skippedIds,
+        });
       } catch (error) {
         return mcpErrorResult('$error');
       }
