@@ -199,7 +199,38 @@ FOO = "bar"
   });
 
   group('upsertOpenCodeJson', () {
-    test('writes local and remote entries under mcp.servers', () {
+    test('writes local and remote entries under flat mcp', () {
+      const existing = '''
+{
+  "mcp": {
+    "legacy": {
+      "type": "local",
+      "command": ["echo", "keep"]
+    }
+  }
+}
+''';
+      final text = McpClientConfig.upsertOpenCodeJson(
+        existing,
+        servers: [httpServer, stdioServer],
+        managedIds: {'kanbanMCP', 'filesystem'},
+      );
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      final mcp = json['mcp'] as Map<String, dynamic>;
+      expect(mcp.containsKey('servers'), isFalse);
+      expect(mcp['legacy'], isNotNull);
+      expect((mcp['kanbanMCP'] as Map)['url'], httpServer.url);
+      expect((mcp['kanbanMCP'] as Map)['type'], 'remote');
+      expect((mcp['kanbanMCP'] as Map)['enabled'], isTrue);
+      final fs = mcp['filesystem'] as Map;
+      expect(fs['type'], 'local');
+      expect(fs['command'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '.']);
+      expect(fs['cwd'], r'C:\work\project');
+      expect(fs['enabled'], isTrue);
+      expect((fs['environment'] as Map)['FOO'], 'bar');
+    });
+
+    test('migrates legacy mcp.servers into flat mcp', () {
       const existing = '''
 {
   "mcp": {
@@ -214,31 +245,44 @@ FOO = "bar"
 ''';
       final text = McpClientConfig.upsertOpenCodeJson(
         existing,
-        servers: [httpServer, stdioServer],
-        managedIds: {'kanbanMCP', 'filesystem'},
+        servers: [httpServer],
+        managedIds: {'kanbanMCP'},
       );
       final json = jsonDecode(text) as Map<String, dynamic>;
       final mcp = json['mcp'] as Map<String, dynamic>;
-      final servers = mcp['servers'] as Map;
-      expect(servers['legacy'], isNotNull);
-      expect((servers['kanbanMCP'] as Map)['url'], httpServer.url);
-      expect((servers['kanbanMCP'] as Map)['type'], 'remote');
-      final fs = servers['filesystem'] as Map;
-      expect(fs['type'], 'local');
-      expect(fs['command'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '.']);
-      expect(fs['cwd'], r'C:\work\project');
-      expect((fs['environment'] as Map)['FOO'], 'bar');
+      expect(mcp.containsKey('servers'), isFalse);
+      expect(mcp['legacy'], isNotNull);
+      expect((mcp['kanbanMCP'] as Map)['type'], 'remote');
+    });
+
+    test('converts Cursor env placeholders to OpenCode {env:NAME}', () {
+      final server = McpServerEntry(
+        id: 'tavily',
+        name: 'Tavily',
+        transport: McpTransport.stdio,
+        command: 'npx',
+        args: const ['-y', 'mcp-remote'],
+        env: const {'TAVILY_API_KEY': r'${env:TAVILY_API_KEY}'},
+        enabled: true,
+      );
+      final text = McpClientConfig.upsertOpenCodeJson(
+        null,
+        servers: [server],
+        managedIds: {'tavily'},
+      );
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      final env =
+          ((json['mcp'] as Map)['tavily'] as Map)['environment'] as Map;
+      expect(env['TAVILY_API_KEY'], '{env:TAVILY_API_KEY}');
     });
 
     test('diagnoseOpenCodeServer detects missing and mismatched fields', () {
       const text = '''
 {
   "mcp": {
-    "servers": {
-      "kanbanMCP": {
-        "type": "remote",
-        "url": "http://wrong"
-      }
+    "kanbanMCP": {
+      "type": "remote",
+      "url": "http://wrong"
     }
   }
 }

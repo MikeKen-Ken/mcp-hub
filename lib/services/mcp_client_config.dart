@@ -387,7 +387,11 @@ abstract final class McpClientConfig {
     ).hasMatch(existing);
   }
 
-  /// 合并 [servers] 到 OpenCode `opencode.json` 的 `mcp.servers`。
+  /// 合并 [servers] 到 OpenCode `opencode.json` 的 `mcp.<name>`。
+  ///
+  /// 现行 OpenCode（Desktop 1.x）要求服务器直接挂在 `mcp` 下；
+  /// 若发现旧版误写的 `mcp.servers`，会提升为扁平结构后删除该嵌套键。
+  /// 环境变量占位符会从 Cursor 风格 `${env:NAME}` 转为 OpenCode `{env:NAME}`。
   static String upsertOpenCodeJson(
     String? existing, {
     required List<McpServerEntry> servers,
@@ -409,43 +413,71 @@ abstract final class McpClientConfig {
         ? Map<String, dynamic>.from(mcp.map((k, v) => MapEntry(k.toString(), v)))
         : <String, dynamic>{};
 
-    final existingServers = mcpMap['servers'];
-    final map = existingServers is Map
-        ? Map<String, dynamic>.from(
-            existingServers.map((k, v) => MapEntry(k.toString(), v)),
-          )
-        : <String, dynamic>{};
+    _promoteLegacyOpenCodeServers(mcpMap);
 
     for (final id in managedIds) {
-      map.remove(id);
+      mcpMap.remove(id);
     }
 
     for (final server in servers.where((s) => s.enabled)) {
-      map[server.id] = _openCodeEntry(server);
+      mcpMap[server.id] = _openCodeEntry(server);
     }
 
-    mcpMap['servers'] = map;
     root['mcp'] = mcpMap;
     return const JsonEncoder.withIndent('  ').convert(root);
+  }
+
+  /// 把误写在 `mcp.servers` 下的条目提升到 `mcp`，再删除 `servers` 键。
+  static void _promoteLegacyOpenCodeServers(Map<String, dynamic> mcpMap) {
+    final legacy = mcpMap.remove('servers');
+    if (legacy is! Map) return;
+    for (final entry in legacy.entries) {
+      final key = entry.key.toString();
+      if (key.isEmpty || mcpMap.containsKey(key)) continue;
+      if (_isOpenCodeServerEntry(entry.value)) {
+        mcpMap[key] = entry.value;
+      }
+    }
+  }
+
+  static bool _isOpenCodeServerEntry(Object? value) {
+    if (value is! Map) return false;
+    final type = value['type']?.toString();
+    return type == 'local' || type == 'remote';
   }
 
   static Map<String, dynamic> _openCodeEntry(McpServerEntry server) {
     return switch (server.transport) {
       McpTransport.http => {
           'type': 'remote',
-          'url': server.url ?? '',
+          'url': _toOpenCodeEnvRefs(server.url ?? ''),
+          'enabled': true,
         },
       McpTransport.stdio => {
           'type': 'local',
           'command': [
             if (server.command != null && server.command!.isNotEmpty)
-              server.command!,
-            ...server.args,
+              _toOpenCodeEnvRefs(server.command!),
+            ...server.args.map(_toOpenCodeEnvRefs),
           ],
-          if (server.env.isNotEmpty) 'environment': server.env,
-          if (server.cwd != null && server.cwd!.isNotEmpty) 'cwd': server.cwd,
+          'enabled': true,
+          if (server.env.isNotEmpty)
+            'environment': {
+              for (final e in server.env.entries)
+                e.key: _toOpenCodeEnvRefs(e.value),
+            },
+          if (server.cwd != null && server.cwd!.isNotEmpty)
+            'cwd': _toOpenCodeEnvRefs(server.cwd!),
         },
     };
+  }
+
+  /// Cursor `${env:NAME}` → OpenCode `{env:NAME}`；已是 OpenCode 写法则保持不变。
+  static String _toOpenCodeEnvRefs(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'\$\{env:([^}]+)\}'),
+      (match) => '{env:${match[1]}}',
+    );
   }
 
   /// 诊断 OpenCode 配置中单个服务器是否与 Hub 期望一致。
@@ -465,11 +497,7 @@ abstract final class McpClientConfig {
       if (mcp is! Map) {
         return McpServerConfigDiagnosis(serverId: server.id, missing: true);
       }
-      final servers = mcp['servers'];
-      if (servers is! Map) {
-        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
-      }
-      final entry = servers[server.id];
+      final entry = mcp[server.id];
       if (entry is! Map) {
         return McpServerConfigDiagnosis(serverId: server.id, missing: true);
       }
@@ -504,7 +532,7 @@ abstract final class McpClientConfig {
             ),
           );
         }
-        final expectedUrl = server.url ?? '';
+        final expectedUrl = _toOpenCodeEnvRefs(server.url ?? '');
         final actualUrl = entry['url']?.toString();
         if (actualUrl != expectedUrl) {
           diffs.add(
@@ -529,8 +557,8 @@ abstract final class McpClientConfig {
         }
         final expectedCommand = <String>[
           if (server.command != null && server.command!.isNotEmpty)
-            server.command!,
-          ...server.args,
+            _toOpenCodeEnvRefs(server.command!),
+          ...server.args.map(_toOpenCodeEnvRefs),
         ];
         final actualCommand = _asStringList(entry['command']);
         if (!_listEquals(actualCommand, expectedCommand)) {
@@ -543,19 +571,24 @@ abstract final class McpClientConfig {
             ),
           );
         }
+        final expectedEnv = {
+          for (final e in server.env.entries)
+            e.key: _toOpenCodeEnvRefs(e.value),
+        };
         final actualEnv = _asStringMap(entry['environment']);
-        if (!_mapEquals(actualEnv, server.env)) {
+        if (!_mapEquals(actualEnv, expectedEnv)) {
           diffs.add(
             McpClientFieldDiff(
               serverId: server.id,
               field: 'environment',
-              expected: _formatMap(server.env),
+              expected: _formatMap(expectedEnv),
               actual: actualEnv == null ? null : _formatMap(actualEnv),
             ),
           );
         }
-        final expectedCwd =
-            (server.cwd != null && server.cwd!.isNotEmpty) ? server.cwd : null;
+        final expectedCwd = (server.cwd != null && server.cwd!.isNotEmpty)
+            ? _toOpenCodeEnvRefs(server.cwd!)
+            : null;
         final actualCwdRaw = entry['cwd']?.toString();
         final actualCwd =
             (actualCwdRaw != null && actualCwdRaw.isNotEmpty) ? actualCwdRaw : null;
