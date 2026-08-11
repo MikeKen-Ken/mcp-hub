@@ -41,8 +41,10 @@ class McpServerConfigDiagnosis {
 /// Ported from the kanban project and generalized for multiple servers
 /// (stdio + http), without overwriting unrelated MCP entries.
 abstract final class McpClientConfig {
-  /// Merge [servers] into Cursor JSON. Only [McpServerEntry.enabled] entries
-  /// are written; disabled Hub-managed keys listed in [managedIds] are removed.
+  /// Merge all [servers] into Cursor JSON.
+  ///
+  /// [McpServerEntry.enabled] controls whether Hub starts the server, not
+  /// whether the server is converted into the client configuration.
   static String upsertCursorJson(
     String? existing, {
     required List<McpServerEntry> servers,
@@ -72,7 +74,7 @@ abstract final class McpClientConfig {
       map.remove(id);
     }
 
-    for (final server in servers.where((s) => s.enabled)) {
+    for (final server in servers) {
       map[server.id] = _cursorEntry(server);
     }
 
@@ -95,7 +97,7 @@ abstract final class McpClientConfig {
     };
   }
 
-  /// Merge enabled servers into Codex TOML; remove disabled managed tables.
+  /// Merge all servers into Codex TOML; remove stale managed tables.
   static String upsertCodexToml(
     String? existing, {
     required List<McpServerEntry> servers,
@@ -108,7 +110,7 @@ abstract final class McpClientConfig {
     text = _ensureCodexRmcpClient(text);
 
     final blocks = <String>[];
-    for (final server in servers.where((s) => s.enabled)) {
+    for (final server in servers) {
       blocks.add(_codexBlock(server));
     }
     if (blocks.isEmpty) {
@@ -424,7 +426,7 @@ abstract final class McpClientConfig {
       mcpMap.remove(id);
     }
 
-    for (final server in servers.where((s) => s.enabled)) {
+    for (final server in servers) {
       mcpMap[server.id] = _openCodeEntry(server, environment: environment);
     }
 
@@ -461,7 +463,7 @@ abstract final class McpClientConfig {
       McpTransport.http => {
           'type': 'remote',
           'url': map(server.url ?? ''),
-          'enabled': true,
+          'enabled': server.enabled,
         },
       McpTransport.stdio => {
           'type': 'local',
@@ -470,7 +472,7 @@ abstract final class McpClientConfig {
               map(server.command!),
             ...server.args.map(map),
           ],
-          'enabled': true,
+          'enabled': server.enabled,
           if (server.env.isNotEmpty)
             'environment': {
               for (final e in server.env.entries) e.key: map(e.value),

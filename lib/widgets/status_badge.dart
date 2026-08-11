@@ -6,17 +6,27 @@ class StatusBadge extends StatelessWidget {
     super.key,
     required this.label,
     this.tonal = false,
+    this.active = false,
   });
 
   final String label;
   final bool tonal;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final bg = tonal ? scheme.secondaryContainer : scheme.surfaceContainerHighest;
-    final fg = tonal ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
+    final bg = active
+        ? scheme.primaryContainer
+        : tonal
+        ? scheme.secondaryContainer
+        : scheme.surfaceContainerHighest;
+    final fg = active
+        ? scheme.onPrimaryContainer
+        : tonal
+        ? scheme.onSecondaryContainer
+        : scheme.onSurfaceVariant;
 
     return Container(
       alignment: Alignment.center,

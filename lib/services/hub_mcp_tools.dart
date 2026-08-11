@@ -4,9 +4,11 @@ import '../common/agent_platforms.dart';
 import '../controllers/hub_controller.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
+import '../models/mcp_server_runtime_info.dart';
 import 'hub_mcp_constants.dart';
 import 'hub_mcp_results.dart';
 import 'mcp_client_configurator.dart';
+import 'mcp_server_runtime_resolver.dart';
 
 /// Register tools so Cursor/Codex can operate Agent Hub itself.
 void registerHubMcpTools(McpServer server, HubController hub) {
@@ -36,6 +38,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
               'cwd': s.cwd,
               'url': s.url,
               'autoStart': s.autoStart,
+              'runtime': hub.runtimeInfoFor(s).toJson(),
             },
         ],
       });
@@ -130,7 +133,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'update_server',
-    description: '对指定 MCP 本地仓库执行 git pull --ff-only',
+    description: '对指定 MCP 本地仓库执行 git pull，并按项目类型自动 npm 构建 / uv sync',
     inputSchema: JsonSchema.object(
       properties: {
         'id': JsonSchema.string(),
@@ -156,7 +159,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'update_all_servers',
-    description: '对所有有本地路径的 MCP 执行 git pull',
+    description: '对所有可 Git 更新的 MCP 执行 pull，并自动构建 / 同步依赖',
     inputSchema: JsonSchema.object(properties: const {}),
     annotations: const ToolAnnotations(
       readOnlyHint: false,
@@ -200,7 +203,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'configure_clients',
-    description: '一键把已启用的 MCP 写入已登记的客户端（Cursor / Codex / Open Code）',
+    description: '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code）',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(

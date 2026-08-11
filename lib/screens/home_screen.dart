@@ -8,7 +8,7 @@ import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
 import '../features/skill_sync/skill_sync.dart';
-import '../models/mcp_transport.dart';
+import '../models/mcp_runtime_phase.dart';
 import '../services/directory_opener.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
@@ -220,7 +220,7 @@ class ClientMcpScreen extends StatelessWidget {
           Text('连接状态', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
-            '将已启用的 MCP 合并写入客户端配置，并查看本地 MCP 列表。',
+            '将全部 MCP 合并写入客户端配置，并查看本地 MCP 列表。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -262,13 +262,15 @@ class LocalMcpScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: '全部更新',
-            onPressed: () async {
-              await hub.updateAllServers();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
-              );
-            },
+            onPressed: hub.hasUpdatableServers
+                ? () async {
+                    await hub.updateAllServers();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
+                    );
+                  }
+                : null,
             icon: const Icon(Icons.system_update_alt),
           ),
         ],
@@ -746,7 +748,7 @@ class _McpResourceSyncCard extends StatelessWidget {
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
               title: const Text('说明与目录'),
-              subtitle: const Text('下载/上传 MCP 清单；更新/覆盖将已启用 MCP 写入客户端。'),
+              subtitle: const Text('下载/上传 MCP 清单；更新/覆盖将全部 MCP 写入客户端。'),
               children: [
                 for (final platform in AgentPlatforms.mcpConfigurable)
                   _DirectoryPathRow(
@@ -770,7 +772,7 @@ Future<bool> _confirmMcpConfigUpdate(BuildContext context) async {
         builder: (dialogContext) => AlertDialog(
           title: const Text('确认更新/覆盖？'),
           content: const Text(
-            '即将把当前已启用的 MCP 写入 Cursor 和 Codex 配置。\n\n'
+            '即将把当前全部 MCP 写入 Cursor 和 Codex 配置。\n\n'
             '会更新同名 MCP，但会保留客户端配置中不由 Agent Hub 管理的服务。',
           ),
           actions: [
@@ -1073,7 +1075,7 @@ class _ClientConfigCard extends StatelessWidget {
               leading: const Icon(Icons.psychology_outlined),
               title: const Text('一键配置客户端'),
               subtitle: Text(
-                supported ? '合并写入已启用的 MCP，不覆盖其他服务' : '当前平台不支持写入客户端配置',
+                supported ? '合并写入全部 MCP，不覆盖其他服务' : '当前平台不支持写入客户端配置',
               ),
             ),
             FilledButton.icon(
@@ -1181,6 +1183,7 @@ class _ServerTile extends StatelessWidget {
     final hub = context.watch<HubController>();
     final server = hub.servers.firstWhere((s) => s.id == serverId);
     final isHub = server.builtIn || server.id == HubMcpConstants.serverKey;
+    final runtime = hub.runtimeInfoFor(server);
     final transportLabel = server.transport == McpTransport.http
         ? 'HTTP'
         : 'stdio';
@@ -1202,10 +1205,13 @@ class _ServerTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isHub) ...[
-                    const SizedBox(width: 8),
-                    const StatusBadge(label: '内置', tonal: true),
-                  ],
+                  const SizedBox(width: 8),
+                  StatusBadge(label: runtime.kindLabel, tonal: true),
+                  const SizedBox(width: 6),
+                  StatusBadge(
+                    label: runtime.phaseBadgeLabel,
+                    active: runtime.phase.isActive,
+                  ),
                   if (server.shouldAutoStartByHub) ...[
                     const SizedBox(width: 6),
                     const StatusBadge(label: '自动'),
@@ -1220,6 +1226,13 @@ class _ServerTile extends StatelessWidget {
               value: server.enabled,
               onChanged: (v) => hub.setEnabled(server.id, v),
             ),
+            if (runtime.lastError != null &&
+                runtime.phase == McpRuntimePhase.error)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.error_outline, size: 20),
+                title: Text(runtime.lastError!),
+              ),
             if (server.notes != null)
               ListTile(
                 dense: true,
@@ -1251,7 +1264,6 @@ class _ServerTile extends StatelessWidget {
                 subtitle: isHub && hub.hubMcpHost.lastError != null
                     ? Text(hub.hubMcpHost.lastError!)
                     : null,
-                trailing: null,
               )
             else
               ListTile(
@@ -1268,19 +1280,19 @@ class _ServerTile extends StatelessWidget {
               child: Wrap(
                 spacing: 4,
                 children: [
-                  if (!isHub && server.canHubStartProcess) ...[
+                  if (runtime.canStart)
                     TextButton.icon(
                       onPressed: () => hub.startServer(server.id),
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('启动'),
                     ),
+                  if (runtime.canStop)
                     TextButton.icon(
                       onPressed: () => hub.stopServer(server.id),
                       icon: const Icon(Icons.stop),
                       label: const Text('停止'),
                     ),
-                  ],
-                  if (!isHub && server.localPath != null)
+                  if (runtime.canUpdate)
                     TextButton.icon(
                       onPressed: () async {
                         try {

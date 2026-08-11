@@ -60,7 +60,7 @@ void main() {
       );
     });
 
-    test('removes disabled managed servers', () {
+    test('writes disabled managed servers as well', () {
       final disabled = httpServer.copyWith(enabled: false);
       const existing = '''
 {
@@ -76,7 +76,8 @@ void main() {
         managedIds: {'kanbanMCP'},
       );
       final servers = (jsonDecode(text) as Map)['mcpServers'] as Map;
-      expect(servers.containsKey('kanbanMCP'), isFalse);
+      expect(servers.containsKey('kanbanMCP'), isTrue);
+      expect((servers['kanbanMCP'] as Map)['url'], disabled.url);
       expect(servers['other'], isNotNull);
     });
   });

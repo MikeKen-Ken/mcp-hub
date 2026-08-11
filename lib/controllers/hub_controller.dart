@@ -16,7 +16,10 @@ import '../services/mcp_catalog_store.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
 import '../services/mcp_process_manager.dart';
+import '../services/mcp_repo_post_pull.dart';
 import '../services/mcp_repo_service.dart';
+import '../models/mcp_server_runtime_info.dart';
+import '../services/mcp_server_runtime_resolver.dart';
 import '../services/repo_name.dart';
 import '../webdav/catalog_sync_document.dart';
 import '../webdav/catalog_sync_mapper.dart';
@@ -33,9 +36,13 @@ class HubController extends ChangeNotifier {
     bool initiallyLoading = true,
   }) : _catalogStore = catalogStore ?? McpCatalogStore(),
        _repoService = repoService ?? McpRepoService(),
-       _processManager = processManager ?? McpProcessManager(),
+       _processManager = processManager ??
+           McpProcessManager(onStateChanged: () {}),
        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
        _loading = initiallyLoading {
+    if (processManager == null) {
+      _processManager.onStateChanged = _onProcessStateChanged;
+    }
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
     webDavSync = WebDavSyncService(
@@ -71,6 +78,7 @@ class HubController extends ChangeNotifier {
   bool _loading;
   String? _lastMessage;
   final Map<AgentPlatformId, McpClientAlignReport?> _clientAlignReports = {};
+  final Map<String, bool> _gitManaged = {};
 
   List<McpServerEntry> get servers => List.unmodifiable(_servers);
   bool get loading => _loading;
@@ -106,6 +114,22 @@ class HubController extends ChangeNotifier {
 
   McpProcessState processState(String id) => _processManager.stateFor(id);
 
+  bool isGitManaged(String id) => _gitManaged[id] ?? false;
+
+  McpServerRuntimeInfo runtimeInfoFor(McpServerEntry server) {
+    return McpServerRuntimeResolver.resolve(
+      server: server,
+      hubHost: hubMcpHost,
+      processState: processState(server.id),
+      gitManaged: isGitManaged(server.id),
+    );
+  }
+
+  bool get hasUpdatableServers =>
+      _servers.any((s) => isGitManaged(s.id));
+
+  void _onProcessStateChanged() => notifyListeners();
+
   void _onHostChanged() {
     _syncBuiltInUrl();
     notifyListeners();
@@ -125,6 +149,7 @@ class HubController extends ChangeNotifier {
     await _ensureBuiltInHubMcp();
     await _repairInvalidWorkingDirectories();
     await _migrateAutoStartForEnabledServers();
+    await _refreshGitManagedFlags();
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
@@ -154,6 +179,16 @@ class HubController extends ChangeNotifier {
     if (!changed) return;
     _servers = next;
     await _persist(scheduleRemote: false);
+  }
+
+  Future<void> _refreshGitManagedFlags() async {
+    final next = <String, bool>{};
+    for (final server in _servers) {
+      next[server.id] = await _repoService.isHubGitCheckout(server.localPath);
+    }
+    _gitManaged
+      ..clear()
+      ..addAll(next);
   }
 
   /// 客户端会直接使用目录中的 cwd；失效目录会令 Windows 无法创建 stdio
@@ -189,6 +224,7 @@ class HubController extends ChangeNotifier {
     await _ensureBuiltInHubMcp(persist: false);
     await _repairInvalidWorkingDirectories();
     await _catalogStore.save(_servers);
+    await _refreshGitManagedFlags();
     _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
     notifyListeners();
     await refreshClientStatus();
@@ -253,7 +289,7 @@ class HubController extends ChangeNotifier {
     notifyListeners();
     for (final platform in AgentPlatforms.mcpConfigurable) {
       _clientAlignReports[platform.id] =
-          await McpClientConfigurator.diagnoseEnabled(
+          await McpClientConfigurator.diagnoseAll(
         platform.id,
         servers: _servers,
       );
@@ -332,6 +368,21 @@ class HubController extends ChangeNotifier {
         throw StateError(result.message);
       }
       localPath = result.localPath ?? localPath;
+      if (localPath != null && localPath.isNotEmpty) {
+        final postPull = await McpRepoPostPull.apply(localPath: localPath);
+        if (!postPull.ok) {
+          _lastMessage = McpRepoService.joinMessages([
+            result.message,
+            postPull.message,
+          ]);
+          notifyListeners();
+          throw StateError(postPull.message);
+        }
+        _lastMessage = McpRepoService.joinMessages([
+          result.message,
+          postPull.message,
+        ]);
+      }
     }
 
     final trimmedCommand = command?.trim();
@@ -363,6 +414,7 @@ class HubController extends ChangeNotifier {
 
     _servers = [..._servers, entry];
     await _persist();
+    await _refreshGitManagedFlags();
     if (entry.shouldAutoStartByHub) {
       await _processManager.start(entry);
     }
@@ -390,19 +442,28 @@ class HubController extends ChangeNotifier {
     if (path == null || path.isEmpty) {
       throw StateError('没有本地仓库路径，无法更新');
     }
-    final result = await _repoService.pull(localPath: path);
+    if (!await _repoService.isHubGitCheckout(path)) {
+      throw StateError('不是 Hub 管理的 Git 仓库，无法 git 更新');
+    }
+    final wasRunning =
+        processState(id).status == McpProcessStatus.running;
+    final result = await _repoService.updateCheckout(localPath: path);
     _lastMessage = '${server.name}: ${result.message}';
     notifyListeners();
     if (!result.ok) {
       throw StateError(result.message);
     }
+    if (wasRunning && server.shouldAutoStartByHub) {
+      await _processManager.start(server);
+      _lastMessage = '${server.name}: ${result.message}（已重启进程）';
+      notifyListeners();
+    }
   }
 
   Future<void> updateAllServers() async {
+    await _refreshGitManagedFlags();
     final withPath = _servers
-        .where(
-          (s) => !s.builtIn && s.localPath != null && s.localPath!.isNotEmpty,
-        )
+        .where((s) => !s.builtIn && isGitManaged(s.id))
         .toList();
     if (withPath.isEmpty) {
       _lastMessage = '没有可更新的本地仓库';
@@ -411,8 +472,16 @@ class HubController extends ChangeNotifier {
     }
     final lines = <String>[];
     for (final server in withPath) {
-      final result = await _repoService.pull(localPath: server.localPath!);
-      lines.add('${server.name}: ${result.message}');
+      final wasRunning =
+          processState(server.id).status == McpProcessStatus.running;
+      final result =
+          await _repoService.updateCheckout(localPath: server.localPath!);
+      var line = '${server.name}: ${result.message}';
+      if (result.ok && wasRunning && server.shouldAutoStartByHub) {
+        await _processManager.start(server);
+        line = '$line（已重启进程）';
+      }
+      lines.add(line);
     }
     _lastMessage = lines.join('\n');
     notifyListeners();
@@ -446,6 +515,7 @@ class HubController extends ChangeNotifier {
     webDavSync.rememberTombstone(id);
     _servers = _servers.where((s) => s.id != id).toList();
     await _persist();
+    await _refreshGitManagedFlags();
     _lastMessage = deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
     notifyListeners();
     await refreshClientStatus();

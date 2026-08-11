@@ -70,7 +70,7 @@ void main() {
     await tester.tap(mcpApply);
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
-    expect(find.textContaining('当前已启用的 MCP'), findsOneWidget);
+    expect(find.textContaining('当前全部 MCP'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 

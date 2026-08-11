@@ -13,10 +13,18 @@ class McpProcessState {
   final String? lastError;
 }
 
+typedef McpProcessStateCallback = void Function();
+
 /// Hub 拉起的 MCP 进程的最小进程管理器。
 class McpProcessManager {
+  McpProcessManager({this.onStateChanged});
+
+  McpProcessStateCallback? onStateChanged;
+
   final Map<String, Process> _processes = {};
   final Map<String, McpProcessState> _states = {};
+
+  void _notifyStateChanged() => onStateChanged?.call();
 
   McpProcessState stateFor(String id) =>
       _states[id] ?? const McpProcessState(status: McpProcessStatus.stopped);
@@ -38,6 +46,7 @@ class McpProcessManager {
         lastError: '缺少启动命令',
       );
       _states[server.id] = state;
+      _notifyStateChanged();
       return state;
     }
 
@@ -45,6 +54,7 @@ class McpProcessManager {
     _states[server.id] = const McpProcessState(
       status: McpProcessStatus.starting,
     );
+    _notifyStateChanged();
 
     try {
       final workingDirectory = await resolveWorkingDirectory(server);
@@ -61,6 +71,7 @@ class McpProcessManager {
         pid: process.pid,
       );
       _states[server.id] = state;
+      _notifyStateChanged();
       unawaited(
         process.exitCode.then((code) {
           if (_processes[server.id] == process) {
@@ -69,6 +80,7 @@ class McpProcessManager {
               status: McpProcessStatus.stopped,
               lastError: code == 0 ? null : '进程退出 code $code',
             );
+            _notifyStateChanged();
           }
         }),
       );
@@ -79,6 +91,7 @@ class McpProcessManager {
         lastError: '$error',
       );
       _states[server.id] = state;
+      _notifyStateChanged();
       return state;
     }
   }
@@ -92,6 +105,7 @@ class McpProcessManager {
       } catch (_) {}
     }
     _states[id] = const McpProcessState(status: McpProcessStatus.stopped);
+    _notifyStateChanged();
   }
 
   Future<void> stopAll() async {

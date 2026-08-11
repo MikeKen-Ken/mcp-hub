@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'mcp_paths.dart';
+import 'mcp_repo_post_pull.dart';
 
 class McpRepoCloneResult {
   const McpRepoCloneResult({
@@ -60,6 +61,27 @@ class McpRepoService {
     );
   }
 
+  /// 是否为 Hub `servers` 目录下的 Git 检出（可安全 pull / 删除）。
+  Future<bool> isHubGitCheckout(String? localPath) async {
+    if (localPath == null || localPath.trim().isEmpty) return false;
+    if (!_isUnderServersRoot(localPath)) return false;
+    return await Directory(p.join(localPath, '.git')).exists();
+  }
+
+  bool _isUnderServersRoot(String localPath) {
+    final root = McpPaths.serversRoot;
+    if (root == null) return false;
+    final normalizedRoot = p.normalize(root);
+    final normalizedPath = p.normalize(localPath);
+    final relative = p.relative(normalizedPath, from: normalizedRoot);
+    if (relative == '.' ||
+        relative.startsWith('..') ||
+        p.isAbsolute(relative)) {
+      return false;
+    }
+    return true;
+  }
+
   /// `git pull --ff-only` in an existing checkout.
   Future<McpRepoCloneResult> pull({required String localPath}) async {
     final dir = Directory(localPath);
@@ -67,6 +89,13 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: false,
         message: '本地目录不存在：$localPath',
+      );
+    }
+    if (!await isHubGitCheckout(localPath)) {
+      return McpRepoCloneResult(
+        ok: false,
+        localPath: localPath,
+        message: '不是 Hub 管理的 Git 仓库，无法 git 更新',
       );
     }
     final result = await Process.run(
@@ -95,6 +124,33 @@ class McpRepoService {
     );
   }
 
+  /// `git pull` 后按项目类型执行 npm 构建 / uv sync 等。
+  Future<McpRepoCloneResult> updateCheckout({required String localPath}) async {
+    final pullResult = await pull(localPath: localPath);
+    if (!pullResult.ok) return pullResult;
+
+    final postPull = await McpRepoPostPull.apply(localPath: localPath);
+    if (!postPull.ok) {
+      return McpRepoCloneResult(
+        ok: false,
+        localPath: localPath,
+        message: _joinMessages([pullResult.message, postPull.message]),
+      );
+    }
+
+    return McpRepoCloneResult(
+      ok: true,
+      localPath: localPath,
+      message: _joinMessages([pullResult.message, postPull.message]),
+    );
+  }
+
+  static String joinMessages(List<String> parts) {
+    return parts.where((p) => p.trim().isNotEmpty).join('；');
+  }
+
+  static String _joinMessages(List<String> parts) => joinMessages(parts);
+
   /// 删除 Hub 管理的本地 clone（仅允许 `serversRoot` 下的子目录）。
   Future<McpRepoCloneResult> deleteLocal({required String localPath}) async {
     final root = McpPaths.serversRoot;
@@ -105,18 +161,14 @@ class McpRepoService {
       );
     }
 
-    final normalizedRoot = p.normalize(root);
-    final normalizedPath = p.normalize(localPath);
-    final relative = p.relative(normalizedPath, from: normalizedRoot);
-    if (relative == '.' ||
-        relative.startsWith('..') ||
-        p.isAbsolute(relative)) {
+    if (!_isUnderServersRoot(localPath)) {
       return McpRepoCloneResult(
         ok: true,
-        localPath: normalizedPath,
+        localPath: p.normalize(localPath),
         message: '路径不在 Hub servers 下，跳过删除本地目录',
       );
     }
+    final normalizedPath = p.normalize(localPath);
 
     final dir = Directory(normalizedPath);
     if (!await dir.exists()) {

@@ -11,7 +11,7 @@ typedef McpClientKind = AgentPlatformId;
 
 /// 客户端 MCP 配置对齐状态类别。
 enum McpClientAlignStatus {
-  /// 已与 Hub 启用项对齐
+  /// 已与 Hub 全部 MCP 对齐
   aligned,
 
   /// 当前平台不支持读写客户端配置
@@ -20,7 +20,11 @@ enum McpClientAlignStatus {
   /// 无法解析用户配置路径
   pathUnresolved,
 
-  /// Hub 中没有启用的 MCP
+  /// Hub 中没有 MCP
+  noServers,
+
+  /// @deprecated 使用 [noServers]。
+  @Deprecated('使用 noServers')
   noEnabledServers,
 
   /// 配置文件不存在
@@ -68,7 +72,8 @@ class McpClientAlignReport {
         McpClientAlignStatus.aligned => '已对齐',
         McpClientAlignStatus.platformUnsupported => '平台不支持',
         McpClientAlignStatus.pathUnresolved => '路径不可用',
-        McpClientAlignStatus.noEnabledServers => '无启用 MCP',
+        McpClientAlignStatus.noServers => '无 MCP',
+        McpClientAlignStatus.noEnabledServers => '无 MCP',
         McpClientAlignStatus.fileMissing => '配置文件不存在',
         McpClientAlignStatus.parseError => '解析失败',
         McpClientAlignStatus.incomplete => _incompleteShortLabel(),
@@ -97,8 +102,10 @@ class McpClientAlignReport {
         return '当前平台不支持';
       case McpClientAlignStatus.pathUnresolved:
         return '无法解析配置路径';
+      case McpClientAlignStatus.noServers:
+        return '无 MCP';
       case McpClientAlignStatus.noEnabledServers:
-        return '无启用的 MCP';
+        return '无 MCP';
       case McpClientAlignStatus.fileMissing:
         return '配置文件不存在';
       case McpClientAlignStatus.parseError:
@@ -146,10 +153,10 @@ class McpConfigureResult {
   final String? path;
 }
 
-/// Write enabled Hub servers into registered client global configs.
+/// Write all Hub servers into registered client global configs.
 abstract final class McpClientConfigurator {
-  /// 结构化诊断：说明是否对齐及具体原因。
-  static Future<McpClientAlignReport> diagnoseEnabled(
+  /// 结构化诊断：检查 Hub 中全部 MCP 是否已转换并对齐。
+  static Future<McpClientAlignReport> diagnoseAll(
     AgentPlatformId platform, {
     required List<McpServerEntry> servers,
   }) async {
@@ -177,11 +184,10 @@ abstract final class McpClientConfigurator {
       );
     }
 
-    final enabled = servers.where((s) => s.enabled).toList();
-    if (enabled.isEmpty) {
+    if (servers.isEmpty) {
       return McpClientAlignReport(
         platform: platform,
-        status: McpClientAlignStatus.noEnabledServers,
+        status: McpClientAlignStatus.noServers,
         configPath: path,
       );
     }
@@ -192,7 +198,7 @@ abstract final class McpClientConfigurator {
         platform: platform,
         status: McpClientAlignStatus.fileMissing,
         configPath: path,
-        missingServerIds: enabled.map((s) => s.id).toList(),
+        missingServerIds: servers.map((s) => s.id).toList(),
       );
     }
 
@@ -231,7 +237,7 @@ abstract final class McpClientConfigurator {
 
     final missing = <String>[];
     final diffs = <McpClientFieldDiff>[];
-    for (final server in enabled) {
+    for (final server in servers) {
       final diagnosis = _diagnoseServer(mcpConfig.format, text, server);
       if (diagnosis.missing) {
         missing.add(server.id);
@@ -261,12 +267,20 @@ abstract final class McpClientConfigurator {
     );
   }
 
-  /// 兼容封装：是否全部启用项已对齐。
+  /// 兼容旧 API；现在检查全部 MCP，而不是仅检查启用项。
+  @Deprecated('使用 diagnoseAll')
+  static Future<McpClientAlignReport> diagnoseEnabled(
+    AgentPlatformId platform, {
+    required List<McpServerEntry> servers,
+  }) =>
+      diagnoseAll(platform, servers: servers);
+
+  /// 兼容封装：是否全部 MCP 已对齐。
   static Future<bool> areEnabledConfigured(
     AgentPlatformId platform, {
     required List<McpServerEntry> servers,
   }) async {
-    final report = await diagnoseEnabled(platform, servers: servers);
+    final report = await diagnoseAll(platform, servers: servers);
     return report.isAligned;
   }
 
@@ -310,11 +324,11 @@ abstract final class McpClientConfigurator {
         managedIds: managedIds,
       );
       await file.writeAsString(next);
-      final count = servers.where((s) => s.enabled).length;
+      final count = servers.length;
       return McpConfigureResult(
         ok: true,
         path: path,
-        message: '已写入 ${definition.label}（$count 个启用的 MCP），请重启 ${definition.label}',
+        message: '已写入 ${definition.label}（$count 个 MCP），请重启 ${definition.label}',
       );
     } catch (error) {
       return McpConfigureResult(
