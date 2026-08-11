@@ -1,14 +1,8 @@
 import '../features/skill_sync/agent_resource_kind.dart';
 import '../services/mcp_paths.dart';
+import 'agent_platform_id.dart';
 
-/// 已登记的 AI 客户端平台标识。
-///
-/// 新增平台时：在 [AgentPlatforms.all] 注册定义，并补齐对应 MCP 写入/诊断实现。
-enum AgentPlatformId {
-  cursor,
-  codex,
-  openCode,
-}
+export 'agent_platform_id.dart';
 
 /// 客户端 MCP 配置文件格式。
 enum AgentMcpConfigFormat {
