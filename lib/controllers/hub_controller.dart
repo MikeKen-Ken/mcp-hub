@@ -627,9 +627,12 @@ class HubController extends ChangeNotifier {
     for (final server in imported) {
       if (existing.containsKey(server.id)) continue;
       final localPath = root == null ? null : p.join(root, server.id);
+      final merged = server.copyWith(localPath: localPath);
       _servers = [
         ..._servers,
-        server.copyWith(localPath: localPath),
+        merged.canHubStartProcess && merged.enabled
+            ? merged.copyWith(autoStart: true)
+            : merged,
       ];
       existing[server.id] = server;
     }

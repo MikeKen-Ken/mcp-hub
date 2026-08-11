@@ -122,7 +122,7 @@ abstract final class McpClientConfigReader {
 
   static McpServerEntry? _fromOpenCodeMap(String id, Map<String, dynamic> map) {
     final type = map['type']?.toString();
-    final enabled = map['enabled'] as bool? ?? false;
+    final enabled = map['enabled'] as bool? ?? true;
     if (type == 'remote') {
       final url = _nonEmpty(map['url']);
       if (url == null) return null;
@@ -169,8 +169,11 @@ abstract final class McpClientConfigReader {
     Map<String, String> env = const {},
     String? cwd,
     String? url,
-    bool enabled = false,
+    bool enabled = true,
   }) {
+    final canStart = transport == McpTransport.stdio &&
+        command != null &&
+        command.trim().isNotEmpty;
     return McpServerEntry(
       id: id,
       name: id,
@@ -181,7 +184,7 @@ abstract final class McpClientConfigReader {
       cwd: cwd,
       url: url,
       enabled: enabled,
-      autoStart: false,
+      autoStart: enabled && canStart,
       builtIn: false,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );

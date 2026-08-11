@@ -353,6 +353,7 @@ FOO = "bar"
       final servers = McpClientConfigReader.parseCursorServers(text);
       expect(servers.map((s) => s.id), ['kanbanMCP', 'filesystem']);
       expect(servers.first.transport, McpTransport.http);
+      expect(servers.first.enabled, isTrue);
       expect(servers.last.command, 'npx');
       expect(servers.last.env['FOO'], 'bar');
     });
@@ -400,6 +401,7 @@ FOO = "bar"
       expect(local.command, 'npx');
       expect(local.args, ['-y', 'fs']);
       expect(local.env['FOO'], r'${env:FOO}');
+      expect(local.enabled, isFalse);
     });
   });
 
