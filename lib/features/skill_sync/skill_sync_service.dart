@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../common/agent_platforms.dart';
 import '../../services/mcp_paths.dart';
 import '../../webdav/webdav_config.dart';
 import 'agent_resource_kind.dart';
