@@ -9,6 +9,7 @@ import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_runtime_phase.dart';
+import '../models/mcp_transport.dart';
 import '../services/directory_opener.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
