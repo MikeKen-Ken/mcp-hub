@@ -173,41 +173,13 @@ class _SectionHeader extends StatelessWidget {
 class ClientMcpScreen extends StatelessWidget {
   const ClientMcpScreen({super.key});
 
-  Future<void> _runWebDavSync(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
-    await action();
-    if (!context.mounted) return;
-    final hub = context.read<HubController>();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(hub.lastMessage ?? '完成')));
-  }
-
   @override
   Widget build(BuildContext context) {
     final hub = context.watch<HubController>();
-    final webDavReady = hub.isWebDavReady;
-    final syncing = hub.isWebDavSyncing;
     return Scaffold(
       appBar: AppBar(
         title: const Text('客户端 MCP'),
         actions: [
-          IconButton(
-            tooltip: webDavReady ? '从 WebDAV 下载 MCP 清单' : '需先启用并配置 WebDAV',
-            onPressed: !webDavReady || syncing
-                ? null
-                : () => _runWebDavSync(context, hub.pullWebDavNow),
-            icon: const Icon(Icons.cloud_download_outlined),
-          ),
-          IconButton(
-            tooltip: webDavReady ? '上传 MCP 清单到 WebDAV' : '需先启用并配置 WebDAV',
-            onPressed: !webDavReady || syncing
-                ? null
-                : () => _runWebDavSync(context, hub.pushWebDavNow),
-            icon: const Icon(Icons.cloud_upload_outlined),
-          ),
           IconButton(
             tooltip: '刷新配置状态',
             onPressed: hub.refreshClientStatus,
