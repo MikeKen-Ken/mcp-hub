@@ -756,7 +756,17 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
-  /// 一键转换全部可转换资源（Skill + Rule → Codex）。
+  /// 转换单个资源到全部可转换目标（不碰缓存，只读 Cursor 正式目录）。
+  Future<SkillSyncResult> convertResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.convertResourceToAllTargets(resource);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  /// 一键转换全部可转换资源（Cursor → Codex / Open Code）。
   Future<SkillSyncResult> convertAllResourcesFromCursor() async {
     final result = await skillSync.convertAllFromCursor();
     _lastMessage = result.message;
@@ -786,7 +796,7 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
-  /// 用缓存全量覆盖正式 Cursor 目录（可随后自动转换 Codex）。
+  /// 用缓存覆盖正式 Cursor 目录（不自动转换；请另点「一键转换」）。
   Future<SkillSyncResult> applyResourceFromCache(
     AgentResourceKind resource,
   ) async {

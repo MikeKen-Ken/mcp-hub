@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/features/skill_sync/agent_resource_kind.dart';
+import 'package:mcp_hub/features/skill_sync/convert/cursor_to_opencode_converter.dart';
+import 'package:mcp_hub/features/skill_sync/skill_folder_copy.dart';
 import 'package:mcp_hub/features/skill_sync/skill_sync_service.dart';
 import 'package:mcp_hub/features/skill_sync/skill_target.dart';
 import 'package:mcp_hub/features/skill_sync/skill_webdav_folder_sync.dart';
@@ -70,7 +72,76 @@ void main() {
       expect(folderSync.pushedRemoteDir, '/AgentHub/skills/cursor');
       expect(result.message, contains('正式目录'));
     });
+
+    test('覆盖 Cursor 后不自动转换；需显式一键转换', () async {
+      var openCodeCalls = 0;
+      final sync = SkillSyncService(
+        loadConfig: () async => WebDavConfig.empty,
+        folderCopy: const _NoopFolderCopy(),
+        openCodeConverter: _RecordingOpenCodeConverter(
+          () => openCodeCalls += 1,
+        ),
+      );
+
+      final apply = await sync.applyResourceFromCache(AgentResourceKind.skill);
+      expect(apply.ok, isTrue);
+      expect(openCodeCalls, 0);
+      expect(apply.message, contains('请使用「一键转换」'));
+
+      final convert = await sync.convertResourceToAllTargets(
+        AgentResourceKind.skill,
+      );
+      expect(convert.ok, isTrue);
+      expect(openCodeCalls, 1);
+      expect(convert.message, contains('Open Code'));
+    });
   });
+}
+
+class _NoopFolderCopy extends SkillFolderCopy {
+  const _NoopFolderCopy();
+
+  @override
+  Future<SkillFolderCopyResult> mirrorContents({
+    required String sourceDir,
+    required String targetDir,
+    bool skipDotEntries = true,
+  }) async {
+    return SkillFolderCopyResult(
+      copiedFiles: 0,
+      copiedDirs: 0,
+      sourcePath: sourceDir,
+      targetPath: targetDir,
+    );
+  }
+}
+
+class _RecordingOpenCodeConverter extends CursorToOpenCodeConverter {
+  _RecordingOpenCodeConverter(this.onCall);
+
+  final void Function() onCall;
+
+  @override
+  Future<int> convertSkills({
+    required String sourceDir,
+    required String targetDir,
+  }) async {
+    onCall();
+    return 2;
+  }
+
+  @override
+  Future<OpenCodeConvertResult> convertAll({
+    required String cursorSkillsDir,
+    required String cursorRulesDir,
+    required String cursorCommandsDir,
+    required String openCodeSkillsDir,
+    required String openCodeAgentsMdPath,
+    required String openCodeCommandsDir,
+  }) async {
+    onCall();
+    return const OpenCodeConvertResult(skills: 2, rules: 1, commands: 0);
+  }
 }
 
 class _RecordingFolderSync extends SkillWebDavFolderSync {

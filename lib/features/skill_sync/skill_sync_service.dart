@@ -71,8 +71,8 @@ class SkillSyncService extends ChangeNotifier {
   SkillTarget? lastTarget;
   AgentResourceKind? lastResource;
   static const _codexNotOnWebDavMessage =
-      'WebDAV 仅下载/上传 Cursor 目录；Codex 由本机从 Cursor 转换生成，'
-      '请使用「一键转换」或先下载 Cursor（下载后会自动转换）';
+      'WebDAV 仅下载/上传 Cursor 目录；Codex / Open Code 由本机从 Cursor 转换生成，'
+      '请使用「一键转换」或先「更新/覆盖」正式 Cursor';
   String? cachePathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
     SkillTarget.codex => McpPaths.codexSkillsCachePath,
@@ -282,7 +282,7 @@ class SkillSyncService extends ChangeNotifier {
     return applyResourceFromCache(AgentResourceKind.skill, target: target);
   }
 
-  /// 把缓存全量镜像到正式目录；Cursor 侧完成后可自动转换 Codex。
+  /// 把缓存全量镜像到正式 Cursor（不自动转换；请用「一键转换」）。
   Future<SkillSyncResult> applyResourceFromCache(
     AgentResourceKind resource, {
     SkillTarget target = SkillTarget.cursor,
@@ -297,7 +297,7 @@ class SkillSyncService extends ChangeNotifier {
     return _run(resource, target, () => _doApplyOne(resource, target));
   }
 
-  /// 把全部资源的 Cursor 缓存全量镜像到正式目录，并可转换 Codex。
+  /// 把全部资源的 Cursor 缓存全量镜像到正式目录（不自动转换）。
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
     return _run(null, null, () async {
       var deployedFiles = 0;
@@ -328,9 +328,9 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 以本机 Cursor 目录为源，批量转换成 Codex 可接受的格式。
+  /// 以本机 Cursor 目录为源，转换单个资源到指定目标。
   ///
-  /// 不依赖 WebDAV。Skill → skills + openai.yaml；Rule → `AGENTS.md`。
+  /// 不依赖 WebDAV，也不读取缓存。Skill → skills + openai.yaml；Rule → `AGENTS.md`。
   /// Command 暂无 Codex 对等目录。
   Future<SkillSyncResult> convertFromCursor(
     AgentResourceKind resource, {
@@ -358,7 +358,71 @@ class SkillSyncService extends ChangeNotifier {
     });
   }
 
-  /// 一键转换全部可转换资源（Skill + Rule）。
+  /// 以本机 Cursor 正式目录为源，转换单个资源到全部可转换目标（不碰缓存）。
+  Future<SkillSyncResult> convertResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    return _run(resource, SkillTarget.cursor, () async {
+      if (!McpPaths.isDesktopSupported) {
+        throw StateError('当前平台不支持目录转换');
+      }
+      final parts = <String>[];
+      var deployedFiles = 0;
+      var packageCount = 0;
+      var allOk = true;
+
+      if (resource.canConvertToCodex) {
+        try {
+          final codex = switch (resource) {
+            AgentResourceKind.skill => await _convertSkillsFromCursor(),
+            AgentResourceKind.rule => await _convertRulesFromCursor(),
+            AgentResourceKind.command => const SkillSyncResult(
+              ok: false,
+              message: 'Command 暂无 Codex 对等目录',
+            ),
+          };
+          deployedFiles += codex.deployedFiles;
+          packageCount += codex.packageCount;
+          parts.add(codex.message);
+          if (!codex.ok) allOk = false;
+        } catch (error) {
+          allOk = false;
+          parts.add('Codex：失败（$error）');
+          debugPrint('${resource.label} 转换 Codex 失败: $error');
+        }
+      }
+
+      if (resource.canConvertTo(SkillTarget.openCode)) {
+        try {
+          final openCode = await _convertOpenCodeFromCursor(resource);
+          deployedFiles += openCode.deployedFiles;
+          packageCount += openCode.packageCount;
+          parts.add(openCode.message);
+          if (!openCode.ok) allOk = false;
+        } catch (error) {
+          allOk = false;
+          parts.add('Open Code：失败（$error）');
+          debugPrint('${resource.label} 转换 Open Code 失败: $error');
+        }
+      }
+
+      if (parts.isEmpty) {
+        return SkillSyncResult(
+          ok: false,
+          message: '${resource.label} 暂无可转换目标',
+        );
+      }
+      return SkillSyncResult(
+        ok: allOk,
+        target: SkillTarget.cursor,
+        deployedFiles: deployedFiles,
+        packageCount: packageCount,
+        message: parts.join('；'),
+      );
+    });
+  }
+
+  /// 一键转换全部可转换资源（Skill + Rule + Command → Codex / Open Code）。
   Future<SkillSyncResult> convertAllFromCursor() async {
     return _run(null, SkillTarget.cursor, () async {
       if (!McpPaths.isDesktopSupported) {
@@ -369,58 +433,52 @@ class SkillSyncService extends ChangeNotifier {
       final parts = <String>[];
       var allOk = true;
       for (final resource in AgentResourceKind.values) {
-        if (!resource.canConvertToCodex) continue;
+        if (!resource.canConvertToCodex &&
+            !resource.canConvertTo(SkillTarget.openCode)) {
+          continue;
+        }
         try {
-          final one = switch (resource) {
-            AgentResourceKind.skill => await _convertSkillsFromCursor(),
-            AgentResourceKind.rule => await _convertRulesFromCursor(),
-            AgentResourceKind.command => const SkillSyncResult(
-              ok: false,
-              message: 'Command 暂无 Codex 对等目录',
-            ),
-          };
-          deployedFiles += one.deployedFiles;
-          packageCount += one.packageCount;
-          parts.add(one.message);
-          if (!one.ok) allOk = false;
+          // 避免嵌套 _run：直接组合单资源转换逻辑
+          final oneParts = <String>[];
+          var oneOk = true;
+          var oneDeployed = 0;
+          var onePackages = 0;
+          if (resource.canConvertToCodex) {
+            final codex = switch (resource) {
+              AgentResourceKind.skill => await _convertSkillsFromCursor(),
+              AgentResourceKind.rule => await _convertRulesFromCursor(),
+              AgentResourceKind.command => const SkillSyncResult(
+                ok: true,
+                message: 'Command 跳过 Codex',
+              ),
+            };
+            if (resource != AgentResourceKind.command) {
+              oneDeployed += codex.deployedFiles;
+              onePackages += codex.packageCount;
+              oneParts.add(codex.message);
+              if (!codex.ok) oneOk = false;
+            }
+          }
+          if (resource.canConvertTo(SkillTarget.openCode)) {
+            final openCode = await _convertOpenCodeFromCursor(resource);
+            oneDeployed += openCode.deployedFiles;
+            onePackages += openCode.packageCount;
+            oneParts.add(openCode.message);
+            if (!openCode.ok) oneOk = false;
+          }
+          deployedFiles += oneDeployed;
+          packageCount += onePackages;
+          parts.addAll(oneParts);
+          if (!oneOk) allOk = false;
         } catch (error) {
           allOk = false;
           parts.add('${resource.label}：失败（$error）');
           debugPrint('转换全部 ${resource.label} 失败: $error');
         }
       }
-      final openCodeSkillsPath = McpPaths.openCodeSkillsPath;
-      final openCodeRulesPath = McpPaths.openCodeRulesPath;
-      final openCodeCommandsPath = McpPaths.openCodeCommandsPath;
-      if (openCodeSkillsPath == null ||
-          openCodeRulesPath == null ||
-          openCodeCommandsPath == null) {
-        throw StateError('当前平台不支持 OpenCode 转换');
-      }
-      final cursorSkillsPath = McpPaths.cursorSkillsPath;
-      final cursorRulesPath = McpPaths.cursorRulesPath;
-      final cursorCommandsPath = McpPaths.cursorCommandsPath;
-      if (cursorSkillsPath == null ||
-          cursorRulesPath == null ||
-          cursorCommandsPath == null) {
-        throw StateError('当前平台不支持 Cursor 转换');
-      }
-      final openCode = await _openCodeConverter.convertAll(
-        cursorSkillsDir: cursorSkillsPath,
-        cursorRulesDir: cursorRulesPath,
-        cursorCommandsDir: cursorCommandsPath,
-        openCodeSkillsDir: openCodeSkillsPath,
-        openCodeAgentsMdPath: openCodeRulesPath,
-        openCodeCommandsDir: openCodeCommandsPath,
-      );
-      deployedFiles += openCode.total;
-      parts.add(
-        '已转换 Open Code：Skill ${openCode.skills} 个、Rule ${openCode.rules} 条、'
-        'Command ${openCode.commands} 个',
-      );
       return SkillSyncResult(
         ok: allOk,
-        target: SkillTarget.codex,
+        target: SkillTarget.cursor,
         deployedFiles: deployedFiles,
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可转换的资源' : parts.join('；'),
@@ -453,26 +511,28 @@ class SkillSyncService extends ChangeNotifier {
         cursorCommandsPath == null) {
       throw StateError('当前平台不支持 Cursor 转换');
     }
-    final result = await _openCodeConverter.convertAll(
-      cursorSkillsDir: cursorSkillsPath,
-      cursorRulesDir: cursorRulesPath,
-      cursorCommandsDir: cursorCommandsPath,
-      openCodeSkillsDir: openCodeSkillsPath,
-      openCodeAgentsMdPath: openCodeRulesPath,
-      openCodeCommandsDir: openCodeCommandsPath,
-    );
+
     final count = switch (resource) {
-      AgentResourceKind.skill => result.skills,
-      AgentResourceKind.rule => result.rules,
-      AgentResourceKind.command => result.commands,
+      AgentResourceKind.skill => await _openCodeConverter.convertSkills(
+        sourceDir: cursorSkillsPath,
+        targetDir: openCodeSkillsPath,
+      ),
+      AgentResourceKind.rule => await _openCodeConverter.convertRules(
+        sourceDir: cursorRulesPath,
+        targetPath: openCodeRulesPath,
+      ),
+      AgentResourceKind.command => await _openCodeConverter.convertCommands(
+        sourceDir: cursorCommandsPath,
+        targetDir: openCodeCommandsPath,
+      ),
     };
     return SkillSyncResult(
       ok: true,
       target: SkillTarget.openCode,
       deployedFiles: count,
-      packageCount: result.skills,
+      packageCount: resource == AgentResourceKind.skill ? count : 0,
       message:
-          '已转换 Open Code ${resource.label}：$count 个 → '
+          '已从 Cursor 转换 Open Code ${resource.label}：$count 个 → '
           '${McpPaths.openCodeConfigDirectory}',
     );
   }
@@ -577,40 +637,6 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 覆盖正式目录后，对本机执行可转换资源的 Cursor→Codex。
-  Future<SkillSyncResult> _maybeConvertAfterCursorApply(
-    AgentResourceKind resource,
-    SkillSyncResult applyResult,
-  ) async {
-    if (!resource.canConvertToCodex) return applyResult;
-    try {
-      final convert = switch (resource) {
-        AgentResourceKind.skill => await _convertSkillsFromCursor(),
-        AgentResourceKind.rule => await _convertRulesFromCursor(),
-        AgentResourceKind.command => applyResult,
-      };
-      if (identical(convert, applyResult)) return applyResult;
-      return SkillSyncResult(
-        ok: applyResult.ok && convert.ok,
-        target: SkillTarget.cursor,
-        pulledFiles: applyResult.pulledFiles,
-        deployedFiles: applyResult.deployedFiles + convert.deployedFiles,
-        packageCount: applyResult.packageCount + convert.packageCount,
-        message: '${applyResult.message}；${convert.message}',
-      );
-    } catch (error) {
-      debugPrint('${resource.label} 覆盖后转换 Codex 失败: $error');
-      return SkillSyncResult(
-        ok: false,
-        target: SkillTarget.cursor,
-        pulledFiles: applyResult.pulledFiles,
-        deployedFiles: applyResult.deployedFiles,
-        packageCount: applyResult.packageCount,
-        message: '${applyResult.message}；Cursor→Codex 转换失败：$error',
-      );
-    }
-  }
-
   /// 仅下载到缓存目录：与远端全量一致，不触碰正式配置。
   Future<SkillSyncResult> _doSyncOne(
     AgentResourceKind resource,
@@ -676,7 +702,7 @@ class SkillSyncService extends ChangeNotifier {
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(deployPath)
         : 0;
-    final applyResult = SkillSyncResult(
+    return SkillSyncResult(
       ok: true,
       target: target,
       deployedFiles: deploy.copiedFiles,
@@ -685,12 +711,9 @@ class SkillSyncService extends ChangeNotifier {
           '已用缓存全量覆盖正式 Cursor ${resource.label}：'
           '写入 ${deploy.copiedFiles} 个文件，删除多余 ${deploy.deletedEntries} 项'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-          ' → $deployPath',
+          ' → $deployPath'
+          '（未转换 Codex / Open Code，请使用「一键转换」）',
     );
-    if (target == SkillTarget.cursor) {
-      return _maybeConvertAfterCursorApply(resource, applyResult);
-    }
-    return applyResult;
   }
 
   /// 直接从本机 Cursor 正式目录上传到远端（缓存只用于下载暂存，不参与上传）。

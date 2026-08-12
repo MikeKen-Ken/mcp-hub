@@ -34,15 +34,15 @@ class CursorToOpenCodeConverter {
     required String openCodeAgentsMdPath,
     required String openCodeCommandsDir,
   }) async {
-    final skills = await _convertSkills(
+    final skills = await convertSkills(
       sourceDir: cursorSkillsDir,
       targetDir: openCodeSkillsDir,
     );
-    final rules = await _convertRules(
+    final rules = await convertRules(
       sourceDir: cursorRulesDir,
       targetPath: openCodeAgentsMdPath,
     );
-    final commands = await _convertCommands(
+    final commands = await convertCommands(
       sourceDir: cursorCommandsDir,
       targetDir: openCodeCommandsDir,
     );
@@ -53,7 +53,7 @@ class CursorToOpenCodeConverter {
     );
   }
 
-  Future<int> _convertSkills({
+  Future<int> convertSkills({
     required String sourceDir,
     required String targetDir,
   }) async {
@@ -75,7 +75,7 @@ class CursorToOpenCodeConverter {
     return count;
   }
 
-  Future<int> _convertRules({
+  Future<int> convertRules({
     required String sourceDir,
     required String targetPath,
   }) async {
@@ -105,7 +105,7 @@ class CursorToOpenCodeConverter {
     return sections.length;
   }
 
-  Future<int> _convertCommands({
+  Future<int> convertCommands({
     required String sourceDir,
     required String targetDir,
   }) async {

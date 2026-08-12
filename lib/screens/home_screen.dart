@@ -416,7 +416,8 @@ class _AgentSyncOverview extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '远端以 Cursor 配置为准；Codex Skill 与 AGENTS.md 由本机 Cursor 配置转换生成。',
+              '远端以 Cursor 为准。下载进缓存 → 更新/覆盖到 Cursor；'
+              'Codex / Open Code 用「一键转换」从 Cursor 正式目录生成。',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
@@ -590,6 +591,11 @@ class _BulkResourceSyncCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
+            Text(
+              '「更新/覆盖」只把缓存写入 Cursor；「一键转换」才从 Cursor 生成 Codex / Open Code。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
@@ -884,6 +890,17 @@ class _ResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('上传'),
                 ),
+                if (_canConvert)
+                  OutlinedButton.icon(
+                    onPressed: !supported || busy
+                        ? null
+                        : () => _run(
+                            context,
+                            () => hub.convertResourceToAllTargets(resource),
+                          ),
+                    icon: const Icon(Icons.transform_outlined),
+                    label: const Text('一键转换'),
+                  ),
               ],
             ),
             const Divider(height: 24),
@@ -935,11 +952,11 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      '批量复制 Skill 包，并为每个包生成 agents/openai.yaml（映射 disable-model-invocation；已有策略优先）',
+      '一键转换：从 Cursor Skill 生成 Codex（含 agents/openai.yaml）与 Open Code skills',
     AgentResourceKind.rule =>
-      '批量读取 ~/.cursor/rules/**/*.mdc，覆盖写入 ~/.codex/AGENTS.md'
-          '（更新/覆盖后也会自动执行）',
-    AgentResourceKind.command => 'Codex 暂无对等目录；OpenCode 写入 commands/<name>.md',
+      '一键转换：从 Cursor rules 生成 Codex / Open Code 的 AGENTS.md',
+    AgentResourceKind.command =>
+      '一键转换：从 Cursor commands 写入 Open Code commands/<name>.md（Codex 无对等目录）',
   };
 
   bool get _canConvert =>
@@ -961,14 +978,8 @@ class _ResourceSyncCard extends StatelessWidget {
   }
 
   String _supportDescription() {
-    if (resource == AgentResourceKind.command) {
-      return '下载到缓存 → 更新/覆盖到正式 Cursor → 从 Cursor 上传远端；'
-          'Codex 暂无对等 Command 目录';
-    }
-    if (resource == AgentResourceKind.rule) {
-      return '下载到缓存 → 更新/覆盖到正式 Cursor（可自动转 AGENTS.md）→ 从 Cursor 上传远端';
-    }
-    return '下载到缓存 → 更新/覆盖到正式 Cursor（可自动转 Codex）→ 从 Cursor 上传远端';
+    return '下载 → 缓存；更新/覆盖 → Cursor 正式目录；'
+        '一键转换 → Codex / Open Code；上传 ← Cursor 正式目录。';
   }
 }
 
@@ -981,9 +992,9 @@ Future<bool> _confirmLocalOverwrite(
         builder: (dialogContext) => AlertDialog(
           title: const Text('确认更新/覆盖？'),
           content: Text(
-            '即将用缓存中的$scope全量镜像正式目录。\n\n'
-            '缓存中不存在的本地文件和目录也会被删除。Skill 和 Rule 更新后还可能同步转换 Codex 配置。\n\n'
-            '请确认缓存内容已检查无误。',
+            '即将把缓存中的$scope镜像到 Cursor 正式目录。\n\n'
+            '缓存中不存在的本地 Cursor 文件和目录也会被删除。\n\n'
+            '本操作不会转换 Codex / Open Code；需要时请再点「一键转换」。',
           ),
           actions: [
             TextButton(

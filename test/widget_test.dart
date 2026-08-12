@@ -39,6 +39,10 @@ void main() {
   testWidgets('home shows Agent Hub title', (tester) async {
     final hub = HubController(initiallyLoading: false);
     addTearDown(hub.dispose);
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
     await tester.pumpWidget(
       ChangeNotifierProvider.value(value: hub, child: const McpHubApp()),
     );
@@ -55,17 +59,25 @@ void main() {
     expect(find.text('Command'), findsOneWidget);
     expect(find.text('Rule'), findsOneWidget);
     expect(find.text('打开 MCP 设置'), findsOneWidget);
+    expect(find.text('一键转换'), findsWidgets);
 
     await tester.tap(find.text('2  更新/覆盖全部'));
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsOneWidget);
     expect(find.text('继续覆盖'), findsOneWidget);
-    expect(find.textContaining('缓存中不存在的本地文件和目录也会被删除。'), findsOneWidget);
+    expect(find.textContaining('本操作不会转换 Codex / Open Code'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.text('确认更新/覆盖？'), findsNothing);
 
-    final mcpApply = find.text('更新/覆盖').first;
+    final mcpCard = find.ancestor(
+      of: find.text('打开 MCP 设置'),
+      matching: find.byType(Card),
+    );
+    final mcpApply = find.descendant(
+      of: mcpCard,
+      matching: find.text('更新/覆盖'),
+    );
     await tester.ensureVisible(mcpApply);
     await tester.tap(mcpApply);
     await tester.pumpAndSettle();
