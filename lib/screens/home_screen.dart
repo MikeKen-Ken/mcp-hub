@@ -329,11 +329,6 @@ class AgentConfigSyncScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       const _SectionHeader('按资源管理'),
-                      const SizedBox(height: 4),
-                      Text(
-                        '只处理某一类配置时使用；展开卡片可查看转换说明和目录位置。',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 12,
@@ -401,7 +396,7 @@ class _AgentSyncOverview extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '在设备与 WebDAV 之间管理 Agent 配置',
+                    '同步流程',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -414,14 +409,6 @@ class _AgentSyncOverview extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              '远端以 Cursor 为准。下载进缓存 → 更新/覆盖到 Cursor；'
-              'Codex / Open Code 用「一键转换」从 Cursor 正式目录生成。',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -430,7 +417,7 @@ class _AgentSyncOverview extends StatelessWidget {
               children: [
                 const _FlowLabel(index: 1, label: '下载到缓存'),
                 Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
-                const _FlowLabel(index: 2, label: '更新到正式目录'),
+                const _FlowLabel(index: 2, label: '应用到 Cursor'),
                 Icon(Icons.arrow_forward, size: 16, color: scheme.outline),
                 const _FlowLabel(index: 3, label: '从 Cursor 上传'),
                 const SizedBox(width: 4),
@@ -541,13 +528,6 @@ class _BulkResourceSyncCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('推荐流程', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              webDavReady
-                  ? '按顺序执行前三步，可让本机与远端保持一致。'
-                  : '下载和上传需要先在设置中启用并配置 WebDAV。',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
@@ -560,7 +540,7 @@ class _BulkResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('1  下载全部'),
                 ),
-                FilledButton.icon(
+                FilledButton.tonalIcon(
                   onPressed: !supported || busy
                       ? null
                       : () async {
@@ -572,7 +552,7 @@ class _BulkResourceSyncCard extends StatelessWidget {
                           await run(hub.applyAllResourcesFromCache);
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('2  更新/覆盖全部'),
+                  label: const Text('2  应用到 Cursor'),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -581,26 +561,20 @@ class _BulkResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('3  上传全部'),
                 ),
-                OutlinedButton.icon(
+                FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () => run(hub.convertAllResourcesFromCursor),
                   icon: const Icon(Icons.transform_outlined),
-                  label: const Text('一键转换全部目标'),
+                  label: const Text('一键转换到全部目标'),
                 ),
               ],
             ),
             const Divider(height: 24),
-            Text(
-              '「更新/覆盖」只把缓存写入 Cursor；「一键转换」才从 Cursor 生成 Codex / Open Code。',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('缓存目录'),
-              subtitle: const Text('下载内容会先保存在这里，不会直接覆盖正式配置'),
+              title: const Text('查看缓存目录'),
               children: [
                 _DirectoryPathRow(
                   label: 'Skill 缓存根目录',
@@ -691,7 +665,7 @@ class _McpResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('下载'),
                 ),
-                FilledButton.icon(
+                FilledButton.tonalIcon(
                   onPressed: !supported
                       ? null
                       : () async {
@@ -702,7 +676,7 @@ class _McpResourceSyncCard extends StatelessWidget {
                           await _run(context, hub.configureAllClients);
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('更新/覆盖'),
+                  label: const Text('写入客户端'),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -726,8 +700,7 @@ class _McpResourceSyncCard extends StatelessWidget {
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('说明与目录'),
-              subtitle: const Text('下载/上传 MCP 清单；更新/覆盖将全部 MCP 写入客户端。'),
+              title: const Text('查看配置目录'),
               children: [
                 for (final platform in AgentPlatforms.mcpConfigurable)
                   _DirectoryPathRow(
@@ -749,7 +722,7 @@ Future<bool> _confirmMcpConfigUpdate(BuildContext context) async {
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('确认更新/覆盖？'),
+          title: const Text('确认写入客户端？'),
           content: const Text(
             '即将把当前全部 MCP 写入 Cursor 和 Codex 配置。\n\n'
             '会更新同名 MCP，但会保留客户端配置中不由 Agent Hub 管理的服务。',
@@ -761,7 +734,7 @@ Future<bool> _confirmMcpConfigUpdate(BuildContext context) async {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('继续覆盖'),
+              child: const Text('确认写入'),
             ),
           ],
         ),
@@ -863,7 +836,7 @@ class _ResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('下载'),
                 ),
-                FilledButton.icon(
+                FilledButton.tonalIcon(
                   onPressed: !supported || busy
                       ? null
                       : () async {
@@ -878,7 +851,7 @@ class _ResourceSyncCard extends StatelessWidget {
                           );
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('更新/覆盖'),
+                  label: const Text('应用到 Cursor'),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -891,7 +864,7 @@ class _ResourceSyncCard extends StatelessWidget {
                   label: const Text('上传'),
                 ),
                 if (_canConvert)
-                  OutlinedButton.icon(
+                  FilledButton.icon(
                     onPressed: !supported || busy
                         ? null
                         : () => _run(
@@ -907,8 +880,7 @@ class _ResourceSyncCard extends StatelessWidget {
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('说明与目录'),
-              subtitle: Text(_supportDescription()),
+              title: const Text('查看目录与转换规则'),
               children: [
                 if (_convertHint != null)
                   Align(
@@ -976,11 +948,6 @@ class _ResourceSyncCard extends StatelessWidget {
     }
     return hub.skillSync.resourceDeployPathFor(resource, target);
   }
-
-  String _supportDescription() {
-    return '下载 → 缓存；更新/覆盖 → Cursor 正式目录；'
-        '一键转换 → Codex / Open Code；上传 ← Cursor 正式目录。';
-  }
 }
 
 Future<bool> _confirmLocalOverwrite(
@@ -990,7 +957,7 @@ Future<bool> _confirmLocalOverwrite(
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('确认更新/覆盖？'),
+          title: const Text('确认应用到 Cursor？'),
           content: Text(
             '即将把缓存中的$scope镜像到 Cursor 正式目录。\n\n'
             '缓存中不存在的本地 Cursor 文件和目录也会被删除。\n\n'
@@ -1003,7 +970,7 @@ Future<bool> _confirmLocalOverwrite(
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('继续覆盖'),
+              child: const Text('确认应用'),
             ),
           ],
         ),
@@ -1026,9 +993,7 @@ class _ClientConfigCard extends StatelessWidget {
     final supported = hub.isDesktopSupported;
     final platforms = AgentPlatforms.mcpConfigurable;
     final detailLines = <String>[];
-    final reports = platforms
-        .map((p) => hub.clientAlignReport(p.id))
-        .toList();
+    final reports = platforms.map((p) => hub.clientAlignReport(p.id)).toList();
     if (reports.any((r) => r == null)) {
       detailLines.add('正在检测…');
     } else {
@@ -1039,14 +1004,11 @@ class _ClientConfigCard extends StatelessWidget {
         }
       }
       if (detailLines.isEmpty) {
-        detailLines.add(
-          '${platforms.map((p) => p.label).join(' / ')} 已对齐',
-        );
+        detailLines.add('${platforms.map((p) => p.label).join(' / ')} 已对齐');
       }
     }
 
-    final configureAllLabel =
-        '配置 ${platforms.map((p) => p.label).join(' + ')}';
+    final configureAllLabel = '配置 ${platforms.map((p) => p.label).join(' + ')}';
 
     return Card(
       child: Padding(

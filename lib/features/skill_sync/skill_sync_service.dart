@@ -72,7 +72,7 @@ class SkillSyncService extends ChangeNotifier {
   AgentResourceKind? lastResource;
   static const _codexNotOnWebDavMessage =
       'WebDAV 仅下载/上传 Cursor 目录；Codex / Open Code 由本机从 Cursor 转换生成，'
-      '请使用「一键转换」或先「更新/覆盖」正式 Cursor';
+      '请使用「一键转换」或先将缓存「应用到 Cursor」';
   String? cachePathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
     SkillTarget.codex => McpPaths.codexSkillsCachePath,
@@ -407,10 +407,7 @@ class SkillSyncService extends ChangeNotifier {
       }
 
       if (parts.isEmpty) {
-        return SkillSyncResult(
-          ok: false,
-          message: '${resource.label} 暂无可转换目标',
-        );
+        return SkillSyncResult(ok: false, message: '${resource.label} 暂无可转换目标');
       }
       return SkillSyncResult(
         ok: allOk,
@@ -677,7 +674,7 @@ class SkillSyncService extends ChangeNotifier {
           '已下载 Cursor ${resource.label} 到缓存：'
           '$pulled 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-          ' → $cachePath（未覆盖正式目录，请使用「更新/覆盖」）',
+          ' → $cachePath（未写入正式目录，请使用「应用到 Cursor」）',
     );
   }
 

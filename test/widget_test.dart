@@ -15,13 +15,13 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('2  更新/覆盖全部'));
+    await tester.tap(find.text('2  应用到 Cursor'));
     await tester.pumpAndSettle();
-    expect(find.text('确认更新/覆盖？'), findsOneWidget);
+    expect(find.text('确认应用到 Cursor？'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('确认更新/覆盖？'), findsNothing);
+    expect(find.text('确认应用到 Cursor？'), findsNothing);
 
     await tester.tap(find.byTooltip('WebDAV 设置'));
     await tester.pumpAndSettle();
@@ -49,7 +49,7 @@ void main() {
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
     expect(find.text('Agent 配置'), findsOneWidget);
-    expect(find.text('2  更新/覆盖全部'), findsOneWidget);
+    expect(find.text('2  应用到 Cursor'), findsOneWidget);
     expect(find.text('配置备份'), findsNothing);
     expect(find.text('本地 MCP'), findsNothing);
 
@@ -61,27 +61,24 @@ void main() {
     expect(find.text('打开 MCP 设置'), findsOneWidget);
     expect(find.text('一键转换'), findsWidgets);
 
-    await tester.tap(find.text('2  更新/覆盖全部'));
+    await tester.tap(find.text('2  应用到 Cursor'));
     await tester.pumpAndSettle();
-    expect(find.text('确认更新/覆盖？'), findsOneWidget);
-    expect(find.text('继续覆盖'), findsOneWidget);
+    expect(find.text('确认应用到 Cursor？'), findsOneWidget);
+    expect(find.text('确认应用'), findsOneWidget);
     expect(find.textContaining('本操作不会转换 Codex / Open Code'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
-    expect(find.text('确认更新/覆盖？'), findsNothing);
+    expect(find.text('确认应用到 Cursor？'), findsNothing);
 
     final mcpCard = find.ancestor(
       of: find.text('打开 MCP 设置'),
       matching: find.byType(Card),
     );
-    final mcpApply = find.descendant(
-      of: mcpCard,
-      matching: find.text('更新/覆盖'),
-    );
+    final mcpApply = find.descendant(of: mcpCard, matching: find.text('写入客户端'));
     await tester.ensureVisible(mcpApply);
     await tester.tap(mcpApply);
     await tester.pumpAndSettle();
-    expect(find.text('确认更新/覆盖？'), findsOneWidget);
+    expect(find.text('确认写入客户端？'), findsOneWidget);
     expect(find.textContaining('当前全部 MCP'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
