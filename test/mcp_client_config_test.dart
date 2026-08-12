@@ -61,6 +61,33 @@ void main() {
       );
     });
 
+    test('removes tombstoned servers while keeping unrelated entries', () {
+      const existing = '''
+{
+  "mcpServers": {
+    "removed": { "command": "echo" },
+    "unityMCP": {
+      "url": "http://127.0.0.1:8080/mcp"
+    },
+    "kanbanMCP": {
+      "url": "http://127.0.0.1:1/mcp",
+      "type": "http"
+    }
+  }
+}
+''';
+      final text = McpClientConfig.upsertCursorJson(
+        existing,
+        servers: [httpServer],
+        managedIds: {'kanbanMCP'},
+        removeIds: {'removed'},
+      );
+      final servers = (jsonDecode(text) as Map)['mcpServers'] as Map;
+      expect(servers.containsKey('removed'), isFalse);
+      expect(servers['unityMCP'], isNotNull);
+      expect((servers['kanbanMCP'] as Map)['url'], httpServer.url);
+    });
+
     test('writes disabled managed servers as well', () {
       final disabled = httpServer.copyWith(enabled: false);
       const existing = '''
@@ -107,6 +134,25 @@ void main() {
         isTrue,
       );
       expect(McpClientConfig.hasCodexRmcpClient(text), isTrue);
+    });
+
+    test('removes tombstoned tables', () {
+      final existing = '''
+[mcp_servers.removed]
+command = "echo"
+
+[mcp_servers.kanbanMCP]
+url = "http://127.0.0.1:1/mcp"
+''';
+      final text = McpClientConfig.upsertCodexToml(
+        existing,
+        servers: [httpServer],
+        managedIds: {'kanbanMCP'},
+        removeIds: {'removed'},
+      );
+      expect(text, isNot(contains('[mcp_servers.removed]')));
+      expect(text, contains('[mcp_servers.kanbanMCP]'));
+      expect(text, contains('url = "${httpServer.url}"'));
     });
   });
 

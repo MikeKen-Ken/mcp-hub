@@ -205,7 +205,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'configure_clients',
     description:
         '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code）。'
-        '写入前会自动从各客户端配置导入 Hub 未登记的 MCP。',
+        '会从各客户端移除 Hub 已删除的 MCP；导入未登记 MCP 请使用 import_from_clients。',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(

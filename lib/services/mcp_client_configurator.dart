@@ -469,6 +469,7 @@ abstract final class McpClientConfigurator {
   static Future<McpConfigureResult> configure(
     AgentPlatformId platform, {
     required List<McpServerEntry> servers,
+    Set<String> removeIds = const {},
   }) async {
     if (!McpPaths.isDesktopSupported) {
       return const McpConfigureResult(
@@ -504,6 +505,7 @@ abstract final class McpClientConfigurator {
         existing,
         servers: servers,
         managedIds: managedIds,
+        removeIds: removeIds,
       );
       await file.writeAsString(next);
       final count = servers.length;
@@ -548,22 +550,26 @@ abstract final class McpClientConfigurator {
     String? existing, {
     required List<McpServerEntry> servers,
     required Set<String> managedIds,
+    Set<String> removeIds = const {},
   }) =>
       switch (format) {
         AgentMcpConfigFormat.cursorJson => McpClientConfig.upsertCursorJson(
             existing,
             servers: servers,
             managedIds: managedIds,
+            removeIds: removeIds,
           ),
         AgentMcpConfigFormat.codexToml => McpClientConfig.upsertCodexToml(
             existing,
             servers: servers,
             managedIds: managedIds,
+            removeIds: removeIds,
           ),
         AgentMcpConfigFormat.openCodeJson => McpClientConfig.upsertOpenCodeJson(
             existing,
             servers: servers,
             managedIds: managedIds,
+            removeIds: removeIds,
             environment: Platform.environment,
           ),
       };

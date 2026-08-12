@@ -49,6 +49,7 @@ abstract final class McpClientConfig {
     String? existing, {
     required List<McpServerEntry> servers,
     Set<String> managedIds = const {},
+    Set<String> removeIds = const {},
   }) {
     Map<String, dynamic> root;
     if (existing == null || existing.trim().isEmpty) {
@@ -70,7 +71,7 @@ abstract final class McpClientConfig {
           )
         : <String, dynamic>{};
 
-    for (final id in managedIds) {
+    for (final id in {...managedIds, ...removeIds}) {
       map.remove(id);
     }
 
@@ -102,9 +103,10 @@ abstract final class McpClientConfig {
     String? existing, {
     required List<McpServerEntry> servers,
     Set<String> managedIds = const {},
+    Set<String> removeIds = const {},
   }) {
     var text = existing ?? '';
-    for (final id in managedIds) {
+    for (final id in {...managedIds, ...removeIds}) {
       text = _removeTomlTable(text, 'mcp_servers.$id');
     }
     text = _ensureCodexRmcpClient(text);
@@ -402,6 +404,7 @@ abstract final class McpClientConfig {
     String? existing, {
     required List<McpServerEntry> servers,
     Set<String> managedIds = const {},
+    Set<String> removeIds = const {},
     Map<String, String> environment = const {},
   }) {
     Map<String, dynamic> root;
@@ -422,7 +425,7 @@ abstract final class McpClientConfig {
 
     _promoteLegacyOpenCodeServers(mcpMap);
 
-    for (final id in managedIds) {
+    for (final id in {...managedIds, ...removeIds}) {
       mcpMap.remove(id);
     }
 

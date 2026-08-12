@@ -560,34 +560,31 @@ class HubController extends ChangeNotifier {
   }
 
   Future<McpConfigureResult> configureClient(AgentPlatformId platform) async {
-    final importMsg = await _importMissingFromClients();
+    final removeIds = webDavSync.tombstones.keys.toSet();
     final result = await McpClientConfigurator.configure(
       platform,
       servers: _servers,
+      removeIds: removeIds,
     );
-    _lastMessage = _joinMessages([importMsg, result.message]);
+    _lastMessage = result.message;
     await refreshClientStatus();
     notifyListeners();
-    return McpConfigureResult(
-      ok: result.ok,
-      message: _lastMessage!,
-      path: result.path,
-    );
+    return result;
   }
 
   Future<McpConfigureResult> configureAllClients() async {
-    final importMsg = await _importMissingFromClients();
+    final removeIds = webDavSync.tombstones.keys.toSet();
     final results = <McpConfigureResult>[];
     for (final platform in AgentPlatforms.mcpConfigurable) {
       results.add(
         await McpClientConfigurator.configure(
           platform.id,
           servers: _servers,
+          removeIds: removeIds,
         ),
       );
     }
-    final configureMsg = results.map((r) => r.message).join('；');
-    final message = _joinMessages([importMsg, configureMsg]);
+    final message = results.map((r) => r.message).join('；');
     final ok = results.every((r) => r.ok);
     _lastMessage = message;
     notifyListeners();
@@ -611,16 +608,6 @@ class HubController extends ChangeNotifier {
     return result.copyWith(message: _lastMessage!);
   }
 
-  Future<String?> _importMissingFromClients() async {
-    final result = await McpClientConfigurator.importMissingServers(
-      hubServers: _servers,
-    );
-    if (!result.ok) return result.message;
-    if (result.imported.isEmpty) return null;
-    await _mergeImportedServers(result.imported);
-    return '已从客户端导入 ${result.importedCount} 个 MCP（${result.imported.map((s) => s.id).join('、')}）';
-  }
-
   Future<void> _mergeImportedServers(List<McpServerEntry> imported) async {
     final existing = {for (final s in _servers) s.id: s};
     final root = McpPaths.serversRoot;
@@ -638,14 +625,6 @@ class HubController extends ChangeNotifier {
     }
     await _persist();
     await _refreshGitManagedFlags();
-  }
-
-  static String _joinMessages(List<String?> parts) {
-    final filtered = [
-      for (final p in parts)
-        if (p != null && p.trim().isNotEmpty) p.trim(),
-    ];
-    return filtered.join('；');
   }
 
   Future<bool> testWebDav(WebDavConfig config) =>

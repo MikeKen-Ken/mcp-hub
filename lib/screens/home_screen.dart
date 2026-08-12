@@ -1049,7 +1049,7 @@ class _ClientConfigCard extends StatelessWidget {
               title: const Text('一键配置客户端'),
               subtitle: Text(
                 supported
-                    ? '写入前自动导入各客户端未登记 MCP，合并写入全部条目'
+                    ? '把 Hub 中的全部 MCP 写入各客户端，并移除 Hub 已删除的条目'
                     : '当前平台不支持写入客户端配置',
               ),
             ),
