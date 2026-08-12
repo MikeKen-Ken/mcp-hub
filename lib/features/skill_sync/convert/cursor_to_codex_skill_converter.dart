@@ -79,9 +79,9 @@ class CursorToCodexSkillConverter {
 
     final skillMdPath = p.join(targetDir, 'SKILL.md');
     final doc = await SkillMdDocument.parseFile(skillMdPath);
-    // 已有 Codex 策略优先；否则用 Cursor `disable-model-invocation` 推导。
-    final allowImplicit = await _readExistingAllowImplicit(targetDir) ??
-        doc.allowImplicitInvocationFromFrontmatter;
+    // 以 Cursor 为准：每次覆盖 Codex 隐式调用开关，不保留旧 yaml。
+    final allowImplicit =
+        doc.allowImplicitInvocationFromFrontmatter ?? true;
     final yaml = buildOpenAiYaml(
       packageName: packageName,
       document: doc,
@@ -130,33 +130,54 @@ class CursorToCodexSkillConverter {
     return buffer.toString();
   }
 
-  static Future<bool?> _readExistingAllowImplicit(String targetDir) async {
-    final yamlFile = File(p.join(targetDir, 'agents', 'openai.yaml'));
-    if (!await yamlFile.exists()) return null;
-    final text = await yamlFile.readAsString();
-    final match = RegExp(
-      r'allow_implicit_invocation\s*:\s*(true|false)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (match == null) return null;
-    return match.group(1)!.toLowerCase() == 'true';
-  }
+  /// Codex 要求界面短描述 25–64 字。
+  static const int shortDescriptionMin = 25;
+  static const int shortDescriptionMax = 64;
+  static final _blockMarker = RegExp(r'^[>|][+-]?$');
 
   static String _shortDescription(String raw) {
-    var text = raw.trim();
-    // 去掉「用户要求…时使用」这类触发说明，保留能力摘要。
-    text = text.replaceFirst(RegExp(r'[。．\.].*用户要求.*$'), '');
-    text = text.replaceFirst(RegExp(r'。用户要求.*$'), '');
-    final sentenceEnd = RegExp(r'[。．\.！!？?]');
-    final match = sentenceEnd.firstMatch(text);
+    final original = raw.trim();
+    if (original.isEmpty || _blockMarker.hasMatch(original)) {
+      return _fitShortDescription('');
+    }
+    var cleaned = original
+        .replaceFirst(RegExp(r'[。．\.].*用户要求.*$'), '')
+        .replaceFirst(RegExp(r'。用户要求.*$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    var first = cleaned;
+    final match = RegExp(r'[。．\.！!？?]').firstMatch(cleaned);
     if (match != null && match.start > 0) {
-      text = text.substring(0, match.start);
+      first = cleaned.substring(0, match.start).trim();
     }
-    text = text.trim();
-    if (text.length > 48) {
-      text = '${text.substring(0, 48).trimRight()}…';
+    return _fitShortDescription(first, fallbacks: [cleaned, original]);
+  }
+
+  static String _fitShortDescription(
+    String preferred, {
+    List<String> fallbacks = const [],
+  }) {
+    for (final candidate in [preferred, ...fallbacks]) {
+      final text = candidate.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (text.isEmpty || _blockMarker.hasMatch(text)) continue;
+      if (text.length > shortDescriptionMax) {
+        return '${text.substring(0, shortDescriptionMax - 1).trimRight()}…';
+      }
+      if (text.length >= shortDescriptionMin) return text;
     }
-    return text.isEmpty ? raw.trim() : text;
+
+    var grown = preferred.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (grown.isEmpty || _blockMarker.hasMatch(grown)) {
+      grown = '技能工作流';
+    }
+    const pad = '。用于相关任务与工作流';
+    while (grown.length < shortDescriptionMin) {
+      grown += pad;
+    }
+    if (grown.length > shortDescriptionMax) {
+      grown = grown.substring(0, shortDescriptionMax);
+    }
+    return grown;
   }
 
   static String _defaultPrompt({

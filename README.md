@@ -67,7 +67,7 @@ Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command �
 | Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，分别写入对应全局 `AGENTS.md` |
 | Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 保留 Markdown 命令 |
 
-界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule 卡片各提供「一键转换」。OpenCode 转换只写入上述 Markdown 文件，不读取、合并或覆盖其余 JSON/JSONC 配置，也不删除目标目录中的其他文件。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。
+界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule 卡片各提供「一键转换」。OpenCode 转换只写入上述 Markdown 文件，不读取、合并或覆盖其余 JSON/JSONC 配置，也不删除目标目录中的其他文件。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。`allow_implicit_invocation` **每次以 Cursor 的 `disable-model-invocation` 为准覆盖**（`true` → 禁止隐式调用；缺省则允许），不保留 Codex 旧值。`short_description` 从 description 生成，长度 25–64。
 
 ## 发布 / 更新
 推送到 `main` 会触发 GitHub Actions（`Push Build`）：

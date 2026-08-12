@@ -28,6 +28,25 @@ description: 根据提交生成日报。用户要求生成日报时使用。
       expect(doc.allowImplicitInvocationFromFrontmatter, isNull);
     });
 
+    test('解析 description: >- 折行，且不把正文里的 name: 当成新键', () {
+      final doc = SkillMdDocument.parse('''
+---
+name: kanban-complete-tasks
+description: >-
+  完成看板最新一张卡：自动区分咨询、实施与返工，提交 Git 后送交人工确认，不推送。
+  支持直接输入项目名或 name:<项目名或id>；无参数时使用看板当前打开的项目。
+disable-model-invocation: true
+---
+
+# 看板：做最新一条
+''');
+      expect(doc.description, contains('完成看板最新一张卡'));
+      expect(doc.description, contains('name:<项目名或id>'));
+      expect(doc.description, isNot(equals('>-')));
+      expect(doc.disableModelInvocation, isTrue);
+      expect(doc.allowImplicitInvocationFromFrontmatter, isFalse);
+    });
+
     test('解析 disable-model-invocation 并推导 Codex 策略', () {
       final disabled = SkillMdDocument.parse('''
 ---
@@ -106,6 +125,14 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
       expect(yaml, contains('display_name: "生成工作日报"'));
       expect(yaml, contains(r'default_prompt: "使用 $daily-report'));
       expect(yaml, contains('allow_implicit_invocation: true'));
+      expect(_shortDescriptionOf(yaml), isNot(equals('>-')));
+      expect(
+        _shortDescriptionOf(yaml).length,
+        inInclusiveRange(
+          CursorToCodexSkillConverter.shortDescriptionMin,
+          CursorToCodexSkillConverter.shortDescriptionMax,
+        ),
+      );
     });
 
     test('首次转换时映射 disable-model-invocation', () async {
@@ -134,7 +161,7 @@ disable-model-invocation: true
       expect(yaml, contains('allow_implicit_invocation: false'));
     });
 
-    test('保留已有 allow_implicit_invocation', () async {
+    test('以 Cursor 为准覆盖已有 allow_implicit_invocation', () async {
       final cursor = Directory(p.join(temp.path, 'cursor2'));
       final codex = Directory(p.join(temp.path, 'codex2'));
       final pack = Directory(p.join(cursor.path, 'demo'));
@@ -163,9 +190,47 @@ policy:
       );
 
       final yaml = await existing.readAsString();
-      // 已有 Codex 策略优先于 Cursor frontmatter。
-      expect(yaml, contains('allow_implicit_invocation: true'));
+      expect(yaml, contains('allow_implicit_invocation: false'));
       expect(yaml, contains('display_name: "演示"'));
+    });
+
+    test('折行 description 生成合法 short_description 且禁止隐式调用', () async {
+      final cursor = Directory(p.join(temp.path, 'cursor-fold'));
+      final codex = Directory(p.join(temp.path, 'codex-fold'));
+      final pack = Directory(p.join(cursor.path, 'kanban-complete-tasks'));
+      await pack.create(recursive: true);
+      await File(p.join(pack.path, 'SKILL.md')).writeAsString('''
+---
+name: kanban-complete-tasks
+description: >-
+  完成看板最新一张卡：自动区分咨询、实施与返工，提交 Git 后送交人工确认，不推送。
+  支持直接输入项目名或 name:<项目名或id>；无参数时使用看板当前打开的项目。
+disable-model-invocation: true
+---
+
+# 看板：做最新一条
+''');
+
+      await const CursorToCodexSkillConverter().convertAll(
+        cursorSkillsDir: cursor.path,
+        codexSkillsDir: codex.path,
+      );
+
+      final yaml = await File(
+        p.join(codex.path, 'kanban-complete-tasks', 'agents', 'openai.yaml'),
+      ).readAsString();
+      final short = _shortDescriptionOf(yaml);
+      expect(short, isNot(equals('>-')));
+      expect(short, contains('完成看板'));
+      expect(
+        short.length,
+        inInclusiveRange(
+          CursorToCodexSkillConverter.shortDescriptionMin,
+          CursorToCodexSkillConverter.shortDescriptionMax,
+        ),
+      );
+      expect(yaml, contains('allow_implicit_invocation: false'));
+      expect(yaml, contains(r'default_prompt: "使用 $kanban-complete-tasks'));
     });
   });
 
@@ -216,4 +281,10 @@ alwaysApply: true
       expect(text, isNot(contains('alwaysApply')));
     });
   });
+}
+
+String _shortDescriptionOf(String yaml) {
+  final match = RegExp(r'short_description:\s*"((?:\\.|[^"\\])*)"').firstMatch(yaml);
+  expect(match, isNotNull, reason: 'openai.yaml 缺少 short_description');
+  return match!.group(1)!.replaceAll(r'\"', '"').replaceAll(r'\\', r'\');
 }

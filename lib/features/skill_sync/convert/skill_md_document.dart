@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// 解析 Agent Skill / Rule 常用的简易 YAML frontmatter（`---` 包裹的 `key: value`）。
+/// 解析 Agent Skill / Rule 的 YAML frontmatter（`---` 包裹）。
+///
+/// 支持普通 `key: value`，以及 `description: >-` 这类块标量。
 class SkillMdDocument {
   const SkillMdDocument({
     required this.frontmatter,
@@ -65,26 +67,143 @@ class SkillMdDocument {
     var body = normalized.substring(end + 4);
     if (body.startsWith('\n')) body = body.substring(1);
 
-    final frontmatter = <String, String>{};
-    for (final line in fmBlock.split('\n')) {
-      final trimmed = line.trimRight();
-      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-      final colon = trimmed.indexOf(':');
-      if (colon <= 0) continue;
-      final key = trimmed.substring(0, colon).trim();
-      var value = trimmed.substring(colon + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.substring(1, value.length - 1);
-      }
-      if (key.isNotEmpty) frontmatter[key] = value;
-    }
-
     return SkillMdDocument(
-      frontmatter: frontmatter,
+      frontmatter: _parseFrontmatter(fmBlock),
       body: body.trim(),
       raw: raw,
     );
+  }
+
+  static final _blockScalar = RegExp(r'^([>|])([+-]?)$');
+
+  /// 解析 frontmatter：支持普通 `key: value` 与 `>` / `|` 块标量（含 `>-`）。
+  static Map<String, String> _parseFrontmatter(String fmBlock) {
+    final lines = fmBlock.split('\n');
+    final result = <String, String>{};
+    var i = 0;
+    while (i < lines.length) {
+      final rawLine = lines[i];
+      final trimmedRight = rawLine.trimRight();
+      final trimmed = trimmedRight.trimLeft();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) {
+        i++;
+        continue;
+      }
+      if (rawLine.startsWith(' ') || rawLine.startsWith('\t')) {
+        i++;
+        continue;
+      }
+      final colon = trimmedRight.indexOf(':');
+      if (colon <= 0) {
+        i++;
+        continue;
+      }
+      final key = trimmedRight.substring(0, colon).trim();
+      if (key.isEmpty) {
+        i++;
+        continue;
+      }
+      final rest = trimmedRight.substring(colon + 1).trim();
+      final block = _blockScalar.firstMatch(rest);
+      if (block != null) {
+        i++;
+        final parsed = _readBlockScalar(
+          lines: lines,
+          start: i,
+          folded: block.group(1) == '>',
+        );
+        result[key] = parsed.text;
+        i = parsed.nextIndex;
+        continue;
+      }
+      result[key] = _unquote(rest);
+      i++;
+    }
+    return result;
+  }
+
+  static ({String text, int nextIndex}) _readBlockScalar({
+    required List<String> lines,
+    required int start,
+    required bool folded,
+  }) {
+    var i = start;
+    final collected = <String>[];
+    while (i < lines.length) {
+      final line = lines[i];
+      if (line.trim().isEmpty) {
+        collected.add(line);
+        i++;
+        continue;
+      }
+      if (line.startsWith(' ') || line.startsWith('\t')) {
+        collected.add(line);
+        i++;
+        continue;
+      }
+      break;
+    }
+
+    while (collected.isNotEmpty && collected.last.trim().isEmpty) {
+      collected.removeLast();
+    }
+
+    var indent = 0;
+    for (final line in collected) {
+      if (line.trim().isEmpty) continue;
+      final ws = line.length - line.trimLeft().length;
+      if (indent == 0 || ws < indent) indent = ws;
+    }
+
+    final contents = [
+      for (final line in collected)
+        if (line.trim().isEmpty)
+          ''
+        else if (line.length >= indent)
+          line.substring(indent)
+        else
+          line.trimLeft(),
+    ];
+
+    if (contents.isEmpty) {
+      return (text: '', nextIndex: i);
+    }
+
+    if (!folded) {
+      return (text: contents.join('\n').trim(), nextIndex: i);
+    }
+
+    final buffer = StringBuffer();
+    var started = false;
+    var pendingBreak = false;
+    for (final part in contents) {
+      if (part.isEmpty) {
+        pendingBreak = true;
+        continue;
+      }
+      if (!started) {
+        buffer.write(part);
+        started = true;
+      } else if (pendingBreak) {
+        buffer
+          ..write('\n\n')
+          ..write(part);
+        pendingBreak = false;
+      } else {
+        buffer
+          ..write(' ')
+          ..write(part);
+      }
+    }
+    return (text: buffer.toString().trim(), nextIndex: i);
+  }
+
+  static String _unquote(String value) {
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      return value.substring(1, value.length - 1);
+    }
+    return value;
   }
 
   static Future<SkillMdDocument> parseFile(String path) async {
