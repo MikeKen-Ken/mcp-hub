@@ -924,11 +924,11 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      '一键转换：从 Cursor Skill 生成 Codex（含 agents/openai.yaml）与 Open Code skills',
+      '一键转换：整包镜像后按格式转换（Codex：openai.yaml；Open Code：SKILL.md frontmatter）',
     AgentResourceKind.rule =>
       '一键转换：从 Cursor rules 生成 Codex / Open Code 的 AGENTS.md',
     AgentResourceKind.command =>
-      '一键转换：从 Cursor commands 写入 Open Code commands/<name>.md（Codex 无对等目录）',
+      '一键转换：从 Cursor commands 镜像写入 Open Code commands/<name>.md（多余命令会删除；Codex 无对等目录）',
   };
 
   bool get _canConvert =>

@@ -63,11 +63,11 @@ Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command �
 
 | 资源 | 源 | 目标 | 转换内容 |
 |------|----|------|----------|
-| Skill | `~/.cursor/skills/` | `~/.codex/skills/` 与 `%USERPROFILE%\\.config\\opencode\\skills/` | Codex 生成 `agents/openai.yaml`；OpenCode 写入 `skills/<name>/SKILL.md` |
-| Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，分别写入对应全局 `AGENTS.md` |
-| Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 保留 Markdown 命令 |
+| Skill | `~/.cursor/skills/` | `~/.codex/skills/` 与 `%USERPROFILE%\\.config\\opencode\\skills/` | 整包镜像后按目标格式转换：Codex 生成 `agents/openai.yaml`；OpenCode 改写 `SKILL.md` frontmatter（`disable-model-invocation` → `metadata.opencode/autoinvoke`） |
+| Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，整文件覆盖对应全局 `AGENTS.md` |
+| Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 按 Cursor 镜像写入并删除多余命令文件 |
 
-界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule 卡片各提供「一键转换」。OpenCode 转换只写入上述 Markdown 文件，不读取、合并或覆盖其余 JSON/JSONC 配置，也不删除目标目录中的其他文件。Skill 的 `SKILL.md`（`name` / `description`）两边通用；Codex 额外需要的是包内 `agents/openai.yaml`（`display_name`、`short_description`、`default_prompt`、`allow_implicit_invocation`）。`allow_implicit_invocation` **每次以 Cursor 的 `disable-model-invocation` 为准覆盖**（`true` → 禁止隐式调用；缺省则允许），不保留 Codex 旧值。`short_description` 从 description 生成，长度 25–64。
+界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule 卡片各提供「一键转换」。转换产物以本机 Cursor 为准全量对齐附件后，再写成各客户端格式：Skill 整包镜像（多余文件与多余包会删除），Codex 写入 `agents/openai.yaml`，OpenCode 改写 `SKILL.md` 为其所识别的 frontmatter；Rule 整文件覆盖 `AGENTS.md`；OpenCode Command 删除 Cursor 中已不存在的命令文件。OpenCode **不读取、合并或覆盖** 其余 JSON/JSONC 配置。Skill 的正文与 `scripts/`、`references/` 两边共用。Codex `allow_implicit_invocation` **每次以 Cursor 的 `disable-model-invocation` 为准覆盖**（`true` → 禁止隐式调用；缺省则允许），不保留 Codex 旧值。`short_description` 从 description 生成，长度 25–64。OpenCode 将同一字段映射为 `metadata.opencode/autoinvoke`。
 
 ## 发布 / 更新
 推送到 `main` 会触发 GitHub Actions（`Push Build`）：

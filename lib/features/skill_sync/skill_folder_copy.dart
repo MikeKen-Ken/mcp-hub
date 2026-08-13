@@ -75,10 +75,13 @@ class SkillFolderCopy {
   /// 把 [sourceDir] 全量镜像到 [targetDir]：覆盖同名，并删除目标中多余项。
   ///
   /// 默认跳过点开头条目（不复制、也不删除目标侧的 `.xxx`）。
+  /// [preserveNames] 仅作用于本层：目标侧这些名字即使源中没有也不删除
+  ///（例如 Codex Skill 包内的 `agents/`）。
   Future<SkillFolderCopyResult> mirrorContents({
     required String sourceDir,
     required String targetDir,
     bool skipDotEntries = true,
+    Set<String> preserveNames = const {},
   }) async {
     final source = Directory(sourceDir);
     if (!await source.exists()) {
@@ -94,6 +97,7 @@ class SkillFolderCopy {
       sourceDir: source.path,
       targetDir: targetDir,
       skipDotEntries: skipDotEntries,
+      preserveNames: preserveNames,
     );
     return SkillFolderCopyResult(
       copiedFiles: copied.copiedFiles,
@@ -108,6 +112,7 @@ class SkillFolderCopy {
     required String sourceDir,
     required String targetDir,
     required bool skipDotEntries,
+    Set<String> preserveNames = const {},
   }) async {
     final target = Directory(targetDir);
     if (!await target.exists()) return 0;
@@ -126,6 +131,7 @@ class SkillFolderCopy {
     await for (final entity in target.list(followLinks: false)) {
       final name = p.basename(entity.path);
       if (skipDotEntries && name.startsWith('.')) continue;
+      if (preserveNames.contains(name)) continue;
 
       if (!sourceNames.contains(name)) {
         await entity.delete(recursive: true);
@@ -142,6 +148,37 @@ class SkillFolderCopy {
       }
     }
     return deleted;
+  }
+
+  /// 删除目标侧已不在源中的 Skill 包（以及根下其它非点开头多余项）。
+  Future<int> removeStaleSkillPackages({
+    required String sourceSkillsDir,
+    required String targetSkillsDir,
+  }) async {
+    final targetRoot = Directory(targetSkillsDir);
+    if (!await targetRoot.exists()) return 0;
+
+    final keepNames = <String>{};
+    final sourceRoot = Directory(sourceSkillsDir);
+    if (await sourceRoot.exists()) {
+      await for (final entity in sourceRoot.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final name = p.basename(entity.path);
+        if (name.startsWith('.')) continue;
+        final skillMd = File(p.join(entity.path, 'SKILL.md'));
+        if (await skillMd.exists()) keepNames.add(name);
+      }
+    }
+
+    var removed = 0;
+    await for (final entity in targetRoot.list(followLinks: false)) {
+      final name = p.basename(entity.path);
+      if (name.startsWith('.')) continue;
+      if (keepNames.contains(name)) continue;
+      await entity.delete(recursive: true);
+      removed += 1;
+    }
+    return removed;
   }
 
   /// 统计目录下 Skill 包数量（含 `SKILL.md` 的直接子目录）。

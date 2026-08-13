@@ -135,6 +135,31 @@ void main() {
       expect(await copy.countSkillPackages(target.path), 1);
     });
 
+    test('preserveNames 不会删除本层保留名', () async {
+      final source = Directory(p.join(temp.path, 'src'));
+      final target = Directory(p.join(temp.path, 'dst'));
+      await source.create(recursive: true);
+      await File(p.join(source.path, 'SKILL.md')).writeAsString('# keep\n');
+      await Directory(p.join(target.path, 'agents')).create(recursive: true);
+      await File(
+        p.join(target.path, 'agents', 'openai.yaml'),
+      ).writeAsString('old');
+      await File(p.join(target.path, 'gone.txt')).writeAsString('x');
+
+      await const SkillFolderCopy().mirrorContents(
+        sourceDir: source.path,
+        targetDir: target.path,
+        preserveNames: const {'agents'},
+      );
+
+      expect(await File(p.join(target.path, 'SKILL.md')).exists(), isTrue);
+      expect(
+        await File(p.join(target.path, 'agents', 'openai.yaml')).exists(),
+        isTrue,
+      );
+      expect(await File(p.join(target.path, 'gone.txt')).exists(), isFalse);
+    });
+
     test('源目录不存在时抛错', () async {
       final copy = const SkillFolderCopy();
       expect(

@@ -106,6 +106,7 @@ class _NoopFolderCopy extends SkillFolderCopy {
     required String sourceDir,
     required String targetDir,
     bool skipDotEntries = true,
+    Set<String> preserveNames = const {},
   }) async {
     return SkillFolderCopyResult(
       copiedFiles: 0,
@@ -122,12 +123,16 @@ class _RecordingOpenCodeConverter extends CursorToOpenCodeConverter {
   final void Function() onCall;
 
   @override
-  Future<int> convertSkills({
+  Future<OpenCodeSkillsConvertResult> convertSkills({
     required String sourceDir,
     required String targetDir,
   }) async {
     onCall();
-    return 2;
+    return const OpenCodeSkillsConvertResult(
+      packages: 2,
+      copiedFiles: 2,
+      deletedEntries: 0,
+    );
   }
 
   @override

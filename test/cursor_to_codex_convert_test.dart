@@ -103,13 +103,13 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
       await File(p.join(pack.path, 'notes.txt')).writeAsString('x');
 
       final converter = const CursorToCodexSkillConverter();
-      final items = await converter.convertAll(
+      final converted = await converter.convertAll(
         cursorSkillsDir: cursor.path,
         codexSkillsDir: codex.path,
       );
 
-      expect(items, hasLength(1));
-      expect(items.single.packageName, 'daily-report');
+      expect(converted.items, hasLength(1));
+      expect(converted.items.single.packageName, 'daily-report');
       expect(
         await File(p.join(codex.path, 'daily-report', 'SKILL.md')).exists(),
         isTrue,
@@ -132,6 +132,49 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
           CursorToCodexSkillConverter.shortDescriptionMin,
           CursorToCodexSkillConverter.shortDescriptionMax,
         ),
+      );
+    });
+
+    test('包内多余文件与多余包会按 Cursor 删除', () async {
+      final cursor = Directory(p.join(temp.path, 'cursor-mirror'));
+      final codex = Directory(p.join(temp.path, 'codex-mirror'));
+      final pack = Directory(p.join(cursor.path, 'daily-report'));
+      await Directory(p.join(pack.path, 'scripts')).create(recursive: true);
+      await File(p.join(pack.path, 'SKILL.md')).writeAsString('# 日报\n');
+      await File(p.join(pack.path, 'scripts', 'report.py')).writeAsString('x');
+
+      final stalePack = Directory(p.join(codex.path, 'old-skill'));
+      await stalePack.create(recursive: true);
+      await File(p.join(stalePack.path, 'SKILL.md')).writeAsString('# old\n');
+      final live = Directory(p.join(codex.path, 'daily-report', 'scripts'));
+      await live.create(recursive: true);
+      await File(p.join(live.path, 'report.py')).writeAsString('old');
+      await File(p.join(live.path, 'gone.py')).writeAsString('stale');
+
+      final converted = await const CursorToCodexSkillConverter().convertAll(
+        cursorSkillsDir: cursor.path,
+        codexSkillsDir: codex.path,
+      );
+
+      expect(converted.removedPackages, 1);
+      expect(await Directory(stalePack.path).exists(), isFalse);
+      expect(
+        await File(
+          p.join(codex.path, 'daily-report', 'scripts', 'report.py'),
+        ).exists(),
+        isTrue,
+      );
+      expect(
+        await File(
+          p.join(codex.path, 'daily-report', 'scripts', 'gone.py'),
+        ).exists(),
+        isFalse,
+      );
+      expect(
+        await File(
+          p.join(codex.path, 'daily-report', 'agents', 'openai.yaml'),
+        ).exists(),
+        isTrue,
       );
     });
 

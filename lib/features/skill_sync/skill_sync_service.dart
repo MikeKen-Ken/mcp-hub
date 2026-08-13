@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../../common/agent_platforms.dart';
 import '../../services/mcp_paths.dart';
@@ -330,8 +329,9 @@ class SkillSyncService extends ChangeNotifier {
 
   /// 以本机 Cursor 目录为源，转换单个资源到指定目标。
   ///
-  /// 不依赖 WebDAV，也不读取缓存。Skill → skills + openai.yaml；Rule → `AGENTS.md`。
-  /// Command 暂无 Codex 对等目录。
+  /// 不依赖 WebDAV，也不读取缓存。Skill 整包镜像后再按目标格式转换
+  ///（Codex：`agents/openai.yaml`；OpenCode：`SKILL.md` frontmatter）；
+  /// Rule → `AGENTS.md`。Command 暂无 Codex 对等目录。
   Future<SkillSyncResult> convertFromCursor(
     AgentResourceKind resource, {
     SkillTarget target = SkillTarget.codex,
@@ -509,28 +509,110 @@ class SkillSyncService extends ChangeNotifier {
       throw StateError('当前平台不支持 Cursor 转换');
     }
 
-    final count = switch (resource) {
-      AgentResourceKind.skill => await _openCodeConverter.convertSkills(
-        sourceDir: cursorSkillsPath,
-        targetDir: openCodeSkillsPath,
+    return switch (resource) {
+      AgentResourceKind.skill => await _convertOpenCodeSkills(
+        cursorSkillsPath,
+        openCodeSkillsPath,
       ),
-      AgentResourceKind.rule => await _openCodeConverter.convertRules(
-        sourceDir: cursorRulesPath,
-        targetPath: openCodeRulesPath,
+      AgentResourceKind.rule => await _convertOpenCodeRules(
+        cursorRulesPath,
+        openCodeRulesPath,
       ),
-      AgentResourceKind.command => await _openCodeConverter.convertCommands(
-        sourceDir: cursorCommandsPath,
-        targetDir: openCodeCommandsPath,
+      AgentResourceKind.command => await _convertOpenCodeCommands(
+        cursorCommandsPath,
+        openCodeCommandsPath,
       ),
     };
+  }
+
+  Future<SkillSyncResult> _convertOpenCodeSkills(
+    String source,
+    String target,
+  ) async {
+    final sourceDir = Directory(source);
+    if (!await sourceDir.exists()) {
+      return SkillSyncResult(
+        ok: true,
+        target: SkillTarget.openCode,
+        message: 'Cursor Skill 目录不存在，跳过转换 → $source',
+      );
+    }
+    final skills = await _openCodeConverter.convertSkills(
+      sourceDir: source,
+      targetDir: target,
+    );
+    final removeHint = skills.removedPackages == 0
+        ? ''
+        : '，并删除多余 ${skills.removedPackages} 个包';
+    final extraHint = skills.deletedEntries == 0
+        ? ''
+        : '，包内删除 ${skills.deletedEntries} 项';
+    return SkillSyncResult(
+      ok: true,
+      target: SkillTarget.openCode,
+      deployedFiles: skills.copiedFiles,
+      packageCount: skills.packages,
+      message: skills.packages == 0
+          ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
+          : '已从 Cursor 批量转换 ${skills.packages} 个 Skill 到 Open Code'
+                '（复制 ${skills.copiedFiles} 个文件$extraHint$removeHint）→ $target',
+    );
+  }
+
+  Future<SkillSyncResult> _convertOpenCodeRules(
+    String source,
+    String target,
+  ) async {
+    final sourceDir = Directory(source);
+    if (!await sourceDir.exists()) {
+      return SkillSyncResult(
+        ok: true,
+        target: SkillTarget.openCode,
+        message: 'Cursor Rule 目录不存在，跳过转换 → $source',
+      );
+    }
+    final count = await _openCodeConverter.convertRules(
+      sourceDir: source,
+      targetPath: target,
+    );
     return SkillSyncResult(
       ok: true,
       target: SkillTarget.openCode,
       deployedFiles: count,
-      packageCount: resource == AgentResourceKind.skill ? count : 0,
+      packageCount: 0,
+      message: count == 0
+          ? 'Cursor Rule 目录为空，已生成空的 AGENTS.md → $target'
+          : '已从 Cursor 批量转换 $count 条 Rule 到 Open Code AGENTS.md → $target',
+    );
+  }
+
+  Future<SkillSyncResult> _convertOpenCodeCommands(
+    String source,
+    String target,
+  ) async {
+    final sourceDir = Directory(source);
+    if (!await sourceDir.exists()) {
+      return SkillSyncResult(
+        ok: true,
+        target: SkillTarget.openCode,
+        message: 'Cursor Command 目录不存在，跳过转换 → $source',
+      );
+    }
+    final commands = await _openCodeConverter.convertCommands(
+      sourceDir: source,
+      targetDir: target,
+    );
+    final deleteHint = commands.deleted == 0
+        ? ''
+        : '，并删除多余 ${commands.deleted} 项';
+    return SkillSyncResult(
+      ok: true,
+      target: SkillTarget.openCode,
+      deployedFiles: commands.written,
+      packageCount: 0,
       message:
-          '已从 Cursor 转换 Open Code ${resource.label}：$count 个 → '
-          '${McpPaths.openCodeConfigDirectory}',
+          '已从 Cursor 转换 Open Code Command：${commands.written} 个'
+          '$deleteHint → $target',
     );
   }
 
@@ -548,61 +630,32 @@ class SkillSyncService extends ChangeNotifier {
         message: 'Cursor Skill 目录不存在，跳过转换 → $source',
       );
     }
-    final items = await _skillConverter.convertAll(
+    final converted = await _skillConverter.convertAll(
       cursorSkillsDir: source,
       codexSkillsDir: target,
     );
-    final removed = await _removeStaleSkillPackages(
-      sourceSkillsDir: source,
-      targetSkillsDir: target,
+    final copied = converted.items.fold<int>(
+      0,
+      (sum, e) => sum + e.copiedFiles,
     );
-    final copied = items.fold<int>(0, (sum, e) => sum + e.copiedFiles);
+    final deletedInPacks = converted.items.fold<int>(
+      0,
+      (sum, e) => sum + e.deletedEntries,
+    );
+    final removed = converted.removedPackages;
     final removeHint = removed == 0 ? '' : '，并删除多余 $removed 个包';
+    final extraHint = deletedInPacks == 0 ? '' : '，包内删除 $deletedInPacks 项';
     return SkillSyncResult(
       ok: true,
       target: SkillTarget.codex,
       deployedFiles: copied,
-      packageCount: items.length,
-      message: items.isEmpty
+      packageCount: converted.items.length,
+      message: converted.items.isEmpty
           ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
-          : '已从 Cursor 批量转换 ${items.length} 个 Skill 到 Codex'
-                '（复制 $copied 个文件，并写入 agents/openai.yaml$removeHint）→ $target',
+          : '已从 Cursor 批量转换 ${converted.items.length} 个 Skill 到 Codex'
+                '（复制 $copied 个文件，并写入 agents/openai.yaml'
+                '$extraHint$removeHint）→ $target',
     );
-  }
-
-  /// 删除目标侧已不在源目录中的 Skill 包（跳过点开头目录）。
-  Future<int> _removeStaleSkillPackages({
-    required String sourceSkillsDir,
-    required String targetSkillsDir,
-  }) async {
-    final targetRoot = Directory(targetSkillsDir);
-    if (!await targetRoot.exists()) return 0;
-
-    final keepNames = <String>{};
-    final sourceRoot = Directory(sourceSkillsDir);
-    if (await sourceRoot.exists()) {
-      await for (final entity in sourceRoot.list(followLinks: false)) {
-        if (entity is! Directory) continue;
-        final name = p.basename(entity.path);
-        if (name.startsWith('.')) continue;
-        final skillMd = File(p.join(entity.path, 'SKILL.md'));
-        if (await skillMd.exists()) keepNames.add(name);
-      }
-    }
-
-    var removed = 0;
-    await for (final entity in targetRoot.list(followLinks: false)) {
-      if (entity is! Directory) continue;
-      final name = p.basename(entity.path);
-      if (name.startsWith('.')) continue;
-      final skillMd = File(p.join(entity.path, 'SKILL.md'));
-      if (!await skillMd.exists()) continue;
-      if (keepNames.contains(name)) continue;
-      await entity.delete(recursive: true);
-      removed += 1;
-      debugPrint('已删除 Codex 多余 Skill 包：$name');
-    }
-    return removed;
   }
 
   Future<SkillSyncResult> _convertRulesFromCursor() async {

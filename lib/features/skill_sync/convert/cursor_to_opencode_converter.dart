@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../skill_folder_copy.dart';
+import 'opencode_skill_md.dart';
 import 'skill_md_document.dart';
 
 /// Cursor 资源转换到 OpenCode 全局 Markdown 目录的结果。
@@ -19,12 +21,45 @@ class OpenCodeConvertResult {
   int get total => skills + rules + commands;
 }
 
+/// Skill 包镜像转换结果。
+class OpenCodeSkillsConvertResult {
+  const OpenCodeSkillsConvertResult({
+    required this.packages,
+    required this.copiedFiles,
+    required this.deletedEntries,
+    this.removedPackages = 0,
+  });
+
+  final int packages;
+  final int copiedFiles;
+  final int deletedEntries;
+  final int removedPackages;
+}
+
+/// Command 文件转换结果。
+class OpenCodeCommandsConvertResult {
+  const OpenCodeCommandsConvertResult({
+    required this.written,
+    this.deleted = 0,
+  });
+
+  final int written;
+  final int deleted;
+}
+
 /// 将 Cursor 的 Skill、Rule、Command 写入 OpenCode 的全局目录。
 ///
-/// 只写 Markdown 目标文件，不读取或修改 OpenCode 的 JSON/JSONC 配置，
-/// 也不删除目标目录中未由本次转换产生的文件。
+/// 不读取或修改 OpenCode 的 JSON/JSONC 配置。
+/// Skill 先整包镜像，再把 `SKILL.md` 转成 OpenCode frontmatter；
+/// Rule 去掉 `.mdc` frontmatter 写入 `AGENTS.md`；Command 写成 `.md`。
 class CursorToOpenCodeConverter {
-  const CursorToOpenCodeConverter();
+  const CursorToOpenCodeConverter({
+    this.folderCopy = const SkillFolderCopy(),
+    this.skillMd = const OpenCodeSkillMd(),
+  });
+
+  final SkillFolderCopy folderCopy;
+  final OpenCodeSkillMd skillMd;
 
   Future<OpenCodeConvertResult> convertAll({
     required String cursorSkillsDir,
@@ -47,32 +82,65 @@ class CursorToOpenCodeConverter {
       targetDir: openCodeCommandsDir,
     );
     return OpenCodeConvertResult(
-      skills: skills,
+      skills: skills.packages,
       rules: rules,
-      commands: commands,
+      commands: commands.written,
     );
   }
 
-  Future<int> convertSkills({
+  /// 整包镜像 Skill，再改写 `SKILL.md` 为 OpenCode 格式，并删除目标多余包。
+  Future<OpenCodeSkillsConvertResult> convertSkills({
     required String sourceDir,
     required String targetDir,
   }) async {
     final source = Directory(sourceDir);
-    if (!await source.exists()) return 0;
-    var count = 0;
+    if (!await source.exists()) {
+      return const OpenCodeSkillsConvertResult(
+        packages: 0,
+        copiedFiles: 0,
+        deletedEntries: 0,
+      );
+    }
+    await Directory(targetDir).create(recursive: true);
+
+    var packages = 0;
+    var copiedFiles = 0;
+    var deletedEntries = 0;
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
       }
-      final input = File(p.join(entity.path, 'SKILL.md'));
-      if (!await input.exists()) continue;
+      final skillMd = File(p.join(entity.path, 'SKILL.md'));
+      if (!await skillMd.exists()) continue;
       final name = p.basename(entity.path);
-      final output = File(p.join(targetDir, name, 'SKILL.md'));
-      await output.parent.create(recursive: true);
-      await output.writeAsString(await input.readAsString());
-      count++;
+      final packageDir = p.join(targetDir, name);
+      final mirrored = await folderCopy.mirrorContents(
+        sourceDir: entity.path,
+        targetDir: packageDir,
+      );
+      await _rewriteOpenCodeSkillMd(packageDir);
+      packages += 1;
+      copiedFiles += mirrored.copiedFiles;
+      deletedEntries += mirrored.deletedEntries;
     }
-    return count;
+
+    final removedPackages = await folderCopy.removeStaleSkillPackages(
+      sourceSkillsDir: sourceDir,
+      targetSkillsDir: targetDir,
+    );
+    return OpenCodeSkillsConvertResult(
+      packages: packages,
+      copiedFiles: copiedFiles,
+      deletedEntries: deletedEntries,
+      removedPackages: removedPackages,
+    );
+  }
+
+  Future<void> _rewriteOpenCodeSkillMd(String packageDir) async {
+    final skillMdFile = File(p.join(packageDir, 'SKILL.md'));
+    if (!await skillMdFile.exists()) return;
+    final doc = await SkillMdDocument.parseFile(skillMdFile.path);
+    await skillMdFile.writeAsString(skillMd.convert(doc));
   }
 
   Future<int> convertRules({
@@ -80,7 +148,11 @@ class CursorToOpenCodeConverter {
     required String targetPath,
   }) async {
     final source = Directory(sourceDir);
-    if (!await source.exists()) return 0;
+    final output = File(targetPath);
+    await output.parent.create(recursive: true);
+    if (!await source.exists()) {
+      return 0;
+    }
     final files = <File>[];
     await for (final entity in source.list(
       recursive: true,
@@ -98,20 +170,26 @@ class CursorToOpenCodeConverter {
       if (body.isEmpty) continue;
       sections.add(body);
     }
-    if (sections.isEmpty) return 0;
-    final output = File(targetPath);
-    await output.parent.create(recursive: true);
+    if (sections.isEmpty) {
+      await output.writeAsString('');
+      return 0;
+    }
     await output.writeAsString('${sections.join('\n\n')}\n');
     return sections.length;
   }
 
-  Future<int> convertCommands({
+  /// 写入转换后的 Command，并删除目标侧多余的 `.md` / `.mdc`。
+  Future<OpenCodeCommandsConvertResult> convertCommands({
     required String sourceDir,
     required String targetDir,
   }) async {
     final source = Directory(sourceDir);
-    if (!await source.exists()) return 0;
+    if (!await source.exists()) {
+      return const OpenCodeCommandsConvertResult(written: 0);
+    }
+    await Directory(targetDir).create(recursive: true);
     var count = 0;
+    final written = <String>{};
     await for (final entity in source.list(
       recursive: true,
       followLinks: false,
@@ -120,11 +198,38 @@ class CursorToOpenCodeConverter {
       final extension = p.extension(entity.path).toLowerCase();
       if (extension != '.md' && extension != '.mdc') continue;
       final name = p.basenameWithoutExtension(entity.path);
-      final output = File(p.join(targetDir, '$name.md'));
+      final outputName = '$name.md';
+      final output = File(p.join(targetDir, outputName));
       await output.parent.create(recursive: true);
       await output.writeAsString(await entity.readAsString());
+      written.add(outputName);
       count++;
     }
-    return count;
+    final deleted = await _deleteExtraCommandFiles(
+      targetDir: targetDir,
+      keepNames: written,
+    );
+    return OpenCodeCommandsConvertResult(written: count, deleted: deleted);
+  }
+
+  Future<int> _deleteExtraCommandFiles({
+    required String targetDir,
+    required Set<String> keepNames,
+  }) async {
+    final target = Directory(targetDir);
+    if (!await target.exists()) return 0;
+    var deleted = 0;
+    await for (final entity in target.list(followLinks: false)) {
+      final name = p.basename(entity.path);
+      if (name.startsWith('.')) continue;
+      if (keepNames.contains(name)) continue;
+      if (entity is File) {
+        final ext = p.extension(name).toLowerCase();
+        if (ext != '.md' && ext != '.mdc') continue;
+      }
+      await entity.delete(recursive: true);
+      deleted += 1;
+    }
+    return deleted;
   }
 }

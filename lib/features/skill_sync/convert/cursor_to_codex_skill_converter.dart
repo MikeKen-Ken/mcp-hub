@@ -11,13 +11,26 @@ class CodexSkillConvertItem {
     required this.packageName,
     required this.targetDir,
     required this.copiedFiles,
+    required this.deletedEntries,
     required this.wroteOpenAiYaml,
   });
 
   final String packageName;
   final String targetDir;
   final int copiedFiles;
+  final int deletedEntries;
   final bool wroteOpenAiYaml;
+}
+
+/// 批量转换结果（含删除的多余包）。
+class CodexSkillConvertAllResult {
+  const CodexSkillConvertAllResult({
+    required this.items,
+    this.removedPackages = 0,
+  });
+
+  final List<CodexSkillConvertItem> items;
+  final int removedPackages;
 }
 
 /// 批量把 Cursor Skill 目录转换成 Codex 可接受的包格式并复制过去。
@@ -32,7 +45,10 @@ class CursorToCodexSkillConverter {
   final SkillFolderCopy folderCopy;
 
   /// 批量转换 [cursorSkillsDir] 下全部 Skill 包到 [codexSkillsDir]。
-  Future<List<CodexSkillConvertItem>> convertAll({
+  ///
+  /// 每个包全量镜像（含 `scripts/`、`references/` 等），再写入 `agents/openai.yaml`；
+  /// 目标侧已不在 Cursor 中的包与多余文件会删除。
+  Future<CodexSkillConvertAllResult> convertAll({
     required String cursorSkillsDir,
     required String codexSkillsDir,
   }) async {
@@ -61,7 +77,14 @@ class CursorToCodexSkillConverter {
     }
 
     items.sort((a, b) => a.packageName.compareTo(b.packageName));
-    return items;
+    final removedPackages = await folderCopy.removeStaleSkillPackages(
+      sourceSkillsDir: cursorSkillsDir,
+      targetSkillsDir: codexSkillsDir,
+    );
+    return CodexSkillConvertAllResult(
+      items: items,
+      removedPackages: removedPackages,
+    );
   }
 
   /// 转换单个 Skill 包。
@@ -72,9 +95,10 @@ class CursorToCodexSkillConverter {
     final packageName = skillPackageNameFromPath(cursorSkillDir);
     final targetDir = p.join(codexSkillsDir, packageName);
 
-    final copy = await folderCopy.copyContents(
+    final copy = await folderCopy.mirrorContents(
       sourceDir: cursorSkillDir,
       targetDir: targetDir,
+      preserveNames: const {'agents'},
     );
 
     final skillMdPath = p.join(targetDir, 'SKILL.md');
@@ -96,6 +120,7 @@ class CursorToCodexSkillConverter {
       packageName: packageName,
       targetDir: targetDir,
       copiedFiles: copy.copiedFiles,
+      deletedEntries: copy.deletedEntries,
       wroteOpenAiYaml: true,
     );
   }
