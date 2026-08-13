@@ -25,10 +25,7 @@ class McpRepoService {
   }) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(
-        ok: false,
-        message: '当前平台不支持本地仓库管理',
-      );
+      return const McpRepoCloneResult(ok: false, message: '当前平台不支持本地仓库管理');
     }
 
     final target = p.join(root, id);
@@ -42,11 +39,11 @@ class McpRepoService {
     }
 
     await Directory(root).create(recursive: true);
-    final result = await Process.run(
-      'git',
-      ['clone', repoUrl, target],
-      runInShell: true,
-    );
+    final result = await Process.run('git', [
+      'clone',
+      repoUrl,
+      target,
+    ], runInShell: true);
     if (result.exitCode != 0) {
       final err = (result.stderr as String).trim();
       return McpRepoCloneResult(
@@ -86,10 +83,7 @@ class McpRepoService {
   Future<McpRepoCloneResult> pull({required String localPath}) async {
     final dir = Directory(localPath);
     if (!await dir.exists()) {
-      return McpRepoCloneResult(
-        ok: false,
-        message: '本地目录不存在：$localPath',
-      );
+      return McpRepoCloneResult(ok: false, message: '本地目录不存在：$localPath');
     }
     if (!await isHubGitCheckout(localPath)) {
       return McpRepoCloneResult(
@@ -113,14 +107,23 @@ class McpRepoService {
         localPath: localPath,
         message: detail.isEmpty
             ? 'git pull 失败 (code ${result.exitCode})'
-            : detail,
+            : 'git pull 失败：$detail',
       );
     }
     final out = (result.stdout as String).trim();
+    if (out.isEmpty ||
+        out.contains('Already up to date') ||
+        out.contains('Already up-to-date')) {
+      return McpRepoCloneResult(
+        ok: true,
+        localPath: localPath,
+        message: '已是最新',
+      );
+    }
     return McpRepoCloneResult(
       ok: true,
       localPath: localPath,
-      message: out.isEmpty ? '已是最新' : out,
+      message: '已更新；$out',
     );
   }
 
@@ -155,10 +158,7 @@ class McpRepoService {
   Future<McpRepoCloneResult> deleteLocal({required String localPath}) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(
-        ok: false,
-        message: '当前平台不支持本地仓库管理',
-      );
+      return const McpRepoCloneResult(ok: false, message: '当前平台不支持本地仓库管理');
     }
 
     if (!_isUnderServersRoot(localPath)) {

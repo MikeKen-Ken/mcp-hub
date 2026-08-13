@@ -46,6 +46,7 @@ class SkillWebDavFolderSync {
     required Client client,
     required String remoteDir,
     required String localDir,
+    void Function(int done, int total)? onProgress,
   }) async {
     final local = io.Directory(localDir);
     if (await local.exists()) {
@@ -59,7 +60,7 @@ class SkillWebDavFolderSync {
       // 远端可能已存在
     }
 
-    return _downloadDir(client, remoteDir, localDir);
+    return _downloadDir(client, remoteDir, localDir, onProgress: onProgress);
   }
 
   /// 将本地目录全量镜像到远端（覆盖同名，并删除远端多余项）。
@@ -67,13 +68,19 @@ class SkillWebDavFolderSync {
     required Client client,
     required String remoteDir,
     required String localDir,
+    void Function(int done, int total)? onProgress,
   }) async {
     final local = io.Directory(localDir);
     if (!await local.exists()) {
       await local.create(recursive: true);
     }
     await client.mkdirAll(remoteDir);
-    final uploaded = await _uploadDir(client, localDir, remoteDir);
+    final uploaded = await _uploadDir(
+      client,
+      localDir,
+      remoteDir,
+      onProgress: onProgress,
+    );
     await _deleteRemoteExtras(client, localDir, remoteDir);
     return uploaded;
   }
@@ -131,11 +138,7 @@ class SkillWebDavFolderSync {
       }
 
       if (entry.isDir == true) {
-        await _deleteRemoteExtras(
-          client,
-          p.join(localDir, name),
-          remotePath,
-        );
+        await _deleteRemoteExtras(client, p.join(localDir, name), remotePath);
       }
     }
   }
@@ -143,23 +146,42 @@ class SkillWebDavFolderSync {
   Future<int> _downloadDir(
     Client client,
     String remoteDir,
-    String localDir,
-  ) async {
-    List<File> entries;
+    String localDir, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final files = <({String remote, String local})>[];
     try {
-      entries = await client.readDir(remoteDir);
+      await _collectRemoteFiles(client, remoteDir, localDir, files);
     } catch (error) {
       final message = error.toString().toLowerCase();
       if (message.contains('404') ||
           message.contains('not found') ||
           message.contains('no such file')) {
         debugPrint('Skill 远端目录不存在，已创建空缓存：$remoteDir');
+        onProgress?.call(0, 0);
         return 0;
       }
       rethrow;
     }
 
-    var files = 0;
+    onProgress?.call(0, files.length);
+    var done = 0;
+    for (final file in files) {
+      await io.File(file.local).parent.create(recursive: true);
+      await client.read2File(file.remote, file.local);
+      done += 1;
+      onProgress?.call(done, files.length);
+    }
+    return files.length;
+  }
+
+  Future<void> _collectRemoteFiles(
+    Client client,
+    String remoteDir,
+    String localDir,
+    List<({String remote, String local})> files,
+  ) async {
+    final entries = await client.readDir(remoteDir);
     for (final entry in entries) {
       final name = entry.name;
       if (name == null || name.isEmpty || name == '.' || name == '..') {
@@ -172,39 +194,52 @@ class SkillWebDavFolderSync {
 
       if (entry.isDir == true) {
         await io.Directory(localPath).create(recursive: true);
-        files += await _downloadDir(client, remotePath, localPath);
+        await _collectRemoteFiles(client, remotePath, localPath, files);
       } else {
-        await io.File(localPath).parent.create(recursive: true);
-        await client.read2File(remotePath, localPath);
-        files += 1;
+        files.add((remote: remotePath, local: localPath));
       }
     }
-    return files;
   }
 
   Future<int> _uploadDir(
     Client client,
     String localDir,
+    String remoteDir, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final files = <({String local, String remote})>[];
+    await _collectLocalFiles(localDir, remoteDir, files);
+    onProgress?.call(0, files.length);
+    var done = 0;
+    for (final file in files) {
+      final parent = p.dirname(file.remote).replaceAll(r'\', '/');
+      if (parent.isNotEmpty && parent != '.' && parent != '/') {
+        await client.mkdirAll(parent);
+      }
+      await client.writeFromFile(file.local, file.remote);
+      done += 1;
+      onProgress?.call(done, files.length);
+    }
+    return files.length;
+  }
+
+  Future<void> _collectLocalFiles(
+    String localDir,
     String remoteDir,
+    List<({String local, String remote})> files,
   ) async {
     final dir = io.Directory(localDir);
-    if (!await dir.exists()) return 0;
-
-    var files = 0;
+    if (!await dir.exists()) return;
     await for (final entity in dir.list(followLinks: false)) {
       final name = p.basename(entity.path);
       if (name.startsWith('.')) continue;
-
       final remotePath = _joinRemote(remoteDir, name);
       if (entity is io.Directory) {
-        await client.mkdirAll(remotePath);
-        files += await _uploadDir(client, entity.path, remotePath);
+        await _collectLocalFiles(entity.path, remotePath, files);
       } else if (entity is io.File) {
-        await client.writeFromFile(entity.path, remotePath);
-        files += 1;
+        files.add((local: entity.path, remote: remotePath));
       }
     }
-    return files;
   }
 
   String _joinRemote(String dir, String name) {

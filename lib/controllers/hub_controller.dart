@@ -36,8 +36,8 @@ class HubController extends ChangeNotifier {
     bool initiallyLoading = true,
   }) : _catalogStore = catalogStore ?? McpCatalogStore(),
        _repoService = repoService ?? McpRepoService(),
-       _processManager = processManager ??
-           McpProcessManager(onStateChanged: () {}),
+       _processManager =
+           processManager ?? McpProcessManager(onStateChanged: () {}),
        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
        _loading = initiallyLoading {
     if (processManager == null) {
@@ -125,8 +125,7 @@ class HubController extends ChangeNotifier {
     );
   }
 
-  bool get hasUpdatableServers =>
-      _servers.any((s) => isGitManaged(s.id));
+  bool get hasUpdatableServers => _servers.any((s) => isGitManaged(s.id));
 
   void _onProcessStateChanged() => notifyListeners();
 
@@ -290,9 +289,9 @@ class HubController extends ChangeNotifier {
     for (final platform in AgentPlatforms.mcpConfigurable) {
       _clientAlignReports[platform.id] =
           await McpClientConfigurator.diagnoseAll(
-        platform.id,
-        servers: _servers,
-      );
+            platform.id,
+            servers: _servers,
+          );
     }
     notifyListeners();
   }
@@ -445,8 +444,7 @@ class HubController extends ChangeNotifier {
     if (!await _repoService.isHubGitCheckout(path)) {
       throw StateError('不是 Hub 管理的 Git 仓库，无法 git 更新');
     }
-    final wasRunning =
-        processState(id).status == McpProcessStatus.running;
+    final wasRunning = processState(id).status == McpProcessStatus.running;
     final result = await _repoService.updateCheckout(localPath: path);
     _lastMessage = '${server.name}: ${result.message}';
     notifyListeners();
@@ -471,19 +469,26 @@ class HubController extends ChangeNotifier {
       return;
     }
     final lines = <String>[];
+    var failCount = 0;
     for (final server in withPath) {
       final wasRunning =
           processState(server.id).status == McpProcessStatus.running;
-      final result =
-          await _repoService.updateCheckout(localPath: server.localPath!);
+      final result = await _repoService.updateCheckout(
+        localPath: server.localPath!,
+      );
       var line = '${server.name}: ${result.message}';
-      if (result.ok && wasRunning && server.shouldAutoStartByHub) {
+      if (!result.ok) {
+        failCount++;
+      } else if (wasRunning && server.shouldAutoStartByHub) {
         await _processManager.start(server);
         line = '$line（已重启进程）';
       }
       lines.add(line);
     }
-    _lastMessage = lines.join('\n');
+    final summary = failCount == 0
+        ? '已更新 ${lines.length} 个仓库'
+        : '部分失败（${lines.length - failCount} 成功 / $failCount 失败）';
+    _lastMessage = '$summary\n${lines.join('\n')}';
     notifyListeners();
   }
 
@@ -603,7 +608,8 @@ class HubController extends ChangeNotifier {
       return result;
     }
     await _mergeImportedServers(result.imported);
-    _lastMessage = '已导入 ${result.importedCount} 个 MCP：${result.imported.map((s) => s.id).join('、')}';
+    _lastMessage =
+        '已导入 ${result.importedCount} 个 MCP：${result.imported.map((s) => s.id).join('、')}';
     notifyListeners();
     return result.copyWith(message: _lastMessage!);
   }
@@ -656,7 +662,7 @@ class HubController extends ChangeNotifier {
     await webDavSync.syncNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? 'WebDAV 下载/上传完成'
-        : (webDavSync.lastError ?? '下载/上传失败');
+        : '下载/上传失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
 
@@ -666,7 +672,7 @@ class HubController extends ChangeNotifier {
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? '已从 WebDAV 下载 MCP 清单'
-        : (webDavSync.lastError ?? '下载失败');
+        : '下载失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
 
@@ -676,7 +682,7 @@ class HubController extends ChangeNotifier {
     await webDavSync.pushNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? '已上传 MCP 清单到 WebDAV'
-        : (webDavSync.lastError ?? '上传失败');
+        : '上传失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
 

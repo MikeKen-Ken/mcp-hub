@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../controllers/hub_controller.dart';
+import '../../widgets/hub_notice/hub_notice.dart';
 import '../../services/directory_opener.dart';
 import '../../services/mcp_paths.dart';
 import 'auto_config_backup_service.dart';
@@ -40,9 +41,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       _busy = false;
       _lastPath = result.path;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   Future<void> _import() async {
@@ -87,9 +86,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       _busy = false;
       _lastPath = result.path;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   Future<void> _openLast() async {
@@ -99,9 +96,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       await DirectoryOpener.open(p.dirname(path));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
+      showHubNotice(context, message: '打开目录失败：$error', ok: false);
     }
   }
 
@@ -176,9 +171,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final result = await hub.runAutoBackupNow();
     if (!mounted) return;
     setState(() => _lastPath = result.path);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   Future<void> _openAutoBackupDirectory() async {
@@ -191,9 +184,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       await DirectoryOpener.open(path);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
+      showHubNotice(context, message: '打开目录失败：$error', ok: false);
     }
   }
 

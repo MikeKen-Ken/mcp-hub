@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../widgets/hub_notice/hub_notice.dart';
 import '../../widgets/settings_section.dart';
 import 'app_update_service.dart';
 import 'github_release_models.dart';
@@ -87,9 +88,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
       );
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已调起安装；完成后请按提示完成更新')),
-      );
+      showHubNotice(context, message: '已调起安装；完成后请按提示完成更新', ok: true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -127,8 +126,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                   leading: const Icon(Icons.new_releases_outlined),
                   title: Text('远端 ${check!.release!.versionLabel}'),
                   subtitle: Text(
-                    check.message ??
-                        (check.updateAvailable ? '有可用更新' : '已是最新'),
+                    check.message ?? (check.updateAvailable ? '有可用更新' : '已是最新'),
                   ),
                 ),
               if (_progress != null) ...[
@@ -137,9 +135,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      LinearProgressIndicator(
-                        value: _progress,
-                      ),
+                      LinearProgressIndicator(value: _progress),
                       const SizedBox(height: 6),
                       Text(
                         '下载 ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
@@ -154,7 +150,9 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   child: Text(
                     _error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               Padding(
@@ -170,7 +168,8 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
-                        onPressed: _busy ||
+                        onPressed:
+                            _busy ||
                                 check == null ||
                                 !check.updateAvailable ||
                                 !_service.isSupported

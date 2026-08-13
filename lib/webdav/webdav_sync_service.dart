@@ -5,6 +5,7 @@ import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
 
+import '../common/sync_progress.dart';
 import 'catalog_merge.dart';
 import 'catalog_sync_base_store.dart';
 import 'catalog_sync_document.dart';
@@ -29,6 +30,8 @@ class WebDavSyncService extends ChangeNotifier {
   CatalogSyncStatus status = CatalogSyncStatus.idle;
   String? lastError;
   DateTime? lastSyncedAt;
+  SyncProgress? progress;
+  String? lastAction;
 
   Timer? _debounceTimer;
   Timer? _pollTimer;
@@ -119,31 +122,35 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
+    lastAction = '上传';
+    progress = const SyncProgress(label: '正在上传 MCP 清单', current: 0, total: 2);
     _setStatus(CatalogSyncStatus.syncing);
     try {
       final local = await _loadLocalDocument();
       final doc = CatalogSyncDocument(
         servers: local.servers,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
-        tombstones: {
-          ...local.tombstones,
-          ..._tombstones,
-        },
+        tombstones: {...local.tombstones, ..._tombstones},
       );
       final path = _catalogPath(config);
       await _ensureParentDir(client, path);
+      progress = const SyncProgress(label: '正在写入远端', current: 1, total: 2);
+      notifyListeners();
       await _writeJson(client, path, doc.toJson());
       await _baseStore.save(doc);
       _tombstones = Map<String, int>.from(doc.tombstones);
       lastSyncedAt = DateTime.now();
       lastError = null;
+      progress = const SyncProgress(label: '上传完成', current: 2, total: 2);
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV push failed: $error');
     } finally {
+      progress = null;
       _inFlight = false;
+      notifyListeners();
     }
   }
 
@@ -155,6 +162,8 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
+    lastAction = '下载';
+    progress = const SyncProgress(label: '正在下载 MCP 清单', current: 0, total: 3);
     _setStatus(CatalogSyncStatus.syncing);
     try {
       final path = _catalogPath(config);
@@ -162,6 +171,8 @@ class WebDavSyncService extends ChangeNotifier {
       final remote = remoteJson == null
           ? CatalogSyncDocument.empty
           : CatalogSyncDocument.fromJson(remoteJson);
+      progress = const SyncProgress(label: '正在合并清单', current: 1, total: 3);
+      notifyListeners();
       final localRaw = await _loadLocalDocument();
       final local = localRaw.copyWith(
         tombstones: {...localRaw.tombstones, ..._tombstones},
@@ -172,6 +183,8 @@ class WebDavSyncService extends ChangeNotifier {
         remote: remote,
         base: base,
       );
+      progress = const SyncProgress(label: '正在写入本机', current: 2, total: 3);
+      notifyListeners();
       await _applyDocument(merged);
       _tombstones = Map<String, int>.from(merged.tombstones);
       // If merge differs from remote, push back.
@@ -181,13 +194,16 @@ class WebDavSyncService extends ChangeNotifier {
       await _baseStore.save(merged);
       lastSyncedAt = DateTime.now();
       lastError = null;
+      progress = const SyncProgress(label: '下载完成', current: 3, total: 3);
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV pull failed: $error');
     } finally {
+      progress = null;
       _inFlight = false;
+      notifyListeners();
     }
   }
 
@@ -207,11 +223,7 @@ class WebDavSyncService extends ChangeNotifier {
     }
   }
 
-  Future<void> _writeJson(
-    Client client,
-    String path,
-    Object data,
-  ) async {
+  Future<void> _writeJson(Client client, String path, Object data) async {
     final bytes = Uint8List.fromList(
       utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
     );

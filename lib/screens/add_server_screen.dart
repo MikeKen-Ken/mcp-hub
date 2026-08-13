@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controllers/hub_controller.dart';
+import '../widgets/hub_notice/hub_notice.dart';
 import '../models/mcp_transport.dart';
 import '../services/repo_name.dart';
 
@@ -75,9 +76,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$error')));
+      showHubNotice(context, message: '$error', ok: false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

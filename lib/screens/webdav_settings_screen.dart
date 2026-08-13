@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../controllers/hub_controller.dart';
+import '../widgets/hub_notice/hub_notice.dart';
 import '../features/config_backup/config_backup.dart';
 import '../webdav/webdav_config.dart';
 
@@ -95,16 +96,14 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
     await context.read<HubController>().saveWebDavConfig(_buildConfig());
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          !_enabled
-              ? '已保存'
-              : (!_autoSync && !_autoPull)
-              ? '已保存；仅手动下载/上传'
-              : '已保存',
-        ),
-      ),
+    showHubNotice(
+      context,
+      message: !_enabled
+          ? '已保存'
+          : (!_autoSync && !_autoPull)
+          ? '已保存；仅手动下载/上传'
+          : '已保存',
+      ok: true,
     );
     Navigator.pop(context);
   }

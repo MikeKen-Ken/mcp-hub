@@ -14,6 +14,8 @@ import '../services/directory_opener.dart';
 import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
+import '../widgets/hub_notice/hub_notice.dart';
+import '../widgets/op_status/op_status.dart';
 import '../widgets/status_badge.dart';
 import 'add_server_screen.dart';
 import 'webdav_settings_screen.dart';
@@ -103,9 +105,7 @@ class _AgentConfigHomeSection extends StatelessWidget {
   ) async {
     final result = await action();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   @override
@@ -239,9 +239,7 @@ class LocalMcpScreen extends StatelessWidget {
                 ? () async {
                     await hub.updateAllServers();
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(hub.lastMessage ?? '更新完成')),
-                    );
+                    showHubNotice(context, message: hub.lastMessage ?? '更新完成');
                   }
                 : null,
             icon: const Icon(Icons.system_update_alt),
@@ -279,9 +277,7 @@ class AgentConfigSyncScreen extends StatelessWidget {
   ) async {
     final result = await action();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   @override
@@ -422,12 +418,26 @@ class _AgentSyncOverview extends StatelessWidget {
                 const _FlowLabel(index: 3, label: '从 Cursor 上传'),
                 const SizedBox(width: 4),
                 _SyncStatusPill(
-                  icon: Icons.history_outlined,
+                  icon: hub.skillSync.status == SkillSyncStatus.error
+                      ? Icons.error_outline
+                      : Icons.history_outlined,
                   label: status,
                   active: hub.skillSync.status == SkillSyncStatus.success,
+                  error: hub.skillSync.status == SkillSyncStatus.error,
                 ),
               ],
             ),
+            if (hub.skillSync.status == SkillSyncStatus.syncing ||
+                (hub.skillSync.lastError != null &&
+                    hub.skillSync.status == SkillSyncStatus.error))
+              OpStatusBar(
+                progress: hub.skillSync.status == SkillSyncStatus.syncing
+                    ? hub.skillSync.progress
+                    : null,
+                errorMessage: hub.skillSync.status == SkillSyncStatus.error
+                    ? hub.skillSync.lastError
+                    : null,
+              ),
           ],
         ),
       ),
@@ -475,29 +485,38 @@ class _SyncStatusPill extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.active,
+    this.error = false,
   });
 
   final IconData icon;
   final String label;
   final bool active;
+  final bool error;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final bg = error
+        ? scheme.errorContainer
+        : active
+        ? scheme.secondaryContainer
+        : scheme.surfaceContainerHighest;
+    final fg = error ? scheme.onErrorContainer : null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: active
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest,
+        color: bg,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16),
+          Icon(icon, size: 16, color: fg),
           const SizedBox(width: 6),
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg),
+          ),
         ],
       ),
     );
@@ -570,6 +589,12 @@ class _BulkResourceSyncCard extends StatelessWidget {
                 ),
               ],
             ),
+            OpStatusBar(
+              progress: busy && hub.skillSync.lastResource == null
+                  ? hub.skillSync.progress
+                  : null,
+              errorMessage: busy ? null : hub.skillSync.failureFor(null),
+            ),
             const Divider(height: 24),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
@@ -606,11 +631,13 @@ class _McpResourceSyncCard extends StatelessWidget {
     BuildContext context,
     Future<void> Function() action,
   ) async {
-    await action();
+    final result = await action();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
+    showHubNotice(
       context,
-    ).showSnackBar(SnackBar(content: Text(hub.lastMessage ?? '完成')));
+      message: hub.lastMessage ?? '完成',
+      ok: hub.lastMessage?.contains('失败') == true ? false : null,
+    );
   }
 
   @override
@@ -673,7 +700,13 @@ class _McpResourceSyncCard extends StatelessWidget {
                             context,
                           );
                           if (!confirmed || !context.mounted) return;
-                          await _run(context, hub.configureAllClients);
+                          final result = await hub.configureAllClients();
+                          if (!context.mounted) return;
+                          showHubNotice(
+                            context,
+                            message: result.message,
+                            ok: result.ok,
+                          );
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
                   label: const Text('写入客户端'),
@@ -686,6 +719,10 @@ class _McpResourceSyncCard extends StatelessWidget {
                   label: const Text('上传'),
                 ),
               ],
+            ),
+            OpStatusBar(
+              progress: busy ? hub.webDavSync.progress : null,
+              errorMessage: busy ? null : hub.webDavSync.lastError,
             ),
             const Divider(height: 24),
             FilledButton.tonalIcon(
@@ -754,9 +791,7 @@ class _ResourceSyncCard extends StatelessWidget {
   ) async {
     final result = await action();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showHubNotice(context, message: result.message, ok: result.ok);
   }
 
   @override
@@ -765,12 +800,18 @@ class _ResourceSyncCard extends StatelessWidget {
     final webDavReady =
         hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
     final busy = hub.skillSync.status == SkillSyncStatus.syncing;
-    final statusText = switch (hub.skillSync.status) {
-      SkillSyncStatus.idle => '空闲',
-      SkillSyncStatus.syncing => '下载/上传中…',
-      SkillSyncStatus.success => '成功',
-      SkillSyncStatus.error => '失败',
-    };
+    final ownError = hub.skillSync.failureFor(resource);
+    final thisBusy = busy && hub.skillSync.lastResource == resource;
+    final statusText = thisBusy
+        ? '进行中'
+        : ownError != null
+        ? '上次失败'
+        : switch (hub.skillSync.status) {
+            SkillSyncStatus.idle => '空闲',
+            SkillSyncStatus.syncing => '空闲',
+            SkillSyncStatus.success => '成功',
+            SkillSyncStatus.error => '空闲',
+          };
     final when = hub.skillSync.lastSyncedAt == null
         ? '尚未下载/上传'
         : '上次：${hub.skillSync.lastSyncedAt!.toLocal()}';
@@ -875,6 +916,12 @@ class _ResourceSyncCard extends StatelessWidget {
                     label: const Text('一键转换'),
                   ),
               ],
+            ),
+            OpStatusBar(
+              progress: busy && hub.skillSync.lastResource == resource
+                  ? hub.skillSync.progress
+                  : null,
+              errorMessage: busy ? null : hub.skillSync.failureFor(resource),
             ),
             const Divider(height: 24),
             ExpansionTile(
@@ -1032,9 +1079,11 @@ class _ClientConfigCard extends StatelessWidget {
                   : () async {
                       final result = await hub.configureAllClients();
                       if (!context.mounted) return;
-                      ScaffoldMessenger.of(
+                      showHubNotice(
                         context,
-                      ).showSnackBar(SnackBar(content: Text(result.message)));
+                        message: result.message,
+                        ok: result.ok,
+                      );
                     },
               icon: const Icon(Icons.flash_on_outlined),
               label: Text(configureAllLabel),
@@ -1046,9 +1095,11 @@ class _ClientConfigCard extends StatelessWidget {
                   : () async {
                       final result = await hub.importMissingFromClients();
                       if (!context.mounted) return;
-                      ScaffoldMessenger.of(
+                      showHubNotice(
                         context,
-                      ).showSnackBar(SnackBar(content: Text(result.message)));
+                        message: result.message,
+                        ok: result.ok,
+                      );
                     },
               icon: const Icon(Icons.download_outlined),
               label: const Text('从客户端导入未登记 MCP'),
@@ -1107,9 +1158,7 @@ class _DirectoryPathRow extends StatelessWidget {
       await DirectoryOpener.open(directoryPath);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('打开目录失败：$error')));
+      showHubNotice(context, message: '打开目录失败：$error', ok: false);
     }
   }
 
@@ -1260,14 +1309,14 @@ class _ServerTile extends StatelessWidget {
                         try {
                           await hub.updateServer(server.id);
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(hub.lastMessage ?? '已更新')),
+                          showHubNotice(
+                            context,
+                            message: hub.lastMessage ?? '已更新',
+                            ok: true,
                           );
                         } catch (error) {
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text('$error')));
+                          showHubNotice(context, message: '$error', ok: false);
                         }
                       },
                       icon: const Icon(Icons.cloud_download_outlined),
@@ -1299,14 +1348,18 @@ class _ServerTile extends StatelessWidget {
                           try {
                             await hub.removeServer(server.id);
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(hub.lastMessage ?? '已移除')),
+                            showHubNotice(
+                              context,
+                              message: hub.lastMessage ?? '已移除',
+                              ok: true,
                             );
                           } catch (error) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(
+                            showHubNotice(
                               context,
-                            ).showSnackBar(SnackBar(content: Text('$error')));
+                              message: '$error',
+                              ok: false,
+                            );
                           }
                         }
                       },

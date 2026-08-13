@@ -65,10 +65,7 @@ void main() {
       expect(result.ok, isTrue);
       expect(folderSync.pushCount, 1);
       expect(folderSync.pushedLocalDir, McpPaths.cursorSkillsPath);
-      expect(
-        folderSync.pushedLocalDir,
-        isNot(McpPaths.cursorSkillsCachePath),
-      );
+      expect(folderSync.pushedLocalDir, isNot(McpPaths.cursorSkillsCachePath));
       expect(folderSync.pushedRemoteDir, '/AgentHub/skills/cursor');
       expect(result.message, contains('正式目录'));
     });
@@ -169,6 +166,7 @@ class _RecordingFolderSync extends SkillWebDavFolderSync {
     required Client client,
     required String remoteDir,
     required String localDir,
+    void Function(int done, int total)? onProgress,
   }) async {
     pushedLocalDir = localDir;
     pushedRemoteDir = remoteDir;

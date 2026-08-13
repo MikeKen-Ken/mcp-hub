@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../common/agent_platforms.dart';
+import '../../common/sync_progress.dart';
 import '../../services/mcp_paths.dart';
 import '../../webdav/webdav_config.dart';
 import 'agent_resource_kind.dart';
@@ -69,6 +70,10 @@ class SkillSyncService extends ChangeNotifier {
   DateTime? lastSyncedAt;
   SkillTarget? lastTarget;
   AgentResourceKind? lastResource;
+  SyncProgress? progress;
+  String? bulkFailure;
+  final Map<AgentResourceKind, String> resourceFailures = {};
+  DateTime? _progressStamp;
   static const _codexNotOnWebDavMessage =
       'WebDAV 仅下载/上传 Cursor 目录；Codex / Open Code 由本机从 Cursor 转换生成，'
       '请使用「一键转换」或先将缓存「应用到 Cursor」';
@@ -122,7 +127,12 @@ class SkillSyncService extends ChangeNotifier {
         message: _codexNotOnWebDavMessage,
       );
     }
-    return _run(resource, target, () => _doSyncOne(resource, target));
+    return _run(
+      resource,
+      target,
+      () => _doSyncOne(resource, target),
+      activity: '下载',
+    );
   }
 
   /// 从 WebDAV 下载 Cursor 到本机缓存（不覆盖正式目录）。
@@ -145,10 +155,12 @@ class SkillSyncService extends ChangeNotifier {
           packageCount += one.packageCount;
           parts.add(one.message);
           if (!one.ok) allOk = false;
+          _rememberResourceOutcome(resource, one.ok, one.message);
         } catch (error) {
           allOk = false;
           parts.add('${target.label}：失败（$error）');
           debugPrint('${resource.label} 下载 ${target.label} 失败: $error');
+          _rememberResourceOutcome(resource, false, '$error');
         }
       }
       return SkillSyncResult(
@@ -157,7 +169,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.join('；'),
       );
-    });
+    }, activity: '下载');
   }
 
   /// 把本机 Cursor 正式目录全量镜像上传到 WebDAV（不经缓存）。
@@ -176,7 +188,12 @@ class SkillSyncService extends ChangeNotifier {
         message: _codexNotOnWebDavMessage,
       );
     }
-    return _run(resource, target, () => _doPushOne(resource, target));
+    return _run(
+      resource,
+      target,
+      () => _doPushOne(resource, target),
+      activity: '上传',
+    );
   }
 
   /// 把该资源的本机 Cursor 目录上传到 WebDAV（一次忙状态）。
@@ -211,7 +228,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.join('；'),
       );
-    });
+    }, activity: '上传');
   }
 
   /// 一次性从 WebDAV 下载全部 Agent 资源到本机缓存（仅 Cursor，不覆盖正式目录）。
@@ -229,10 +246,12 @@ class SkillSyncService extends ChangeNotifier {
             packageCount += one.packageCount;
             parts.add(one.message);
             if (!one.ok) allOk = false;
+            _rememberResourceOutcome(resource, one.ok, one.message);
           } catch (error) {
             allOk = false;
             parts.add('${resource.label}/${target.label}：失败（$error）');
             debugPrint('整体下载 ${resource.label} ${target.label} 失败: $error');
+            _rememberResourceOutcome(resource, false, '$error');
           }
         }
       }
@@ -242,7 +261,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可下载的资源' : parts.join('；'),
       );
-    });
+    }, activity: '下载');
   }
 
   /// 一次性把全部 Agent 资源的本机 Cursor 正式目录直接上传到 WebDAV（不经缓存）。
@@ -260,10 +279,12 @@ class SkillSyncService extends ChangeNotifier {
             packageCount += one.packageCount;
             parts.add(one.message);
             if (!one.ok) allOk = false;
+            _rememberResourceOutcome(resource, one.ok, one.message);
           } catch (error) {
             allOk = false;
             parts.add('${resource.label}/${target.label}：失败（$error）');
             debugPrint('整体上传 ${resource.label} ${target.label} 失败: $error');
+            _rememberResourceOutcome(resource, false, '$error');
           }
         }
       }
@@ -273,7 +294,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可上传的资源' : parts.join('；'),
       );
-    });
+    }, activity: '上传');
   }
 
   /// 仅把本机 Skill 缓存全量镜像到客户端正式目录（不访问 WebDAV）。
@@ -293,7 +314,12 @@ class SkillSyncService extends ChangeNotifier {
         message: _codexNotOnWebDavMessage,
       );
     }
-    return _run(resource, target, () => _doApplyOne(resource, target));
+    return _run(
+      resource,
+      target,
+      () => _doApplyOne(resource, target),
+      activity: '应用',
+    );
   }
 
   /// 把全部资源的 Cursor 缓存全量镜像到正式目录（不自动转换）。
@@ -311,10 +337,12 @@ class SkillSyncService extends ChangeNotifier {
             packageCount += one.packageCount;
             parts.add(one.message);
             if (!one.ok) allOk = false;
+            _rememberResourceOutcome(resource, one.ok, one.message);
           } catch (error) {
             allOk = false;
             parts.add('${resource.label}/${target.label}：失败（$error）');
             debugPrint('整体覆盖 ${resource.label} ${target.label} 失败: $error');
+            _rememberResourceOutcome(resource, false, '$error');
           }
         }
       }
@@ -324,7 +352,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可覆盖的资源' : parts.join('；'),
       );
-    });
+    }, activity: '应用');
   }
 
   /// 以本机 Cursor 目录为源，转换单个资源到指定目标。
@@ -355,7 +383,7 @@ class SkillSyncService extends ChangeNotifier {
           message: 'Command 暂无 Codex 对等目录，无法一键转换',
         ),
       };
-    });
+    }, activity: '转换');
   }
 
   /// 以本机 Cursor 正式目录为源，转换单个资源到全部可转换目标（不碰缓存）。
@@ -416,7 +444,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.join('；'),
       );
-    });
+    }, activity: '转换');
   }
 
   /// 一键转换全部可转换资源（Skill + Rule + Command → Codex / Open Code）。
@@ -480,7 +508,7 @@ class SkillSyncService extends ChangeNotifier {
         packageCount: packageCount,
         message: parts.isEmpty ? '没有可转换的资源' : parts.join('；'),
       );
-    });
+    }, activity: '转换');
   }
 
   SkillSyncResult _unsupportedTarget(SkillTarget target) => SkillSyncResult(
@@ -714,6 +742,8 @@ class SkillSyncService extends ChangeNotifier {
       client: client,
       remoteDir: remote,
       localDir: cachePath,
+      onProgress: (done, total) =>
+          _reportProgress('正在下载 ${resource.label}', done, total),
     );
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(cachePath)
@@ -795,6 +825,8 @@ class SkillSyncService extends ChangeNotifier {
       client: client,
       remoteDir: remote,
       localDir: deployPath,
+      onProgress: (done, total) =>
+          _reportProgress('正在上传 ${resource.label}', done, total),
     );
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(deployPath)
@@ -814,8 +846,9 @@ class SkillSyncService extends ChangeNotifier {
   Future<SkillSyncResult> _run(
     AgentResourceKind? resource,
     SkillTarget? target,
-    Future<SkillSyncResult> Function() action,
-  ) async {
+    Future<SkillSyncResult> Function() action, {
+    String activity = '同步',
+  }) async {
     if (status == SkillSyncStatus.syncing) {
       return const SkillSyncResult(ok: false, message: '配置下载/上传进行中，请稍候');
     }
@@ -823,6 +856,7 @@ class SkillSyncService extends ChangeNotifier {
     lastTarget = target;
     lastResource = resource;
     lastError = null;
+    progress = SyncProgress(label: '正在$activity ${resource?.label ?? '全部资源'}');
     notifyListeners();
     try {
       final result = await action();
@@ -830,15 +864,56 @@ class SkillSyncService extends ChangeNotifier {
       lastSyncedAt = DateTime.now();
       lastError = result.ok ? null : result.message;
       status = result.ok ? SkillSyncStatus.success : SkillSyncStatus.error;
+      _rememberOutcome(resource, result.ok, result.message);
+      progress = null;
       notifyListeners();
       return result;
     } catch (error) {
       lastError = '$error';
       lastMessage = lastError;
       status = SkillSyncStatus.error;
+      _rememberOutcome(resource, false, lastError!);
+      progress = null;
       debugPrint('Skill 下载/上传失败: $error');
       notifyListeners();
       return SkillSyncResult(ok: false, target: target, message: lastError!);
+    }
+  }
+
+  String? failureFor(AgentResourceKind? resource) {
+    if (resource == null) return bulkFailure;
+    return resourceFailures[resource];
+  }
+
+  void _rememberOutcome(AgentResourceKind? resource, bool ok, String message) {
+    if (resource == null) {
+      bulkFailure = ok ? null : message;
+      return;
+    }
+    _rememberResourceOutcome(resource, ok, message);
+  }
+
+  void _rememberResourceOutcome(
+    AgentResourceKind resource,
+    bool ok,
+    String message,
+  ) {
+    if (ok) {
+      resourceFailures.remove(resource);
+    } else {
+      resourceFailures[resource] = message;
+    }
+  }
+
+  void _reportProgress(String label, int done, int total) {
+    progress = SyncProgress(label: label, current: done, total: total);
+    final now = DateTime.now();
+    if (done == 0 ||
+        done == total ||
+        _progressStamp == null ||
+        now.difference(_progressStamp!) >= const Duration(milliseconds: 100)) {
+      _progressStamp = now;
+      notifyListeners();
     }
   }
 }
