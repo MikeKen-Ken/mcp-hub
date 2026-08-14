@@ -154,13 +154,37 @@ class AutoConfigBackupService extends ChangeNotifier {
     }
   }
 
+  /// 在当前选中的自动备份目录清理过期文件。
+  Future<ConfigBackupResult> cleanupNow() async {
+    final directoryPath = effectiveDirectory;
+    if (directoryPath == null || directoryPath.trim().isEmpty) {
+      return const ConfigBackupResult(ok: false, message: '当前平台没有可用的自动备份目录');
+    }
+    try {
+      final deleted = await cleanupExpiredBackups(directoryPath);
+      if (deleted == 0) {
+        return ConfigBackupResult(
+          ok: true,
+          message: '当前目录没有超过 ${settings.retentionDays} 天的自动备份',
+          path: directoryPath,
+        );
+      }
+      return ConfigBackupResult(
+        ok: true,
+        message: '已在当前目录清理 $deleted 个超过 ${settings.retentionDays} 天的自动备份',
+        path: directoryPath,
+        fileCount: deleted,
+      );
+    } catch (error) {
+      return ConfigBackupResult(ok: false, message: '清理自动备份失败：$error');
+    }
+  }
+
   /// 只清理本功能生成且超过保留期的 zip，不影响用户手动导出的文件。
   Future<int> cleanupExpiredBackups(String directoryPath) async {
     final directory = Directory(directoryPath);
     if (!await directory.exists()) return 0;
-    final cutoff = _now().subtract(
-      const Duration(days: AutoBackupSettings.retentionDays),
-    );
+    final cutoff = _now().subtract(Duration(days: settings.retentionDays));
     var deleted = 0;
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;

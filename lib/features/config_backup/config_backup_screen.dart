@@ -166,11 +166,58 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     );
   }
 
+  Future<void> _editAutoBackupRetention() async {
+    final hub = context.read<HubController>();
+    final controller = TextEditingController(
+      text: '${hub.autoConfigBackup.settings.retentionDays}',
+    );
+    final days = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('自动备份保留天数'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '天',
+            helperText: '只清理当前目录里的自动备份 zip，最短 1 天，默认 14 天',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              Navigator.pop(ctx, value);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (days == null || !mounted) return;
+    await hub.saveAutoBackupSettings(
+      hub.autoConfigBackup.settings.copyWith(retentionDays: days),
+    );
+  }
+
   Future<void> _runAutoBackupNow() async {
     final hub = context.read<HubController>();
     final result = await hub.runAutoBackupNow();
     if (!mounted) return;
     setState(() => _lastPath = result.path);
+    showHubNotice(context, message: result.message, ok: result.ok);
+  }
+
+  Future<void> _cleanupExpiredAutoBackups() async {
+    final hub = context.read<HubController>();
+    final result = await hub.cleanupExpiredAutoBackups();
+    if (!mounted) return;
     showHubNotice(context, message: result.message, ok: result.ok);
   }
 
@@ -277,7 +324,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                     title: const Text('自动备份'),
                     subtitle: Text(
                       automatic.settings.enabled
-                          ? '每 ${automatic.settings.intervalMinutes} 分钟备份一次，自动文件保留 7 天'
+                          ? '每 ${automatic.settings.intervalMinutes} 分钟备份一次，自动文件保留 ${automatic.settings.retentionDays} 天'
                           : '关闭时不会在后台生成备份',
                     ),
                     value: automatic.settings.enabled,
@@ -292,6 +339,16 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                     subtitle: Text('${automatic.settings.intervalMinutes} 分钟'),
                     trailing: const Icon(Icons.edit_outlined),
                     onTap: supported ? _editAutoBackupInterval : null,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.auto_delete_outlined),
+                    title: const Text('保留天数'),
+                    subtitle: Text(
+                      '${automatic.settings.retentionDays} 天（只清理当前目录中的自动备份）',
+                    ),
+                    trailing: const Icon(Icons.edit_outlined),
+                    onTap: supported ? _editAutoBackupRetention : null,
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -326,6 +383,16 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                               : _runAutoBackupNow,
                           icon: const Icon(Icons.backup_outlined),
                           label: const Text('立即备份'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: supported
+                              ? _cleanupExpiredAutoBackups
+                              : null,
+                          icon: const Icon(Icons.cleaning_services_outlined),
+                          label: const Text('清理过期'),
                         ),
                       ),
                       const SizedBox(width: 8),

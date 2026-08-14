@@ -887,6 +887,13 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
+  Future<ConfigBackupResult> cleanupExpiredAutoBackups() async {
+    final result = await autoConfigBackup.cleanupNow();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
   /// 用备份清单替换非内置 MCP，并按本机 servers 根目录重写 localPath。
   Future<void> _applyImportedServers(List<McpServerEntry> imported) async {
     final hubIndex = _servers.indexWhere(

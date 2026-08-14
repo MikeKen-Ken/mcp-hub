@@ -8,21 +8,25 @@ class AutoBackupSettings {
     this.enabled = true,
     this.directory,
     this.intervalMinutes = defaultIntervalMinutes,
+    this.retentionDays = defaultRetentionDays,
   });
 
   static const defaultIntervalMinutes = 10;
   static const minIntervalMinutes = 1;
-  static const retentionDays = 7;
+  static const defaultRetentionDays = 14;
+  static const minRetentionDays = 1;
 
   final bool enabled;
   final String? directory;
   final int intervalMinutes;
+  final int retentionDays;
 
   AutoBackupSettings copyWith({
     bool? enabled,
     String? directory,
     bool clearDirectory = false,
     int? intervalMinutes,
+    int? retentionDays,
   }) {
     return AutoBackupSettings(
       enabled: enabled ?? this.enabled,
@@ -30,6 +34,7 @@ class AutoBackupSettings {
       intervalMinutes: _normalizeInterval(
         intervalMinutes ?? this.intervalMinutes,
       ),
+      retentionDays: _normalizeRetention(retentionDays ?? this.retentionDays),
     );
   }
 
@@ -37,6 +42,7 @@ class AutoBackupSettings {
     'enabled': enabled,
     if (directory != null) 'directory': directory,
     'intervalMinutes': intervalMinutes,
+    'retentionDays': retentionDays,
   };
 
   factory AutoBackupSettings.fromJson(Map<String, dynamic> json) {
@@ -49,11 +55,17 @@ class AutoBackupSettings {
       intervalMinutes: _normalizeInterval(
         json['intervalMinutes'] as int? ?? defaultIntervalMinutes,
       ),
+      retentionDays: _normalizeRetention(
+        json['retentionDays'] as int? ?? defaultRetentionDays,
+      ),
     );
   }
 
   static int _normalizeInterval(int minutes) =>
       minutes < minIntervalMinutes ? minIntervalMinutes : minutes;
+
+  static int _normalizeRetention(int days) =>
+      days < minRetentionDays ? minRetentionDays : days;
 }
 
 class AutoBackupSettingsStore {

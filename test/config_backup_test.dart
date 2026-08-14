@@ -16,22 +16,25 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('AutoBackupSettings', () {
-    test('默认每 10 分钟且启用', () {
+    test('默认每 10 分钟且启用，自动备份保留 14 天', () {
       const settings = AutoBackupSettings();
       expect(settings.enabled, isTrue);
       expect(settings.intervalMinutes, 10);
+      expect(settings.retentionDays, 14);
       expect(settings.directory, isNull);
     });
 
-    test('读取设置时把过短间隔限制为 1 分钟', () {
+    test('读取设置时把过短间隔和保留天数限制为 1', () {
       final settings = AutoBackupSettings.fromJson({
         'enabled': true,
         'directory': '  D:/backups  ',
         'intervalMinutes': 0,
+        'retentionDays': 0,
       });
       expect(settings.enabled, isTrue);
       expect(settings.directory, 'D:/backups');
       expect(settings.intervalMinutes, 1);
+      expect(settings.retentionDays, 1);
     });
   });
 
@@ -265,7 +268,7 @@ void main() {
       expect(fake.exportCalls, 2);
     });
 
-    test('只清理超过 7 天的自动备份', () async {
+    test('只清理超过保留天数的自动备份', () async {
       final temp = await Directory.systemTemp.createTemp('auto_cleanup_test_');
       addTearDown(() async {
         if (await temp.exists()) await temp.delete(recursive: true);
@@ -274,29 +277,61 @@ void main() {
         p.join(temp.path, 'AgentHub-auto-backup-20260801-000000.zip'),
       );
       final recentAuto = File(
-        p.join(temp.path, 'AgentHub-auto-backup-20260808-000000.zip'),
+        p.join(temp.path, 'AgentHub-auto-backup-20260810-000000.zip'),
       );
       final manual = File(p.join(temp.path, 'AgentHub-backup-manual.zip'));
       for (final file in [oldAuto, recentAuto, manual]) {
         await file.writeAsString('test');
       }
       await oldAuto.setLastModified(DateTime(2026, 8, 1));
-      await recentAuto.setLastModified(DateTime(2026, 8, 8));
+      await recentAuto.setLastModified(DateTime(2026, 8, 10));
       await manual.setLastModified(DateTime(2026, 8, 1));
 
       final service = AutoConfigBackupService(
         loadServers: () async => const [],
         settingsStore: _MemoryAutoBackupSettingsStore(),
-        now: () => DateTime(2026, 8, 9),
+        defaultDirectory: temp.path,
+        now: () => DateTime(2026, 8, 20),
       );
       addTearDown(service.dispose);
+      await service.initialize();
 
-      final deleted = await service.cleanupExpiredBackups(temp.path);
+      final result = await service.cleanupNow();
 
-      expect(deleted, 1);
+      expect(result.ok, isTrue);
+      expect(result.fileCount, 1);
+      expect(result.message, contains('当前目录'));
       expect(await oldAuto.exists(), isFalse);
       expect(await recentAuto.exists(), isTrue);
       expect(await manual.exists(), isTrue);
+    });
+
+    test('清理过期备份使用当前设置的保留天数', () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'auto_cleanup_custom_test_',
+      );
+      addTearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+      final threeDaysOld = File(
+        p.join(temp.path, 'AgentHub-auto-backup-20260806-000000.zip'),
+      );
+      await threeDaysOld.writeAsString('test');
+      await threeDaysOld.setLastModified(DateTime(2026, 8, 6));
+
+      final store = _MemoryAutoBackupSettingsStore()
+        ..value = const AutoBackupSettings(retentionDays: 2);
+      final service = AutoConfigBackupService(
+        loadServers: () async => const [],
+        settingsStore: store,
+        defaultDirectory: temp.path,
+        now: () => DateTime(2026, 8, 9),
+      );
+      addTearDown(service.dispose);
+      await service.initialize();
+
+      expect(await service.cleanupExpiredBackups(temp.path), 1);
+      expect(await threeDaysOld.exists(), isFalse);
     });
   });
 }
