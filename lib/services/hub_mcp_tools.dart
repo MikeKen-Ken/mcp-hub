@@ -295,7 +295,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'sync_webdav',
-    description: '立即下载并上传 MCP 目录到 WebDAV（需已配置）',
+    description: '立即把 MCP 清单与远端 catalog.zip 三路合并，再覆盖上传压缩包（需已配置）',
     inputSchema: JsonSchema.object(properties: const {}),
     annotations: const ToolAnnotations(
       readOnlyHint: false,
@@ -320,18 +320,19 @@ void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'sync_skills',
     description:
-        'WebDAV 仅下载/上传 Cursor Skill。'
-        'direction=pull：远端全量镜像到本机缓存（不覆盖正式目录）；'
-        'direction=apply：缓存全量镜像到正式 Cursor 目录（本地多余删除，成功后可自动转 Codex）；'
-        'direction=push：本机 Cursor 正式目录直接全量镜像到远端（不经缓存；远端多余删除）。'
-        'target=codex 且 direction=pull/apply 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
+        'WebDAV 仅下载/上传 Cursor Skill（固定名 skills.zip 覆盖）。'
+        'direction=pull：远端压缩包解压覆盖到本机缓存（不覆盖正式目录）；'
+        'direction=merge：远端压缩包解压后合并到缓存（覆盖同名，不删多余项）；'
+        'direction=apply：缓存全量镜像到正式 Cursor 目录（本地多余删除）；'
+        'direction=push：本机 Cursor 正式目录打包为 skills.zip 覆盖远端（不经缓存）。'
+        'target=codex 且 direction=pull/apply/merge 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
           description: 'all | cursor | codex，默认 all',
         ),
         'direction': JsonSchema.string(
-          description: 'pull（默认）| apply | push',
+          description: 'pull（默认）| merge | apply | push',
         ),
       },
     ),
@@ -347,6 +348,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           mcpTrimmedString(args['direction'])?.toLowerCase() ?? 'pull';
       final isPush = direction == 'push';
       final isApply = direction == 'apply';
+      final isMerge = direction == 'merge';
 
       Map<String, Object?> pack(SkillSyncResult r) => {
             'ok': r.ok,
@@ -375,6 +377,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
             r = await hub.pushSkillsToWebDav(SkillTarget.cursor);
           } else if (isApply) {
             r = await hub.applyResourceFromCache(AgentResourceKind.skill);
+          } else if (isMerge) {
+            r = await hub.mergeResourceToAllTargets(AgentResourceKind.skill);
           } else {
             r = await hub.syncSkillsFromWebDav(SkillTarget.cursor);
           }
@@ -385,6 +389,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           r = await hub.pushAllSkillsToWebDav();
         } else if (isApply) {
           r = await hub.applyResourceFromCache(AgentResourceKind.skill);
+        } else if (isMerge) {
+          r = await hub.mergeResourceToAllTargets(AgentResourceKind.skill);
         } else {
           r = await hub.syncAllSkillsFromWebDav();
         }

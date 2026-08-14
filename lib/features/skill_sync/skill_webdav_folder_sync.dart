@@ -5,44 +5,205 @@ import 'package:path/path.dart' as p;
 import 'package:webdav_client/webdav_client.dart';
 
 import '../../webdav/webdav_config.dart';
+import '../../webdav/webdav_zip_paths.dart';
+import '../../webdav/webdav_zip_transfer.dart';
+import '../../webdav/zip_directory_codec.dart';
+import 'skill_folder_copy.dart';
 
-/// WebDAV 与本地 Skill 文件夹之间的递归下载/上传。
+/// WebDAV 与本地 Skill 文件夹之间的压缩包下载/上传/合并。
 class SkillWebDavFolderSync {
-  Client? clientFor(WebDavConfig config) {
-    if (!config.isConfigured) return null;
-    var url = config.serverUrl.trim();
-    if (!url.endsWith('/')) url = '$url/';
-    final client = newClient(
-      url,
-      user: config.username.trim(),
-      password: config.password,
-      debug: false,
-    );
-    client.setReceiveTimeout(120000);
-    client.setSendTimeout(120000);
-    return client;
-  }
+  SkillWebDavFolderSync({
+    WebDavZipTransfer? zipTransfer,
+    ZipDirectoryCodec? zipCodec,
+    SkillFolderCopy? folderCopy,
+  }) : _zipTransfer = zipTransfer ?? WebDavZipTransfer(),
+       _zipCodec = zipCodec ?? const ZipDirectoryCodec(),
+       _folderCopy = folderCopy ?? const SkillFolderCopy();
 
-  /// `{remotePath}/skills/cursor`（远端仅 Cursor；旧 `.../codex` 不再使用）。
+  final WebDavZipTransfer _zipTransfer;
+  final ZipDirectoryCodec _zipCodec;
+  final SkillFolderCopy _folderCopy;
+
+  Client? clientFor(WebDavConfig config) => _zipTransfer.clientFor(config);
+
+  /// `{remotePath}/skills/cursor`（旧目录树，仅下载回退）。
   String remoteSkillsDir(WebDavConfig config, String targetWireName) {
     return remoteResourceDir(config, 'skills', targetWireName);
   }
 
   /// `{remotePath}/{skills|commands|rules}/cursor`
-  ///
-  /// 权威远端只保留 Cursor 侧目录；历史 `{...}/codex` 可忽略，勿再下载/上传。
   String remoteResourceDir(
     WebDavConfig config,
     String resourceWireName,
     String targetWireName,
   ) {
-    final base = config.remotePath.trim().replaceAll(RegExp(r'/+$'), '');
-    final root = base.isEmpty ? WebDavConfig.defaultRemotePath : base;
-    return '$root/$resourceWireName/$targetWireName';
+    return '${WebDavZipPaths.remoteRoot(config)}/$resourceWireName/$targetWireName';
   }
 
-  /// 将远端目录镜像到本地（先清空本地目录再下载）。
+  String remoteResourceZip(WebDavConfig config, String resourceWireName) {
+    return WebDavZipPaths.resourceZip(config, resourceWireName);
+  }
+
+  /// 将远端压缩包镜像到本地（先清空本地目录再解压）。
   Future<int> pullFolder({
+    required Client client,
+    required WebDavConfig config,
+    required String resourceWireName,
+    required String targetWireName,
+    required String localDir,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    onProgress?.call(0, 1);
+    final zipRemote = remoteResourceZip(config, resourceWireName);
+    final extracted = await _downloadZipToDir(
+      client: client,
+      remoteZip: zipRemote,
+      localDir: localDir,
+      wipeTarget: true,
+    );
+    if (extracted != null) {
+      onProgress?.call(1, 1);
+      return extracted;
+    }
+
+    debugPrint('未找到 $zipRemote，回退旧目录树下载');
+    return _pullLegacyTree(
+      client: client,
+      remoteDir: remoteResourceDir(config, resourceWireName, targetWireName),
+      localDir: localDir,
+      onProgress: onProgress,
+    );
+  }
+
+  /// 下载压缩包后合并复制到本地（覆盖同名，不删除本地多余项）。
+  Future<int> mergeFolder({
+    required Client client,
+    required WebDavConfig config,
+    required String resourceWireName,
+    required String targetWireName,
+    required String localDir,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    onProgress?.call(0, 1);
+    final staging = await io.Directory.systemTemp.createTemp(
+      'mcp_hub_merge_${resourceWireName}_',
+    );
+    try {
+      final zipRemote = remoteResourceZip(config, resourceWireName);
+      final extracted = await _downloadZipToDir(
+        client: client,
+        remoteZip: zipRemote,
+        localDir: staging.path,
+        wipeTarget: true,
+      );
+      if (extracted == null) {
+        debugPrint('未找到 $zipRemote，回退旧目录树合并');
+        await _pullLegacyTree(
+          client: client,
+          remoteDir: remoteResourceDir(
+            config,
+            resourceWireName,
+            targetWireName,
+          ),
+          localDir: staging.path,
+          onProgress: onProgress,
+        );
+      }
+      await io.Directory(localDir).create(recursive: true);
+      if (!await staging.exists()) {
+        onProgress?.call(1, 1);
+        return 0;
+      }
+      final copied = await _folderCopy.copyContents(
+        sourceDir: staging.path,
+        targetDir: localDir,
+      );
+      onProgress?.call(1, 1);
+      return copied.copiedFiles;
+    } finally {
+      try {
+        if (await staging.exists()) await staging.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+
+  /// 将本地目录打成固定名 zip 覆盖上传。
+  Future<int> pushFolder({
+    required Client client,
+    required WebDavConfig config,
+    required String resourceWireName,
+    required String localDir,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    onProgress?.call(0, 2);
+    final local = io.Directory(localDir);
+    if (!await local.exists()) {
+      await local.create(recursive: true);
+    }
+    final zipFile = await _zipTransfer.createTempFile(
+      'mcp_hub_$resourceWireName',
+      '.zip',
+    );
+    try {
+      await _zipCodec.packDirectory(
+        sourceDir: localDir,
+        zipPath: zipFile.path,
+      );
+      onProgress?.call(1, 2);
+      await _zipTransfer.uploadFile(
+        client: client,
+        localPath: zipFile.path,
+        remotePath: remoteResourceZip(config, resourceWireName),
+      );
+      onProgress?.call(2, 2);
+      return await _countPackedFiles(localDir);
+    } finally {
+      try {
+        if (await zipFile.exists()) await zipFile.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<int?> _downloadZipToDir({
+    required Client client,
+    required String remoteZip,
+    required String localDir,
+    required bool wipeTarget,
+  }) async {
+    final zipFile = await _zipTransfer.createTempFile('mcp_hub_dl', '.zip');
+    try {
+      final ok = await _zipTransfer.downloadFile(
+        client: client,
+        remotePath: remoteZip,
+        localPath: zipFile.path,
+      );
+      if (!ok) return null;
+      return _zipCodec.extractTo(
+        zipPath: zipFile.path,
+        targetDir: localDir,
+        wipeTarget: wipeTarget,
+      );
+    } finally {
+      try {
+        if (await zipFile.exists()) await zipFile.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<int> _countPackedFiles(String localDir) async {
+    final dir = io.Directory(localDir);
+    if (!await dir.exists()) return 0;
+    var count = 0;
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is! io.File) continue;
+      if (p.basename(entity.path).startsWith('.')) continue;
+      count += 1;
+    }
+    return count;
+  }
+
+  /// 旧 `{remote}/{resource}/cursor` 目录树，仅当压缩包不存在时使用。
+  Future<int> _pullLegacyTree({
     required Client client,
     required String remoteDir,
     required String localDir,
@@ -54,101 +215,6 @@ class SkillWebDavFolderSync {
     }
     await local.create(recursive: true);
 
-    try {
-      await client.mkdirAll(remoteDir);
-    } catch (_) {
-      // 远端可能已存在
-    }
-
-    return _downloadDir(client, remoteDir, localDir, onProgress: onProgress);
-  }
-
-  /// 将本地目录全量镜像到远端（覆盖同名，并删除远端多余项）。
-  Future<int> pushFolder({
-    required Client client,
-    required String remoteDir,
-    required String localDir,
-    void Function(int done, int total)? onProgress,
-  }) async {
-    final local = io.Directory(localDir);
-    if (!await local.exists()) {
-      await local.create(recursive: true);
-    }
-    await client.mkdirAll(remoteDir);
-    final uploaded = await _uploadDir(
-      client,
-      localDir,
-      remoteDir,
-      onProgress: onProgress,
-    );
-    await _deleteRemoteExtras(client, localDir, remoteDir);
-    return uploaded;
-  }
-
-  /// 删除远端有、本地没有的条目，使远端与本地目录一致。
-  Future<void> _deleteRemoteExtras(
-    Client client,
-    String localDir,
-    String remoteDir,
-  ) async {
-    List<File> entries;
-    try {
-      entries = await client.readDir(remoteDir);
-    } catch (error) {
-      final message = error.toString().toLowerCase();
-      if (message.contains('404') ||
-          message.contains('not found') ||
-          message.contains('no such file')) {
-        return;
-      }
-      rethrow;
-    }
-
-    final localNames = <String>{};
-    final local = io.Directory(localDir);
-    if (await local.exists()) {
-      await for (final entity in local.list(followLinks: false)) {
-        final name = p.basename(entity.path);
-        if (name.startsWith('.')) continue;
-        localNames.add(name);
-      }
-    }
-
-    for (final entry in entries) {
-      final name = entry.name;
-      if (name == null || name.isEmpty || name == '.' || name == '..') {
-        continue;
-      }
-      if (name.startsWith('.')) continue;
-
-      final remotePath = entry.path ?? _joinRemote(remoteDir, name);
-      if (!localNames.contains(name)) {
-        try {
-          // 部分 WebDAV 服务删除目录要求路径以 / 结尾。
-          final path = entry.isDir == true && !remotePath.endsWith('/')
-              ? '$remotePath/'
-              : remotePath;
-          await client.remove(path);
-          debugPrint('已删除远端多余项：$path');
-        } catch (error) {
-          debugPrint('删除远端多余项失败 $remotePath: $error');
-          rethrow;
-        }
-        continue;
-      }
-
-      if (entry.isDir == true) {
-        await _deleteRemoteExtras(client, p.join(localDir, name), remotePath);
-      }
-    }
-  }
-
-  Future<int> _downloadDir(
-    Client client,
-    String remoteDir,
-    String localDir, {
-    void Function(int done, int total)? onProgress,
-  }) async {
     final files = <({String remote, String local})>[];
     try {
       await _collectRemoteFiles(client, remoteDir, localDir, files);
@@ -197,47 +263,6 @@ class SkillWebDavFolderSync {
         await _collectRemoteFiles(client, remotePath, localPath, files);
       } else {
         files.add((remote: remotePath, local: localPath));
-      }
-    }
-  }
-
-  Future<int> _uploadDir(
-    Client client,
-    String localDir,
-    String remoteDir, {
-    void Function(int done, int total)? onProgress,
-  }) async {
-    final files = <({String local, String remote})>[];
-    await _collectLocalFiles(localDir, remoteDir, files);
-    onProgress?.call(0, files.length);
-    var done = 0;
-    for (final file in files) {
-      final parent = p.dirname(file.remote).replaceAll(r'\', '/');
-      if (parent.isNotEmpty && parent != '.' && parent != '/') {
-        await client.mkdirAll(parent);
-      }
-      await client.writeFromFile(file.local, file.remote);
-      done += 1;
-      onProgress?.call(done, files.length);
-    }
-    return files.length;
-  }
-
-  Future<void> _collectLocalFiles(
-    String localDir,
-    String remoteDir,
-    List<({String local, String remote})> files,
-  ) async {
-    final dir = io.Directory(localDir);
-    if (!await dir.exists()) return;
-    await for (final entity in dir.list(followLinks: false)) {
-      final name = p.basename(entity.path);
-      if (name.startsWith('.')) continue;
-      final remotePath = _joinRemote(remoteDir, name);
-      if (entity is io.Directory) {
-        await _collectLocalFiles(entity.path, remotePath, files);
-      } else if (entity is io.File) {
-        files.add((local: entity.path, remote: remotePath));
       }
     }
   }

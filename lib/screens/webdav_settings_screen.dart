@@ -204,18 +204,20 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('变更后自动上传'),
+                subtitle: const Text('把 MCP 清单打成 catalog.zip 覆盖远端同名文件'),
                 value: _autoSync,
                 onChanged: (v) => setState(() => _autoSync = v),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('启动 / 定时自动下载'),
+                title: const Text('启动 / 定时自动合并'),
+                subtitle: const Text('下载 catalog.zip 后与本机三路合并，不会整包覆盖'),
                 value: _autoPull,
                 onChanged: (v) => setState(() => _autoPull = v),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('下载间隔：${_pollSeconds}s'),
+                title: Text('合并间隔：${_pollSeconds}s'),
                 subtitle: Slider(
                   min: WebDavConfig.minPollIntervalSeconds.toDouble(),
                   max: WebDavConfig.maxPollIntervalSeconds.toDouble(),
@@ -256,13 +258,13 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ],
               const SizedBox(height: 12),
               Text(
-                '下载/上传内容：MCP 清单（仓库 URL、command/args 等），'
-                '在「客户端 MCP」右上角可下载/上传；'
-                'Skill / Command / Rule 文件夹在 {远端}/{skills|commands|rules}/{客户端}/，'
-                '在「Agent 配置下载/上传」：下载仅写入本机缓存，'
-                '「应用到 Cursor」再全量镜像到正式 Cursor；上传直接从本机 Cursor 正式目录推到远端（不经缓存）。\n'
+                '下载/上传内容：MCP 清单与 Skill / Command / Rule 均使用固定名压缩包覆盖传输'
+                '（catalog.zip、skills.zip、commands.zip、rules.zip），不会按日期堆积文件。\n'
+                '「下载」解压后覆盖对应缓存或清单；「合并」解压后再与本机合并'
+                '（清单为三路合并，资源为覆盖同名、保留本地多余项）。\n'
                 '不下载/上传：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
-                '换电脑后：配置好同一 WebDAV → 在客户端 MCP 下载清单 → '
+                '旧版 catalog.json 与 {skills|commands|rules}/cursor/ 目录仅在压缩包不存在时回退读取，上传不再写入。\n'
+                '换电脑后：配置好同一 WebDAV → 下载或合并清单 → '
                 '下载 Agent 配置到缓存 → 应用到 Cursor 正式目录 → 再按需 clone / 一键写入客户端。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),

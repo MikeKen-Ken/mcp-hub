@@ -158,7 +158,7 @@ class HubController extends ChangeNotifier {
     if (webDavConfig.enabled &&
         webDavConfig.autoPull &&
         webDavConfig.isConfigured) {
-      unawaited(webDavSync.pullNow());
+      unawaited(webDavSync.mergeNow());
     }
     await webDavSync.startPolling();
   }
@@ -642,7 +642,7 @@ class HubController extends ChangeNotifier {
     webDavSync.stopPolling();
     if (config.enabled && config.isConfigured) {
       if (config.autoPull) {
-        unawaited(webDavSync.pullNow());
+        unawaited(webDavSync.mergeNow());
       }
       await webDavSync.startPolling();
       if (config.autoSync) {
@@ -661,27 +661,37 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.syncNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'WebDAV 下载/上传完成'
-        : '下载/上传失败：${webDavSync.lastError ?? '未知错误'}';
+        ? 'WebDAV 合并并上传完成'
+        : '合并/上传失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
 
-  /// 从 WebDAV 下载并合并 MCP 清单到本机。
+  /// 用远端 catalog.zip 覆盖本机 MCP 清单（不合并）。
   Future<void> pullWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已从 WebDAV 下载 MCP 清单'
+        ? '已从 WebDAV 下载并覆盖 MCP 清单'
         : '下载失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
 
-  /// 把本机 MCP 清单上传到 WebDAV。
+  /// 下载 catalog.zip 后与本机三路合并。
+  Future<void> mergeWebDavNow() async {
+    if (!_ensureWebDavReadyForManualSync()) return;
+    await webDavSync.mergeNow();
+    _lastMessage = webDavSync.status == CatalogSyncStatus.success
+        ? '已从 WebDAV 合并 MCP 清单'
+        : '合并失败：${webDavSync.lastError ?? '未知错误'}';
+    notifyListeners();
+  }
+
+  /// 把本机 MCP 清单打成 catalog.zip 覆盖上传。
   Future<void> pushWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.pushNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已上传 MCP 清单到 WebDAV'
+        ? '已上传 MCP 清单压缩包到 WebDAV'
         : '上传失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
@@ -752,6 +762,15 @@ class HubController extends ChangeNotifier {
     return result;
   }
 
+  Future<SkillSyncResult> mergeResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    final result = await skillSync.mergeResourceToAllTargets(resource);
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
   Future<SkillSyncResult> convertResourceFromCursor(
     AgentResourceKind resource, {
     SkillTarget target = SkillTarget.codex,
@@ -797,6 +816,13 @@ class HubController extends ChangeNotifier {
 
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
     final result = await skillSync.pushAllResourcesToWebDav();
+    _lastMessage = result.message;
+    notifyListeners();
+    return result;
+  }
+
+  Future<SkillSyncResult> mergeAllResourcesFromWebDav() async {
+    final result = await skillSync.mergeAllResourcesFromWebDav();
     _lastMessage = result.message;
     notifyListeners();
     return result;

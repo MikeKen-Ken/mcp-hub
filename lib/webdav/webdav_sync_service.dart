@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
@@ -9,23 +8,32 @@ import '../common/sync_progress.dart';
 import 'catalog_merge.dart';
 import 'catalog_sync_base_store.dart';
 import 'catalog_sync_document.dart';
+import 'catalog_zip_codec.dart';
 import 'webdav_config.dart';
+import 'webdav_zip_paths.dart';
+import 'webdav_zip_transfer.dart';
 
 enum CatalogSyncStatus { idle, syncing, success, error }
 
-/// Lightweight WebDAV sync for a single MCP catalog file.
+/// 以固定名 `catalog.zip` 覆盖上传/下载 MCP 清单。
 class WebDavSyncService extends ChangeNotifier {
   WebDavSyncService({
     required this._loadConfig,
     required this._loadLocalDocument,
     required this._applyDocument,
     CatalogSyncBaseStore? baseStore,
-  }) : _baseStore = baseStore ?? CatalogSyncBaseStore();
+    CatalogZipCodec? catalogZip,
+    WebDavZipTransfer? zipTransfer,
+  }) : _baseStore = baseStore ?? CatalogSyncBaseStore(),
+       _catalogZip = catalogZip ?? CatalogZipCodec(),
+       _zipTransfer = zipTransfer ?? WebDavZipTransfer();
 
   final Future<WebDavConfig> Function() _loadConfig;
   final Future<CatalogSyncDocument> Function() _loadLocalDocument;
   final Future<void> Function(CatalogSyncDocument doc) _applyDocument;
   final CatalogSyncBaseStore _baseStore;
+  final CatalogZipCodec _catalogZip;
+  final WebDavZipTransfer _zipTransfer;
 
   CatalogSyncStatus status = CatalogSyncStatus.idle;
   String? lastError;
@@ -48,26 +56,7 @@ class WebDavSyncService extends ChangeNotifier {
     _tombstones[id] = DateTime.now().millisecondsSinceEpoch;
   }
 
-  Client? _client(WebDavConfig config) {
-    if (!config.isConfigured) return null;
-    var url = config.serverUrl.trim();
-    if (!url.endsWith('/')) url = '$url/';
-    final client = newClient(
-      url,
-      user: config.username.trim(),
-      password: config.password,
-      debug: false,
-    );
-    client.setReceiveTimeout(60000);
-    client.setSendTimeout(60000);
-    return client;
-  }
-
-  String _catalogPath(WebDavConfig config) {
-    final base = config.remotePath.trim().replaceAll(RegExp(r'/+$'), '');
-    final root = base.isEmpty ? WebDavConfig.defaultRemotePath : base;
-    return '$root/catalog.json';
-  }
+  Client? _client(WebDavConfig config) => _zipTransfer.clientFor(config);
 
   Future<bool> testConnection([WebDavConfig? override]) async {
     final config = override ?? await _loadConfig();
@@ -100,7 +89,7 @@ class WebDavSyncService extends ChangeNotifier {
     if (!config.enabled || !config.autoPull || !config.isConfigured) return;
     _pollTimer = Timer.periodic(
       Duration(seconds: config.pollIntervalSeconds),
-      (_) => unawaited(pullNow()),
+      (_) => unawaited(mergeNow()),
     );
   }
 
@@ -109,8 +98,9 @@ class WebDavSyncService extends ChangeNotifier {
     _pollTimer = null;
   }
 
+  /// 合并远端清单后再覆盖上传压缩包。
   Future<void> syncNow() async {
-    await pullNow();
+    await mergeNow();
     await pushNow();
   }
 
@@ -123,7 +113,7 @@ class WebDavSyncService extends ChangeNotifier {
 
     _inFlight = true;
     lastAction = '上传';
-    progress = const SyncProgress(label: '正在上传 MCP 清单', current: 0, total: 2);
+    progress = const SyncProgress(label: '正在打包 MCP 清单', current: 0, total: 2);
     _setStatus(CatalogSyncStatus.syncing);
     try {
       final local = await _loadLocalDocument();
@@ -132,11 +122,9 @@ class WebDavSyncService extends ChangeNotifier {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         tombstones: {...local.tombstones, ..._tombstones},
       );
-      final path = _catalogPath(config);
-      await _ensureParentDir(client, path);
-      progress = const SyncProgress(label: '正在写入远端', current: 1, total: 2);
+      progress = const SyncProgress(label: '正在上传压缩包', current: 1, total: 2);
       notifyListeners();
-      await _writeJson(client, path, doc.toJson());
+      await _writeCatalogZip(client, config, doc);
       await _baseStore.save(doc);
       _tombstones = Map<String, int>.from(doc.tombstones);
       lastSyncedAt = DateTime.now();
@@ -154,7 +142,17 @@ class WebDavSyncService extends ChangeNotifier {
     }
   }
 
+  /// 用远端压缩包覆盖本机清单（不合并）。
   Future<void> pullNow() async {
+    await _pullRemote(merge: false);
+  }
+
+  /// 下载压缩包后与本机做三路合并。
+  Future<void> mergeNow() async {
+    await _pullRemote(merge: true);
+  }
+
+  Future<void> _pullRemote({required bool merge}) async {
     if (_inFlight) return;
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) return;
@@ -162,39 +160,55 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
-    lastAction = '下载';
-    progress = const SyncProgress(label: '正在下载 MCP 清单', current: 0, total: 3);
+    lastAction = merge ? '合并' : '下载';
+    progress = SyncProgress(
+      label: merge ? '正在下载并合并 MCP 清单' : '正在下载 MCP 清单',
+      current: 0,
+      total: 3,
+    );
     _setStatus(CatalogSyncStatus.syncing);
     try {
-      final path = _catalogPath(config);
-      final remoteJson = await _readJson(client, path);
-      final remote = remoteJson == null
-          ? CatalogSyncDocument.empty
-          : CatalogSyncDocument.fromJson(remoteJson);
-      progress = const SyncProgress(label: '正在合并清单', current: 1, total: 3);
+      final remote = await _readRemoteCatalog(client, config);
+      if (!merge && remote == null) {
+        lastSyncedAt = DateTime.now();
+        lastError = null;
+        progress = const SyncProgress(label: '远端暂无清单', current: 3, total: 3);
+        _setStatus(CatalogSyncStatus.success);
+        return;
+      }
+      final remoteDoc = remote ?? CatalogSyncDocument.empty;
+      progress = SyncProgress(
+        label: merge ? '正在合并清单' : '正在覆盖本机清单',
+        current: 1,
+        total: 3,
+      );
       notifyListeners();
       final localRaw = await _loadLocalDocument();
       final local = localRaw.copyWith(
         tombstones: {...localRaw.tombstones, ..._tombstones},
       );
-      final base = await _baseStore.load();
-      final merged = CatalogMerge.merge(
-        local: local,
-        remote: remote,
-        base: base,
-      );
+      final CatalogSyncDocument next;
+      if (merge) {
+        final base = await _baseStore.load();
+        next = CatalogMerge.merge(local: local, remote: remoteDoc, base: base);
+      } else {
+        next = remoteDoc;
+      }
       progress = const SyncProgress(label: '正在写入本机', current: 2, total: 3);
       notifyListeners();
-      await _applyDocument(merged);
-      _tombstones = Map<String, int>.from(merged.tombstones);
-      // If merge differs from remote, push back.
-      if (!_sameDoc(merged, remote)) {
-        await _writeJson(client, path, merged.toJson());
+      await _applyDocument(next);
+      _tombstones = Map<String, int>.from(next.tombstones);
+      if (merge && !_sameDoc(next, remoteDoc)) {
+        await _writeCatalogZip(client, config, next);
       }
-      await _baseStore.save(merged);
+      await _baseStore.save(next);
       lastSyncedAt = DateTime.now();
       lastError = null;
-      progress = const SyncProgress(label: '下载完成', current: 3, total: 3);
+      progress = SyncProgress(
+        label: merge ? '合并完成' : '下载完成',
+        current: 3,
+        total: 3,
+      );
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
@@ -211,29 +225,19 @@ class WebDavSyncService extends ChangeNotifier {
     return jsonEncode(a.toJson()) == jsonEncode(b.toJson());
   }
 
-  Future<void> _ensureParentDir(Client client, String path) async {
-    final idx = path.lastIndexOf('/');
-    if (idx <= 0) return;
-    final dir = path.substring(0, idx);
-    if (dir.isEmpty || dir == '/') return;
+  Future<void> _writeCatalogZip(
+    Client client,
+    WebDavConfig config,
+    CatalogSyncDocument doc,
+  ) async {
+    final tmp = await _zipTransfer.createTempFile('mcp_hub_catalog', '.zip');
     try {
-      await client.mkdirAll(dir);
-    } catch (_) {
-      // directory may already exist
-    }
-  }
-
-  Future<void> _writeJson(Client client, String path, Object data) async {
-    final bytes = Uint8List.fromList(
-      utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
-    );
-    final tmp = io.File(
-      '${io.Directory.systemTemp.path}${io.Platform.pathSeparator}'
-      'mcp_hub_webdav_${DateTime.now().microsecondsSinceEpoch}.json',
-    );
-    try {
-      await tmp.writeAsBytes(bytes, flush: true);
-      await client.writeFromFile(tmp.path, path);
+      await _catalogZip.writeDocument(doc: doc, zipPath: tmp.path);
+      await _zipTransfer.uploadFile(
+        client: client,
+        localPath: tmp.path,
+        remotePath: WebDavZipPaths.catalogZip(config),
+      );
     } finally {
       try {
         if (await tmp.exists()) await tmp.delete();
@@ -241,15 +245,44 @@ class WebDavSyncService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> _readJson(Client client, String path) async {
+  Future<CatalogSyncDocument?> _readRemoteCatalog(
+    Client client,
+    WebDavConfig config,
+  ) async {
+    final zipPath = WebDavZipPaths.catalogZip(config);
+    final tmp = await _zipTransfer.createTempFile('mcp_hub_catalog_dl', '.zip');
+    try {
+      final ok = await _zipTransfer.downloadFile(
+        client: client,
+        remotePath: zipPath,
+        localPath: tmp.path,
+      );
+      if (ok) {
+        return _catalogZip.readDocument(tmp.path);
+      }
+    } finally {
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+    }
+
+    final legacy = await _readLegacyJson(
+      client,
+      WebDavZipPaths.legacyCatalogJson(config),
+    );
+    if (legacy != null) {
+      debugPrint('已从旧 catalog.json 读取清单，下次上传将改为 catalog.zip');
+    }
+    return legacy;
+  }
+
+  Future<CatalogSyncDocument?> _readLegacyJson(
+    Client client,
+    String path,
+  ) async {
     try {
       final data = await client.read(path);
-      final decoded = jsonDecode(utf8.decode(data));
-      if (decoded is Map<String, dynamic>) return decoded;
-      if (decoded is Map) {
-        return decoded.map((k, v) => MapEntry(k.toString(), v));
-      }
-      return null;
+      return _decodeCatalogJson(data);
     } catch (error) {
       final message = error.toString().toLowerCase();
       if (message.contains('404') ||
@@ -259,6 +292,19 @@ class WebDavSyncService extends ChangeNotifier {
       }
       rethrow;
     }
+  }
+
+  CatalogSyncDocument? _decodeCatalogJson(List<int> data) {
+    final decoded = jsonDecode(utf8.decode(data));
+    if (decoded is Map<String, dynamic>) {
+      return CatalogSyncDocument.fromJson(decoded);
+    }
+    if (decoded is Map) {
+      return CatalogSyncDocument.fromJson(
+        decoded.map((k, v) => MapEntry(k.toString(), v)),
+      );
+    }
+    return null;
   }
 
   void _setStatus(CatalogSyncStatus value) {

@@ -37,9 +37,10 @@ class SkillSyncResult {
 }
 
 /// Agent 资源同步：
-/// - 下载：远端 Cursor → 本机缓存（不碰正式目录）
+/// - 下载：远端固定名 zip 解压覆盖到本机缓存（不碰正式目录）
+/// - 合并：远端 zip 解压后合并复制到缓存（覆盖同名，不删本地多余项）
 /// - 覆盖：缓存 → 正式 Cursor
-/// - 上传：正式 Cursor → 远端（不经缓存）
+/// - 上传：正式 Cursor 打成固定名 zip 覆盖远端
 /// - 转换：正式 Cursor → Codex / OpenCode
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
@@ -135,41 +136,47 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 从 WebDAV 下载 Cursor 到本机缓存（不覆盖正式目录）。
+  /// 从 WebDAV 下载 Cursor 到本机缓存（压缩包解压后覆盖缓存）。
   Future<SkillSyncResult> syncResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    return _run(resource, null, () async {
-      final targets = resource.webDavTargets.toList();
-      if (targets.isEmpty) {
-        throw StateError('${resource.label} 没有可下载的客户端');
-      }
-      var pulledFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      for (final target in targets) {
-        try {
-          final one = await _doSyncOne(resource, target);
-          pulledFiles += one.pulledFiles;
-          packageCount += one.packageCount;
-          parts.add(one.message);
-          if (!one.ok) allOk = false;
-          _rememberResourceOutcome(resource, one.ok, one.message);
-        } catch (error) {
-          allOk = false;
-          parts.add('${target.label}：失败（$error）');
-          debugPrint('${resource.label} 下载 ${target.label} 失败: $error');
-          _rememberResourceOutcome(resource, false, '$error');
-        }
-      }
+    return _forEachWebDavTarget(
+      resource: resource,
+      activity: '下载',
+      emptyMessage: '${resource.label} 没有可下载的客户端',
+      each: _doSyncOne,
+    );
+  }
+
+  /// 从 WebDAV 合并 Cursor 资源到本机缓存（压缩包解压后合并复制）。
+  Future<SkillSyncResult> mergeResourceFromWebDav(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    if (!resource.supportsWebDav(target)) {
       return SkillSyncResult(
-        ok: allOk,
-        pulledFiles: pulledFiles,
-        packageCount: packageCount,
-        message: parts.join('；'),
+        ok: false,
+        target: target,
+        message: _codexNotOnWebDavMessage,
       );
-    }, activity: '下载');
+    }
+    return _run(
+      resource,
+      target,
+      () => _doMergeOne(resource, target),
+      activity: '合并',
+    );
+  }
+
+  Future<SkillSyncResult> mergeResourceToAllTargets(
+    AgentResourceKind resource,
+  ) async {
+    return _forEachWebDavTarget(
+      resource: resource,
+      activity: '合并',
+      emptyMessage: '${resource.label} 没有可合并的客户端',
+      each: _doMergeOne,
+    );
   }
 
   /// 把本机 Cursor 正式目录全量镜像上传到 WebDAV（不经缓存）。
@@ -196,105 +203,46 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 把该资源的本机 Cursor 目录上传到 WebDAV（一次忙状态）。
+  /// 把该资源的本机 Cursor 目录打成固定名 zip 覆盖上传。
   Future<SkillSyncResult> pushResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    return _run(resource, null, () async {
-      final targets = resource.webDavTargets.toList();
-      if (targets.isEmpty) {
-        throw StateError('${resource.label} 没有可上传的客户端');
-      }
-      var pushedFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      for (final target in targets) {
-        try {
-          final one = await _doPushOne(resource, target);
-          pushedFiles += one.pushedFiles;
-          packageCount += one.packageCount;
-          parts.add(one.message);
-          if (!one.ok) allOk = false;
-        } catch (error) {
-          allOk = false;
-          parts.add('${target.label}：失败（$error）');
-          debugPrint('${resource.label} 上传 ${target.label} 失败: $error');
-        }
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        pushedFiles: pushedFiles,
-        packageCount: packageCount,
-        message: parts.join('；'),
-      );
-    }, activity: '上传');
+    return _forEachWebDavTarget(
+      resource: resource,
+      activity: '上传',
+      emptyMessage: '${resource.label} 没有可上传的客户端',
+      each: _doPushOne,
+    );
   }
 
-  /// 一次性从 WebDAV 下载全部 Agent 资源到本机缓存（仅 Cursor，不覆盖正式目录）。
+  /// 一次性从 WebDAV 下载全部 Agent 资源到本机缓存（压缩包覆盖缓存）。
   Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
-    return _run(null, null, () async {
-      var pulledFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      for (final resource in AgentResourceKind.values) {
-        for (final target in resource.webDavTargets) {
-          try {
-            final one = await _doSyncOne(resource, target);
-            pulledFiles += one.pulledFiles;
-            packageCount += one.packageCount;
-            parts.add(one.message);
-            if (!one.ok) allOk = false;
-            _rememberResourceOutcome(resource, one.ok, one.message);
-          } catch (error) {
-            allOk = false;
-            parts.add('${resource.label}/${target.label}：失败（$error）');
-            debugPrint('整体下载 ${resource.label} ${target.label} 失败: $error');
-            _rememberResourceOutcome(resource, false, '$error');
-          }
-        }
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        pulledFiles: pulledFiles,
-        packageCount: packageCount,
-        message: parts.isEmpty ? '没有可下载的资源' : parts.join('；'),
-      );
-    }, activity: '下载');
+    return _forEachWebDavTarget(
+      resource: null,
+      activity: '下载',
+      emptyMessage: '没有可下载的资源',
+      each: _doSyncOne,
+    );
   }
 
-  /// 一次性把全部 Agent 资源的本机 Cursor 正式目录直接上传到 WebDAV（不经缓存）。
+  /// 一次性从 WebDAV 合并全部 Agent 资源到本机缓存。
+  Future<SkillSyncResult> mergeAllResourcesFromWebDav() async {
+    return _forEachWebDavTarget(
+      resource: null,
+      activity: '合并',
+      emptyMessage: '没有可合并的资源',
+      each: _doMergeOne,
+    );
+  }
+
+  /// 一次性把全部 Agent 资源打成固定名 zip 覆盖上传（不经缓存）。
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
-    return _run(null, null, () async {
-      var pushedFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      for (final resource in AgentResourceKind.values) {
-        for (final target in resource.webDavTargets) {
-          try {
-            final one = await _doPushOne(resource, target);
-            pushedFiles += one.pushedFiles;
-            packageCount += one.packageCount;
-            parts.add(one.message);
-            if (!one.ok) allOk = false;
-            _rememberResourceOutcome(resource, one.ok, one.message);
-          } catch (error) {
-            allOk = false;
-            parts.add('${resource.label}/${target.label}：失败（$error）');
-            debugPrint('整体上传 ${resource.label} ${target.label} 失败: $error');
-            _rememberResourceOutcome(resource, false, '$error');
-          }
-        }
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        pushedFiles: pushedFiles,
-        packageCount: packageCount,
-        message: parts.isEmpty ? '没有可上传的资源' : parts.join('；'),
-      );
-    }, activity: '上传');
+    return _forEachWebDavTarget(
+      resource: null,
+      activity: '上传',
+      emptyMessage: '没有可上传的资源',
+      each: _doPushOne,
+    );
   }
 
   /// 仅把本机 Skill 缓存全量镜像到客户端正式目录（不访问 WebDAV）。
@@ -324,35 +272,12 @@ class SkillSyncService extends ChangeNotifier {
 
   /// 把全部资源的 Cursor 缓存全量镜像到正式目录（不自动转换）。
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
-    return _run(null, null, () async {
-      var deployedFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      for (final resource in AgentResourceKind.values) {
-        for (final target in resource.webDavTargets) {
-          try {
-            final one = await _doApplyOne(resource, target);
-            deployedFiles += one.deployedFiles;
-            packageCount += one.packageCount;
-            parts.add(one.message);
-            if (!one.ok) allOk = false;
-            _rememberResourceOutcome(resource, one.ok, one.message);
-          } catch (error) {
-            allOk = false;
-            parts.add('${resource.label}/${target.label}：失败（$error）');
-            debugPrint('整体覆盖 ${resource.label} ${target.label} 失败: $error');
-            _rememberResourceOutcome(resource, false, '$error');
-          }
-        }
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        deployedFiles: deployedFiles,
-        packageCount: packageCount,
-        message: parts.isEmpty ? '没有可覆盖的资源' : parts.join('；'),
-      );
-    }, activity: '应用');
+    return _forEachWebDavTarget(
+      resource: null,
+      activity: '应用',
+      emptyMessage: '没有可覆盖的资源',
+      each: _doApplyOne,
+    );
   }
 
   /// 以本机 Cursor 目录为源，转换单个资源到指定目标。
@@ -715,7 +640,7 @@ class SkillSyncService extends ChangeNotifier {
     );
   }
 
-  /// 仅下载到缓存目录：与远端全量一致，不触碰正式配置。
+  /// 仅下载到缓存目录：用远端压缩包覆盖缓存，不触碰正式配置。
   Future<SkillSyncResult> _doSyncOne(
     AgentResourceKind resource,
     SkillTarget target,
@@ -732,15 +657,11 @@ class SkillSyncService extends ChangeNotifier {
     if (client == null) {
       throw StateError('WebDAV 未配置完整');
     }
-    // 远端仅 Cursor；旧的 .../codex/ 目录不再下载。
-    final remote = _folderSync.remoteResourceDir(
-      config,
-      resource.wireName,
-      target.wireName,
-    );
     final pulled = await _folderSync.pullFolder(
       client: client,
-      remoteDir: remote,
+      config: config,
+      resourceWireName: resource.wireName,
+      targetWireName: target.wireName,
       localDir: cachePath,
       onProgress: (done, total) =>
           _reportProgress('正在下载 ${resource.label}', done, total),
@@ -754,10 +675,52 @@ class SkillSyncService extends ChangeNotifier {
       pulledFiles: pulled,
       packageCount: packages,
       message:
-          '已下载 Cursor ${resource.label} 到缓存：'
+          '已下载 Cursor ${resource.label} 压缩包到缓存：'
           '$pulled 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
           ' → $cachePath（未写入正式目录，请使用「应用到 Cursor」）',
+    );
+  }
+
+  /// 下载压缩包后合并到缓存（覆盖同名，不删除缓存中多余项）。
+  Future<SkillSyncResult> _doMergeOne(
+    AgentResourceKind resource,
+    SkillTarget target,
+  ) async {
+    final config = await _loadConfig();
+    if (!config.enabled || !config.isConfigured) {
+      throw StateError('请先配置并启用 WebDAV');
+    }
+    final cachePath = resourceCachePathFor(resource, target);
+    if (cachePath == null) {
+      throw StateError('${target.label} 不支持 ${resource.label} 合并');
+    }
+    final client = _folderSync.clientFor(config);
+    if (client == null) {
+      throw StateError('WebDAV 未配置完整');
+    }
+    final merged = await _folderSync.mergeFolder(
+      client: client,
+      config: config,
+      resourceWireName: resource.wireName,
+      targetWireName: target.wireName,
+      localDir: cachePath,
+      onProgress: (done, total) =>
+          _reportProgress('正在合并 ${resource.label}', done, total),
+    );
+    final packages = resource == AgentResourceKind.skill
+        ? await _folderCopy.countSkillPackages(cachePath)
+        : 0;
+    return SkillSyncResult(
+      ok: true,
+      target: target,
+      pulledFiles: merged,
+      packageCount: packages,
+      message:
+          '已合并 Cursor ${resource.label} 到缓存：'
+          '写入 $merged 个文件'
+          '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          ' → $cachePath（未删除缓存多余项，也未写入正式目录）',
     );
   }
 
@@ -815,15 +778,11 @@ class SkillSyncService extends ChangeNotifier {
     if (client == null) {
       throw StateError('WebDAV 未配置完整');
     }
-    // 仅上传到 .../cursor/；全量镜像，远端多余项也会删除。
-    final remote = _folderSync.remoteResourceDir(
-      config,
-      resource.wireName,
-      target.wireName,
-    );
+    final remoteZip = _folderSync.remoteResourceZip(config, resource.wireName);
     final pushed = await _folderSync.pushFolder(
       client: client,
-      remoteDir: remote,
+      config: config,
+      resourceWireName: resource.wireName,
       localDir: deployPath,
       onProgress: (done, total) =>
           _reportProgress('正在上传 ${resource.label}', done, total),
@@ -837,10 +796,62 @@ class SkillSyncService extends ChangeNotifier {
       pushedFiles: pushed,
       packageCount: packages,
       message:
-          '已从 Cursor 正式目录全量上传 ${resource.label}：$pushed 个文件'
+          '已从 Cursor 正式目录打包上传 ${resource.label}：$pushed 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
-          ' → $remote（远端已与本机 Cursor 一致）',
+          ' → $remoteZip（已覆盖同名压缩包）',
     );
+  }
+
+  Future<SkillSyncResult> _forEachWebDavTarget({
+    required AgentResourceKind? resource,
+    required String activity,
+    required String emptyMessage,
+    required Future<SkillSyncResult> Function(
+      AgentResourceKind resource,
+      SkillTarget target,
+    )
+    each,
+  }) async {
+    return _run(resource, null, () async {
+      final kinds = resource == null
+          ? AgentResourceKind.values
+          : [resource];
+      var pulledFiles = 0;
+      var pushedFiles = 0;
+      var deployedFiles = 0;
+      var packageCount = 0;
+      final parts = <String>[];
+      var allOk = true;
+      var any = false;
+      for (final kind in kinds) {
+        for (final target in kind.webDavTargets) {
+          any = true;
+          try {
+            final one = await each(kind, target);
+            pulledFiles += one.pulledFiles;
+            pushedFiles += one.pushedFiles;
+            deployedFiles += one.deployedFiles;
+            packageCount += one.packageCount;
+            parts.add(one.message);
+            if (!one.ok) allOk = false;
+            _rememberResourceOutcome(kind, one.ok, one.message);
+          } catch (error) {
+            allOk = false;
+            parts.add('${kind.label}/${target.label}：失败（$error）');
+            debugPrint('$activity ${kind.label} ${target.label} 失败: $error');
+            _rememberResourceOutcome(kind, false, '$error');
+          }
+        }
+      }
+      return SkillSyncResult(
+        ok: allOk,
+        pulledFiles: pulledFiles,
+        pushedFiles: pushedFiles,
+        deployedFiles: deployedFiles,
+        packageCount: packageCount,
+        message: !any || parts.isEmpty ? emptyMessage : parts.join('；'),
+      );
+    }, activity: activity);
   }
 
   Future<SkillSyncResult> _run(

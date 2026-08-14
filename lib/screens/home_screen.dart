@@ -559,6 +559,13 @@ class _BulkResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('1  下载全部'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => run(hub.mergeAllResourcesFromWebDav),
+                  icon: const Icon(Icons.merge_outlined),
+                  label: const Text('合并全部'),
+                ),
                 FilledButton.tonalIcon(
                   onPressed: !supported || busy
                       ? null
@@ -670,7 +677,7 @@ class _McpResourceSyncCard extends StatelessWidget {
                       Text(
                         supported
                             ? (webDavReady
-                                  ? '共 ${hub.servers.length} 个 MCP · 清单可下载/上传'
+                                  ? '共 ${hub.servers.length} 个 MCP · 清单用 catalog.zip 下载/合并/上传'
                                   : 'WebDAV 未就绪，仍可更新客户端配置')
                             : '当前平台不支持 MCP 配置写入',
                         style: Theme.of(context).textTheme.bodySmall,
@@ -688,9 +695,22 @@ class _McpResourceSyncCard extends StatelessWidget {
                 FilledButton.tonalIcon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => _run(context, hub.pullWebDavNow),
+                      : () async {
+                          final confirmed = await _confirmCatalogReplace(
+                            context,
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(context, hub.pullWebDavNow);
+                        },
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('下载'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(context, hub.mergeWebDavNow),
+                  icon: const Icon(Icons.merge_outlined),
+                  label: const Text('合并'),
                 ),
                 FilledButton.tonalIcon(
                   onPressed: !supported
@@ -877,6 +897,16 @@ class _ResourceSyncCard extends StatelessWidget {
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('下载'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: !supported || !webDavReady || busy
+                      ? null
+                      : () => _run(
+                          context,
+                          () => hub.mergeResourceToAllTargets(resource),
+                        ),
+                  icon: const Icon(Icons.merge_outlined),
+                  label: const Text('合并'),
+                ),
                 FilledButton.tonalIcon(
                   onPressed: !supported || busy
                       ? null
@@ -995,6 +1025,31 @@ class _ResourceSyncCard extends StatelessWidget {
     }
     return hub.skillSync.resourceDeployPathFor(resource, target);
   }
+}
+
+Future<bool> _confirmCatalogReplace(BuildContext context) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认覆盖本机 MCP 清单？'),
+          content: const Text(
+            '即将下载远端 catalog.zip 并覆盖本机 MCP 列表。\n\n'
+            '本机多出的条目会被去掉；路径、密钥和开/关状态仍留在本机。\n\n'
+            '若希望两边都保留，请改用「合并」。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('确认下载'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 Future<bool> _confirmLocalOverwrite(

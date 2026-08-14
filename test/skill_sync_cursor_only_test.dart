@@ -66,7 +66,7 @@ void main() {
       expect(folderSync.pushCount, 1);
       expect(folderSync.pushedLocalDir, McpPaths.cursorSkillsPath);
       expect(folderSync.pushedLocalDir, isNot(McpPaths.cursorSkillsCachePath));
-      expect(folderSync.pushedRemoteDir, '/AgentHub/skills/cursor');
+      expect(folderSync.pushedResourceWire, 'skills');
       expect(result.message, contains('正式目录'));
     });
 
@@ -148,7 +148,7 @@ class _RecordingOpenCodeConverter extends CursorToOpenCodeConverter {
 
 class _RecordingFolderSync extends SkillWebDavFolderSync {
   String? pushedLocalDir;
-  String? pushedRemoteDir;
+  String? pushedResourceWire;
   int pushCount = 0;
 
   @override
@@ -164,12 +164,13 @@ class _RecordingFolderSync extends SkillWebDavFolderSync {
   @override
   Future<int> pushFolder({
     required Client client,
-    required String remoteDir,
+    required WebDavConfig config,
+    required String resourceWireName,
     required String localDir,
     void Function(int done, int total)? onProgress,
   }) async {
     pushedLocalDir = localDir;
-    pushedRemoteDir = remoteDir;
+    pushedResourceWire = resourceWireName;
     pushCount += 1;
     return 0;
   }

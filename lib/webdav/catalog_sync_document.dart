@@ -72,7 +72,7 @@ class SyncableServer {
   }
 }
 
-/// Remote catalog envelope under `<remotePath>/catalog.json`.
+/// 远端清单信封，放在 `<remotePath>/catalog.zip` 内的 `catalog.json`。
 class CatalogSyncDocument {
   const CatalogSyncDocument({
     required this.servers,
