@@ -71,35 +71,4 @@ void main() {
       isTrue,
     );
   });
-
-  test('ensureDownloadedFile 在文件缺失或为空时给出明确错误', () async {
-    final dir = await WritableTemp.resolveDir();
-    final missing =
-        '${dir.path}${Platform.pathSeparator}mcp_hub_missing_${DateTime.now().microsecondsSinceEpoch}.zip';
-    await expectLater(
-      WebDavZipTransfer.ensureDownloadedFile(missing),
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          contains('无法打开本地文件'),
-        ),
-      ),
-    );
-
-    final empty = await WritableTemp.createFile('mcp_hub_empty', '.zip');
-    addTearDown(() async {
-      if (await empty.exists()) await empty.delete();
-    });
-    await expectLater(
-      WebDavZipTransfer.ensureDownloadedFile(empty.path),
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          contains('本地文件为空'),
-        ),
-      ),
-    );
-  });
 }

@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
@@ -44,32 +45,20 @@ class WebDavZipTransfer {
     await client.writeFromFile(localPath, remotePath);
   }
 
-  /// 下载成功返回 true；远端不存在返回 false。
-  Future<bool> downloadFile({
+  /// 下载固定名 zip 的完整字节；远端不存在返回 null。
+  Future<Uint8List?> downloadBytes({
     required Client client,
     required String remotePath,
-    required String localPath,
   }) async {
-    final local = io.File(localPath);
     try {
-      await local.parent.create(recursive: true);
-      var usable = false;
-      try {
-        await client.read2File(remotePath, localPath);
-        usable = await isUsableLocalFile(localPath);
-      } catch (error) {
-        if (isRemoteNotFound(error)) return false;
-        debugPrint('流式下载落盘失败，改用整包写入: $error');
+      final bytes = await client.read(remotePath);
+      if (bytes.isEmpty) {
+        throw StateError('远端压缩包为空：$remotePath');
       }
-      if (!usable) {
-        final bytes = await client.read(remotePath);
-        await local.writeAsBytes(bytes, flush: true);
-      }
-      await ensureDownloadedFile(localPath);
-      return true;
+      return Uint8List.fromList(bytes);
     } catch (error) {
-      if (isRemoteNotFound(error)) return false;
-      throw StateError('下载远端文件失败：$remotePath → $localPath（$error）');
+      if (isRemoteNotFound(error)) return null;
+      throw StateError('下载远端压缩包失败：$remotePath（$error）');
     }
   }
 
@@ -86,31 +75,6 @@ class WebDavZipTransfer {
     if (message.contains('not found')) return true;
     if (message.contains('no such file')) return true;
     return false;
-  }
-
-  @visibleForTesting
-  static Future<bool> isUsableLocalFile(String localPath) async {
-    try {
-      await ensureDownloadedFile(localPath);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  @visibleForTesting
-  static Future<void> ensureDownloadedFile(String localPath) async {
-    final file = io.File(localPath);
-    try {
-      final raf = await file.open(mode: io.FileMode.read);
-      final length = await raf.length();
-      await raf.close();
-      if (length <= 0) {
-        throw StateError('下载完成但本地文件为空：$localPath');
-      }
-    } on io.FileSystemException catch (error) {
-      throw StateError('下载完成但无法打开本地文件：$localPath（$error）');
-    }
   }
 
   Future<io.File> createTempFile(String prefix, String extension) async {

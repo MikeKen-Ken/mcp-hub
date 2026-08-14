@@ -250,20 +250,12 @@ class WebDavSyncService extends ChangeNotifier {
     WebDavConfig config,
   ) async {
     final zipPath = WebDavZipPaths.catalogZip(config);
-    final tmp = await _zipTransfer.createTempFile('mcp_hub_catalog_dl', '.zip');
-    try {
-      final ok = await _zipTransfer.downloadFile(
-        client: client,
-        remotePath: zipPath,
-        localPath: tmp.path,
-      );
-      if (ok) {
-        return _catalogZip.readDocument(tmp.path);
-      }
-    } finally {
-      try {
-        if (await tmp.exists()) await tmp.delete();
-      } catch (_) {}
+    final bytes = await _zipTransfer.downloadBytes(
+      client: client,
+      remotePath: zipPath,
+    );
+    if (bytes != null) {
+      return _catalogZip.decodeBytes(bytes);
     }
 
     final legacy = await _readLegacyJson(

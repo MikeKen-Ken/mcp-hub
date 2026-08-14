@@ -171,24 +171,16 @@ class SkillWebDavFolderSync {
     required String localDir,
     required bool wipeTarget,
   }) async {
-    final zipFile = await _zipTransfer.createTempFile('mcp_hub_dl', '.zip');
-    try {
-      final ok = await _zipTransfer.downloadFile(
-        client: client,
-        remotePath: remoteZip,
-        localPath: zipFile.path,
-      );
-      if (!ok) return null;
-      return _zipCodec.extractTo(
-        zipPath: zipFile.path,
-        targetDir: localDir,
-        wipeTarget: wipeTarget,
-      );
-    } finally {
-      try {
-        if (await zipFile.exists()) await zipFile.delete();
-      } catch (_) {}
-    }
+    final bytes = await _zipTransfer.downloadBytes(
+      client: client,
+      remotePath: remoteZip,
+    );
+    if (bytes == null) return null;
+    return _zipCodec.extractBytes(
+      zipBytes: bytes,
+      targetDir: localDir,
+      wipeTarget: wipeTarget,
+    );
   }
 
   Future<int> _countPackedFiles(String localDir) async {
