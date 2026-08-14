@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:webdav_client/webdav_client.dart';
 
+import '../../common/writable_temp.dart';
 import '../../webdav/webdav_config.dart';
 import '../../webdav/webdav_zip_paths.dart';
 import '../../webdav/webdav_zip_transfer.dart';
@@ -85,8 +86,8 @@ class SkillWebDavFolderSync {
     void Function(int done, int total)? onProgress,
   }) async {
     onProgress?.call(0, 1);
-    final staging = await io.Directory.systemTemp.createTemp(
-      'mcp_hub_merge_${resourceWireName}_',
+    final staging = await WritableTemp.createDir(
+      'mcp_hub_merge_${resourceWireName}',
     );
     try {
       final zipRemote = remoteResourceZip(config, resourceWireName);
