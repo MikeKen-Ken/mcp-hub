@@ -1,7 +1,7 @@
 name: mcp_hub
 description: Agent Hub — manage MCP, Skills and other Cursor/Codex agent configs.
 publish_to: "none"
-version: 0.1.34+0
+version: 0.1.35+0
 
 environment:
   sdk: ^3.12.0
