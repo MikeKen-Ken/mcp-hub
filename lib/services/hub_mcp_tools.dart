@@ -110,7 +110,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'set_enabled',
-    description: '启用或禁用某个 MCP（影响是否写入 Cursor/Codex）',
+    description: '启用或禁用某个 MCP：同步 Hub 进程，并立即写入 Cursor（禁用则从 mcp.json 移除）、Codex / OpenCode（enabled）',
     inputSchema: JsonSchema.object(
       properties: {
         'id': JsonSchema.string(),

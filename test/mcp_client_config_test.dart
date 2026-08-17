@@ -88,7 +88,7 @@ void main() {
       expect((servers['kanbanMCP'] as Map)['url'], httpServer.url);
     });
 
-    test('writes disabled managed servers as well', () {
+    test('omits disabled managed servers from Cursor', () {
       final disabled = httpServer.copyWith(enabled: false);
       const existing = '''
 {
@@ -104,8 +104,7 @@ void main() {
         managedIds: {'kanbanMCP'},
       );
       final servers = (jsonDecode(text) as Map)['mcpServers'] as Map;
-      expect(servers.containsKey('kanbanMCP'), isTrue);
-      expect((servers['kanbanMCP'] as Map)['url'], disabled.url);
+      expect(servers.containsKey('kanbanMCP'), isFalse);
       expect(servers['other'], isNotNull);
     });
   });
@@ -118,6 +117,7 @@ void main() {
         managedIds: {'kanbanMCP', 'filesystem'},
       );
       expect(text, contains('[mcp_servers.kanbanMCP]'));
+      expect(text, contains('enabled = true'));
       expect(text, contains('url = "${httpServer.url}"'));
       expect(text, contains('[mcp_servers.filesystem]'));
       expect(text, contains('command = "npx"'));
@@ -203,6 +203,32 @@ url = "http://127.0.0.1:1/mcp"
       expect(d.missing, isFalse);
       expect(d.diffs.single.field, 'url');
     });
+
+    test('treats absent Cursor entry as aligned when Hub disabled', () {
+      final disabled = httpServer.copyWith(enabled: false);
+      final d = McpClientConfig.diagnoseCursorServer(
+        '{"mcpServers": {}}',
+        server: disabled,
+      );
+      expect(d.isAligned, isTrue);
+    });
+
+    test('reports leftover Cursor entry when Hub disabled', () {
+      final disabled = httpServer.copyWith(enabled: false);
+      const existing = '''
+{
+  "mcpServers": {
+    "kanbanMCP": { "url": "http://127.0.0.1:18765/mcp", "type": "http" }
+  }
+}
+''';
+      final d = McpClientConfig.diagnoseCursorServer(
+        existing,
+        server: disabled,
+      );
+      expect(d.isAligned, isFalse);
+      expect(d.diffs.single.field, 'enabled');
+    });
   });
 
   group('diagnoseCodexServer', () {
@@ -235,6 +261,26 @@ FOO = "bar"
       expect(d.missing, isFalse);
       expect(d.diffs.single.field, 'command');
       expect(d.diffs.single.actual, 'node');
+    });
+
+    test('writes and diagnoses Codex enabled flag', () {
+      final disabled = httpServer.copyWith(enabled: false);
+      final text = McpClientConfig.upsertCodexToml(
+        null,
+        servers: [disabled],
+        managedIds: {'kanbanMCP'},
+      );
+      expect(text, contains('enabled = false'));
+      expect(
+        McpClientConfig.diagnoseCodexServer(text, server: disabled).isAligned,
+        isTrue,
+      );
+      expect(
+        McpClientConfig.diagnoseCodexServer(text, server: httpServer)
+            .diffs
+            .map((e) => e.field),
+        contains('enabled'),
+      );
     });
 
     test('detects missing rmcp_client', () {
@@ -377,6 +423,21 @@ FOO = "bar"
       );
       expect(d.missing, isFalse);
       expect(d.diffs.single.field, 'url');
+    });
+
+    test('writes OpenCode enabled=false when Hub disabled', () {
+      final disabled = httpServer.copyWith(enabled: false);
+      final text = McpClientConfig.upsertOpenCodeJson(
+        null,
+        servers: [disabled],
+        managedIds: {'kanbanMCP'},
+      );
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      expect(((json['mcp'] as Map)['kanbanMCP'] as Map)['enabled'], isFalse);
+      expect(
+        McpClientConfig.diagnoseOpenCodeServer(text, server: disabled).isAligned,
+        isTrue,
+      );
     });
   });
 

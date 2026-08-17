@@ -43,8 +43,8 @@ class McpServerConfigDiagnosis {
 abstract final class McpClientConfig {
   /// Merge all [servers] into Cursor JSON.
   ///
-  /// [McpServerEntry.enabled] controls whether Hub starts the server, not
-  /// whether the server is converted into the client configuration.
+  /// Cursor 的 `mcp.json` 没有可靠的禁用字段：未启用的托管条目会从配置中移除，
+  /// 启用的才写入。否则 IDE 会自己再拉起 stdio / 继续连 HTTP。
   static String upsertCursorJson(
     String? existing, {
     required List<McpServerEntry> servers,
@@ -76,6 +76,7 @@ abstract final class McpClientConfig {
     }
 
     for (final server in servers) {
+      if (!server.enabled) continue;
       map[server.id] = _cursorEntry(server);
     }
 
@@ -128,6 +129,7 @@ abstract final class McpClientConfig {
 
   static String _codexBlock(McpServerEntry server) {
     final buffer = StringBuffer('[mcp_servers.${server.id}]\n');
+    buffer.writeln('enabled = ${server.enabled}');
     switch (server.transport) {
       case McpTransport.http:
         buffer.writeln('url = "${server.url ?? ''}"');
@@ -177,6 +179,23 @@ abstract final class McpClientConfig {
         return McpServerConfigDiagnosis(serverId: server.id, missing: true);
       }
       final entry = servers[server.id];
+      if (!server.enabled) {
+        if (entry == null) {
+          return McpServerConfigDiagnosis(serverId: server.id, missing: false);
+        }
+        return McpServerConfigDiagnosis(
+          serverId: server.id,
+          missing: false,
+          diffs: [
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'enabled',
+              expected: 'false',
+              actual: 'true',
+            ),
+          ],
+        );
+      }
       if (entry is! Map) {
         return McpServerConfigDiagnosis(serverId: server.id, missing: true);
       }
@@ -301,6 +320,17 @@ abstract final class McpClientConfig {
     _CodexServerTable table,
   ) {
     final diffs = <McpClientFieldDiff>[];
+    final actualEnabled = table.enabled ?? true;
+    if (actualEnabled != server.enabled) {
+      diffs.add(
+        McpClientFieldDiff(
+          serverId: server.id,
+          field: 'enabled',
+          expected: '${server.enabled}',
+          actual: '$actualEnabled',
+        ),
+      );
+    }
     switch (server.transport) {
       case McpTransport.http:
         final expectedUrl = server.url ?? '';
@@ -555,6 +585,19 @@ abstract final class McpClientConfig {
     Map<String, String> environment = const {},
   }) {
     final diffs = <McpClientFieldDiff>[];
+    final actualEnabled = entry['enabled'] is bool
+        ? entry['enabled'] as bool
+        : true;
+    if (actualEnabled != server.enabled) {
+      diffs.add(
+        McpClientFieldDiff(
+          serverId: server.id,
+          field: 'enabled',
+          expected: '${server.enabled}',
+          actual: '$actualEnabled',
+        ),
+      );
+    }
     final type = entry['type']?.toString();
     String map(String value) =>
         _toOpenCodeString(value, environment: environment);
@@ -725,12 +768,22 @@ abstract final class McpClientConfig {
       }
     }
 
+    bool? enabled;
+    final enabledMatch = RegExp(
+      r'^\s*enabled\s*=\s*(true|false)\s*$',
+      multiLine: true,
+    ).firstMatch(body);
+    if (enabledMatch != null) {
+      enabled = enabledMatch.group(1) == 'true';
+    }
+
     return _CodexServerTable(
       command: readString('command'),
       url: readString('url'),
       cwd: readString('cwd'),
       args: args,
       env: env,
+      enabled: enabled,
     );
   }
 
@@ -830,6 +883,7 @@ class CodexServerTable {
     this.cwd,
     this.args,
     this.env,
+    this.enabled,
   });
 
   final String? command;
@@ -837,6 +891,7 @@ class CodexServerTable {
   final String? cwd;
   final List<String>? args;
   final Map<String, String>? env;
+  final bool? enabled;
 }
 
 typedef _CodexServerTable = CodexServerTable;

@@ -344,7 +344,13 @@ class HubController extends ChangeNotifier {
       }
     }
     notifyListeners();
-    await refreshClientStatus();
+    final sync = await configureAllClients();
+    if (sync.ok) {
+      _lastMessage = enabled
+          ? '已启用 $id，并同步到 Cursor / Codex / OpenCode'
+          : '已禁用 $id，并同步到 Cursor / Codex / OpenCode';
+      notifyListeners();
+    }
   }
 
   Future<String> addServer({

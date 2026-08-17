@@ -8,7 +8,7 @@
 
 - **内置 `hubMCP`**：始终存在；AI 可用工具添加仓库、开关、一键配置 Cursor/Codex
 - 粘贴 Git URL，clone 到 `~/.mcp-hub/servers/<id>`（名称可留空，自动取仓库名）
-- 列表开关：控制是否写入客户端配置
+- 列表开关：立即同步客户端。Cursor 禁用时从 `mcp.json` 移除该条目；Codex / OpenCode 写入 `enabled = false`。stdio 由 IDE 按配置拉起，因此必须改配置才能真正断开。
 - 支持 **stdio**（客户端按需拉起）与 **HTTP**（Hub 可启停进程）
 - 一键合并写入：
   - Cursor: `%USERPROFILE%\.cursor\mcp.json`

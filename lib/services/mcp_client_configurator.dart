@@ -508,11 +508,12 @@ abstract final class McpClientConfigurator {
         removeIds: removeIds,
       );
       await file.writeAsString(next);
-      final count = servers.length;
+      final enabledCount = servers.where((s) => s.enabled).length;
       return McpConfigureResult(
         ok: true,
         path: path,
-        message: '已写入 ${definition.label}（$count 个 MCP），请重启 ${definition.label}',
+        message:
+            '已同步 ${definition.label}（启用 $enabledCount / 共 ${servers.length}），请重载 MCP 或重启 ${definition.label}',
       );
     } catch (error) {
       return McpConfigureResult(
