@@ -6,6 +6,7 @@ import 'package:mcp_hub/webdav/catalog_zip_codec.dart';
 import 'package:mcp_hub/webdav/webdav_config.dart';
 import 'package:mcp_hub/webdav/webdav_zip_paths.dart';
 import 'package:mcp_hub/webdav/zip_directory_codec.dart';
+import 'package:mcp_hub/webdav/zip_package_meta.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -89,5 +90,37 @@ void main() {
     expect(restored.updatedAt, 42);
     expect(restored.servers.single.id, 'demo');
     expect(restored.tombstones['gone'], 1);
+  });
+
+  test('资源压缩包写入上传时间，解压时不落入目标目录', () async {
+    final source = Directory(p.join(temp.path, 'skills'));
+    await File(p.join(source.path, 'demo.txt')).create(recursive: true);
+    await File(p.join(source.path, 'demo.txt')).writeAsString('ok');
+
+    final zipPath = p.join(temp.path, 'skills.zip');
+    const codec = ZipDirectoryCodec();
+    final uploadedAt = DateTime.utc(2026, 8, 17, 1, 30);
+    final meta = ZipPackageMeta(uploadedAt: uploadedAt);
+    await codec.packDirectory(
+      sourceDir: source.path,
+      zipPath: zipPath,
+      extraEntries: {ZipPackageMeta.entryName: meta.toUtf8Json()},
+    );
+
+    final restoredMeta = await codec.readPackageMeta(zipPath);
+    expect(restoredMeta?.uploadedAt.toUtc(), uploadedAt);
+
+    final dest = Directory(p.join(temp.path, 'skills_out'));
+    final count = await codec.extractTo(
+      zipPath: zipPath,
+      targetDir: dest.path,
+      wipeTarget: true,
+    );
+    expect(count, 1);
+    expect(File(p.join(dest.path, 'demo.txt')).existsSync(), isTrue);
+    expect(
+      File(p.join(dest.path, ZipPackageMeta.entryName)).existsSync(),
+      isFalse,
+    );
   });
 }

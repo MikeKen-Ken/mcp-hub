@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../common/agent_platforms.dart';
+import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
@@ -23,6 +24,7 @@ import '../services/mcp_server_runtime_resolver.dart';
 import '../services/repo_name.dart';
 import '../webdav/catalog_sync_document.dart';
 import '../webdav/catalog_sync_mapper.dart';
+import '../webdav/package_version_store.dart';
 import '../webdav/webdav_config.dart';
 import '../webdav/webdav_sync_service.dart';
 
@@ -45,13 +47,18 @@ class HubController extends ChangeNotifier {
     }
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
+    _packageVersions = PackageVersionStore();
     webDavSync = WebDavSyncService(
       loadConfig: () async => webDavConfig,
       loadLocalDocument: () async => CatalogSyncMapper.toDocument(_servers),
       applyDocument: _applySyncDocument,
+      versionStore: _packageVersions,
     );
     webDavSync.addListener(_onWebDavChanged);
-    skillSync = SkillSyncService(loadConfig: () async => webDavConfig);
+    skillSync = SkillSyncService(
+      loadConfig: () async => webDavConfig,
+      versionStore: _packageVersions,
+    );
     skillSync.addListener(_onSkillSyncChanged);
     configBackup = ConfigBackupService();
     autoConfigBackup = AutoConfigBackupService(
@@ -68,6 +75,7 @@ class HubController extends ChangeNotifier {
   final _uuid = const Uuid();
 
   late final HubMcpHost hubMcpHost;
+  late final PackageVersionStore _packageVersions;
   late final WebDavSyncService webDavSync;
   late final SkillSyncService skillSync;
   late final ConfigBackupService configBackup;
@@ -145,6 +153,12 @@ class HubController extends ChangeNotifier {
     notifyListeners();
     webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
+    await _packageVersions.load();
+    webDavSync.hydrateCatalogUploadedAt(
+      _packageVersions.get(PackageVersionStore.catalogKey),
+    );
+    skillSync.hydratePackageUploadedAt(_packageVersions.snapshot());
+    await webDavSync.seedCatalogUploadedAtIfMissing();
     await _ensureBuiltInHubMcp();
     await _repairInvalidWorkingDirectories();
     await _migrateAutoStartForEnabledServers();
@@ -657,6 +671,14 @@ class HubController extends ChangeNotifier {
 
   bool get isWebDavSyncing => webDavSync.status == CatalogSyncStatus.syncing;
 
+  Future<DateTime?> peekRemoteCatalogUploadedAt() {
+    return webDavSync.peekCatalogUploadedAt();
+  }
+
+  Future<DateTime?> peekRemoteResourceUploadedAt(AgentResourceKind resource) {
+    return skillSync.peekRemoteUploadedAt(resource);
+  }
+
   Future<void> syncWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.syncNow();
@@ -671,7 +693,9 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已从 WebDAV 下载并覆盖 MCP 清单'
+        ? (webDavSync.catalogUploadedAt == null
+            ? '已从 WebDAV 下载并覆盖 MCP 清单'
+            : '已从 WebDAV 下载并覆盖 MCP 清单（远端版本 ${formatPackageTime(webDavSync.catalogUploadedAt)}）')
         : '下载失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }

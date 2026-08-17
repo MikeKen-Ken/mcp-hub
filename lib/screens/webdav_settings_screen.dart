@@ -260,6 +260,8 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               Text(
                 '下载/上传内容：MCP 清单与 Skill / Command / Rule 均使用固定名压缩包覆盖传输'
                 '（catalog.zip、skills.zip、commands.zip、rules.zip），不会按日期堆积文件。\n'
+                '上传时会写入版本日期：MCP 清单用 catalog.json 的 updatedAt；'
+                'Skill / Command / Rule 压缩包内写入上传时间。旧包没有该字段时，下载确认会回退显示 WebDAV 文件修改时间。\n'
                 '「下载」解压后覆盖对应缓存或清单；「合并」解压后再与本机合并'
                 '（清单为三路合并，资源为覆盖同名、保留本地多余项）。\n'
                 '不下载/上传：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'

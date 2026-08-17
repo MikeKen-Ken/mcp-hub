@@ -288,6 +288,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           'status': hub.webDavSync.status.name,
           'lastError': hub.webDavSync.lastError,
           'lastSyncedAt': hub.webDavSync.lastSyncedAt?.toIso8601String(),
+          'catalogUploadedAt':
+              hub.webDavSync.catalogUploadedAt?.toIso8601String(),
         },
       });
     },

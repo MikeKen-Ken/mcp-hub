@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/app.dart';
 import 'package:mcp_hub/app_brand.dart';
 import 'package:mcp_hub/controllers/hub_controller.dart';
+import 'package:mcp_hub/webdav/webdav_config.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -38,6 +39,17 @@ void main() {
 
   testWidgets('home shows Agent Hub title', (tester) async {
     final hub = HubController(initiallyLoading: false);
+    hub.webDavConfig = const WebDavConfig(
+      enabled: true,
+      serverUrl: 'https://dav.example.com',
+      username: 'user',
+      password: 'secret',
+      remotePath: '/AgentHub',
+      autoSync: false,
+      autoPull: false,
+      pollIntervalSeconds: WebDavConfig.defaultPollIntervalSeconds,
+      pushDebounceSeconds: WebDavConfig.defaultPushDebounceSeconds,
+    );
     addTearDown(hub.dispose);
     addTearDown(() async {
       await tester.binding.setSurfaceSize(null);
@@ -70,6 +82,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('确认应用到 Cursor？'), findsNothing);
 
+    await tester.tap(find.text('3  上传全部'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认覆盖远端？'), findsOneWidget);
+    expect(find.text('确认上传'), findsOneWidget);
+    expect(find.textContaining('远端同名压缩包会被整包覆盖'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认覆盖远端？'), findsNothing);
+
     final mcpCard = find.ancestor(
       of: find.text('打开 MCP 设置'),
       matching: find.byType(Card),
@@ -80,6 +101,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('确认写入客户端？'), findsOneWidget);
     expect(find.textContaining('当前全部 MCP'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    final mcpUpload = find.descendant(of: mcpCard, matching: find.text('上传'));
+    await tester.ensureVisible(mcpUpload);
+    await tester.tap(mcpUpload);
+    await tester.pumpAndSettle();
+    expect(find.text('确认覆盖远端？'), findsOneWidget);
+    expect(find.textContaining('本机「MCP 清单」'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 

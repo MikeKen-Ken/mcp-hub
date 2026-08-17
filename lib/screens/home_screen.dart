@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../common/agent_platforms.dart';
+import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
@@ -17,6 +18,7 @@ import '../services/mcp_paths.dart';
 import '../widgets/hub_notice/hub_notice.dart';
 import '../widgets/op_status/op_status.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/sync_confirm/sync_confirm.dart';
 import 'add_server_screen.dart';
 import 'webdav_settings_screen.dart';
 
@@ -555,7 +557,26 @@ class _BulkResourceSyncCard extends StatelessWidget {
                 FilledButton.tonalIcon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => run(hub.syncAllResourcesFromWebDav),
+                      : () async {
+                          final confirmed = await confirmRemoteDownload(
+                            context,
+                            title: '确认下载全部 Agent 配置？',
+                            body:
+                                '即将下载远端 Skill / Command / Rule 压缩包并覆盖本机缓存。\n\n'
+                                '不会写入 Cursor 正式目录。',
+                            packages: [
+                              for (final resource in AgentResourceKind.values)
+                                RemotePackageDateQuery(
+                                  label: resource.label,
+                                  load: () => hub.peekRemoteResourceUploadedAt(
+                                    resource,
+                                  ),
+                                ),
+                            ],
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await run(hub.syncAllResourcesFromWebDav);
+                        },
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('1  下载全部'),
                 ),
@@ -583,7 +604,14 @@ class _BulkResourceSyncCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => run(hub.pushAllResourcesToWebDav),
+                      : () async {
+                          final confirmed = await confirmRemoteOverwrite(
+                            context,
+                            scope: '全部 Agent 配置',
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await run(hub.pushAllResourcesToWebDav);
+                        },
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('3  上传全部'),
                 ),
@@ -677,7 +705,7 @@ class _McpResourceSyncCard extends StatelessWidget {
                       Text(
                         supported
                             ? (webDavReady
-                                  ? '共 ${hub.servers.length} 个 MCP · 清单用 catalog.zip 下载/合并/上传'
+                                  ? '${currentPackageVersionLabel(hub.webDavSync.catalogUploadedAt)} · 共 ${hub.servers.length} 个 MCP'
                                   : 'WebDAV 未就绪，仍可更新客户端配置')
                             : '当前平台不支持 MCP 配置写入',
                         style: Theme.of(context).textTheme.bodySmall,
@@ -696,8 +724,10 @@ class _McpResourceSyncCard extends StatelessWidget {
                   onPressed: !supported || !webDavReady || busy
                       ? null
                       : () async {
-                          final confirmed = await _confirmCatalogReplace(
+                          final confirmed = await confirmCatalogReplace(
                             context,
+                            loadRemoteUploadedAt:
+                                hub.peekRemoteCatalogUploadedAt,
                           );
                           if (!confirmed || !context.mounted) return;
                           await _run(context, hub.pullWebDavNow);
@@ -734,7 +764,14 @@ class _McpResourceSyncCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => _run(context, hub.pushWebDavNow),
+                      : () async {
+                          final confirmed = await confirmRemoteOverwrite(
+                            context,
+                            scope: 'MCP 清单',
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(context, hub.pushWebDavNow);
+                        },
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('上传'),
                 ),
@@ -832,9 +869,9 @@ class _ResourceSyncCard extends StatelessWidget {
             SkillSyncStatus.success => '成功',
             SkillSyncStatus.error => '空闲',
           };
-    final when = hub.skillSync.lastSyncedAt == null
-        ? '尚未下载/上传'
-        : '上次：${hub.skillSync.lastSyncedAt!.toLocal()}';
+    final when = currentPackageVersionLabel(
+      hub.skillSync.uploadedAtFor(resource),
+    );
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -890,10 +927,28 @@ class _ResourceSyncCard extends StatelessWidget {
                 FilledButton.tonalIcon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => _run(
-                          context,
-                          () => hub.syncResourceToAllTargets(resource),
-                        ),
+                      : () async {
+                          final confirmed = await confirmRemoteDownload(
+                            context,
+                            title: '确认下载远端 ${resource.label}？',
+                            body:
+                                '即将下载远端 ${resource.label} 压缩包并覆盖本机缓存。\n\n'
+                                '不会写入 Cursor 正式目录。',
+                            packages: [
+                              RemotePackageDateQuery(
+                                label: resource.label,
+                                load: () => hub.peekRemoteResourceUploadedAt(
+                                  resource,
+                                ),
+                              ),
+                            ],
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(
+                            context,
+                            () => hub.syncResourceToAllTargets(resource),
+                          );
+                        },
                   icon: const Icon(Icons.cloud_download_outlined),
                   label: const Text('下载'),
                 ),
@@ -927,10 +982,17 @@ class _ResourceSyncCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
                       ? null
-                      : () => _run(
-                          context,
-                          () => hub.pushResourceToAllTargets(resource),
-                        ),
+                      : () async {
+                          final confirmed = await confirmRemoteOverwrite(
+                            context,
+                            scope: resource.label,
+                          );
+                          if (!confirmed || !context.mounted) return;
+                          await _run(
+                            context,
+                            () => hub.pushResourceToAllTargets(resource),
+                          );
+                        },
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('上传'),
                 ),
@@ -1025,31 +1087,6 @@ class _ResourceSyncCard extends StatelessWidget {
     }
     return hub.skillSync.resourceDeployPathFor(resource, target);
   }
-}
-
-Future<bool> _confirmCatalogReplace(BuildContext context) async {
-  return await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('确认覆盖本机 MCP 清单？'),
-          content: const Text(
-            '即将下载远端 catalog.zip 并覆盖本机 MCP 列表。\n\n'
-            '本机多出的条目会被去掉；路径、密钥和开/关状态仍留在本机。\n\n'
-            '若希望两边都保留，请改用「合并」。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认下载'),
-            ),
-          ],
-        ),
-      ) ??
-      false;
 }
 
 Future<bool> _confirmLocalOverwrite(

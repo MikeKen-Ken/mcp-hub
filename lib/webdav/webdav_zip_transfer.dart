@@ -42,6 +42,32 @@ class WebDavZipTransfer {
     await client.writeFromFile(localPath, remotePath);
   }
 
+  /// 读取远端文件的 Last-Modified；不存在则返回 null。
+  Future<DateTime?> readRemoteModifiedAt({
+    required Client client,
+    required String remotePath,
+  }) async {
+    final normalized = remotePath.replaceAll(RegExp(r'/+$'), '');
+    final slash = normalized.lastIndexOf('/');
+    final dir = slash <= 0 ? '/' : normalized.substring(0, slash);
+    final name = slash <= 0 ? normalized : normalized.substring(slash + 1);
+    try {
+      final entries = await client.readDir(dir);
+      for (final entry in entries) {
+        final entryName = entry.name;
+        final entryPath = (entry.path ?? '').replaceAll('\\', '/');
+        final matchesName = entryName == name;
+        final matchesPath =
+            entryPath == normalized || entryPath.endsWith('/$name');
+        if (matchesName || matchesPath) return entry.mTime;
+      }
+      return null;
+    } catch (error) {
+      if (_isNotFound(error)) return null;
+      rethrow;
+    }
+  }
+
   /// 下载成功返回 true；远端不存在返回 false。
   Future<bool> downloadFile({
     required Client client,

@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../common/agent_platforms.dart';
+import '../../common/package_time.dart';
 import '../../common/sync_progress.dart';
 import '../../services/mcp_paths.dart';
+import '../../webdav/package_version_store.dart';
 import '../../webdav/webdav_config.dart';
 import 'agent_resource_kind.dart';
 import 'convert/cursor_to_codex_agents_converter.dart';
@@ -50,6 +52,7 @@ class SkillSyncService extends ChangeNotifier {
     CursorToCodexSkillConverter? skillConverter,
     CursorToCodexAgentsConverter? agentsConverter,
     CursorToOpenCodeConverter? openCodeConverter,
+    PackageVersionStore? versionStore,
   }) : _loadConfig = loadConfig,
        _folderSync = folderSync ?? SkillWebDavFolderSync(),
        _folderCopy = folderCopy ?? const SkillFolderCopy(),
@@ -57,18 +60,21 @@ class SkillSyncService extends ChangeNotifier {
        _agentsConverter =
            agentsConverter ?? const CursorToCodexAgentsConverter(),
        _openCodeConverter =
-           openCodeConverter ?? const CursorToOpenCodeConverter();
+           openCodeConverter ?? const CursorToOpenCodeConverter(),
+       _versionStore = versionStore ?? PackageVersionStore();
   final Future<WebDavConfig> Function() _loadConfig;
   final SkillWebDavFolderSync _folderSync;
   final SkillFolderCopy _folderCopy;
   final CursorToCodexSkillConverter _skillConverter;
   final CursorToCodexAgentsConverter _agentsConverter;
   final CursorToOpenCodeConverter _openCodeConverter;
+  final PackageVersionStore _versionStore;
 
   SkillSyncStatus status = SkillSyncStatus.idle;
   String? lastError;
   String? lastMessage;
   DateTime? lastSyncedAt;
+  final Map<AgentResourceKind, DateTime> packageUploadedAt = {};
   SkillTarget? lastTarget;
   AgentResourceKind? lastResource;
   SyncProgress? progress;
@@ -111,6 +117,29 @@ class SkillSyncService extends ChangeNotifier {
     (AgentResourceKind.command, SkillTarget.openCode) =>
       McpPaths.openCodeCommandsPath,
   };
+
+  DateTime? uploadedAtFor(AgentResourceKind resource) =>
+      packageUploadedAt[resource];
+
+  void hydratePackageUploadedAt(Map<String, DateTime> times) {
+    packageUploadedAt.clear();
+    for (final kind in AgentResourceKind.values) {
+      final time = times[kind.wireName];
+      if (time != null) packageUploadedAt[kind] = time;
+    }
+  }
+
+  Future<DateTime?> peekRemoteUploadedAt(AgentResourceKind resource) async {
+    final config = await _loadConfig();
+    if (!config.enabled || !config.isConfigured) return null;
+    final client = _folderSync.clientFor(config);
+    if (client == null) return null;
+    return _folderSync.peekRemoteUploadedAt(
+      client: client,
+      config: config,
+      resourceWireName: resource.wireName,
+    );
+  }
 
   /// 从 WebDAV 下载 Cursor Skill 到本机缓存（不覆盖正式目录）。
   Future<SkillSyncResult> syncFromWebDav(SkillTarget target) async {
@@ -666,18 +695,23 @@ class SkillSyncService extends ChangeNotifier {
       onProgress: (done, total) =>
           _reportProgress('正在下载 ${resource.label}', done, total),
     );
+    await _rememberPackageUploadedAt(resource, pulled.uploadedAt);
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(cachePath)
         : 0;
+    final versionHint = pulled.uploadedAt == null
+        ? ''
+        : '（远端版本 ${formatPackageTime(pulled.uploadedAt)}）';
     return SkillSyncResult(
       ok: true,
       target: target,
-      pulledFiles: pulled,
+      pulledFiles: pulled.fileCount,
       packageCount: packages,
       message:
           '已下载 Cursor ${resource.label} 压缩包到缓存：'
-          '$pulled 个文件'
+          '${pulled.fileCount} 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          '$versionHint'
           ' → $cachePath（未写入正式目录，请使用「应用到 Cursor」）',
     );
   }
@@ -708,18 +742,23 @@ class SkillSyncService extends ChangeNotifier {
       onProgress: (done, total) =>
           _reportProgress('正在合并 ${resource.label}', done, total),
     );
+    await _rememberPackageUploadedAt(resource, merged.uploadedAt);
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(cachePath)
         : 0;
+    final versionHint = merged.uploadedAt == null
+        ? ''
+        : '（远端版本 ${formatPackageTime(merged.uploadedAt)}）';
     return SkillSyncResult(
       ok: true,
       target: target,
-      pulledFiles: merged,
+      pulledFiles: merged.fileCount,
       packageCount: packages,
       message:
           '已合并 Cursor ${resource.label} 到缓存：'
-          '写入 $merged 个文件'
+          '写入 ${merged.fileCount} 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          '$versionHint'
           ' → $cachePath（未删除缓存多余项，也未写入正式目录）',
     );
   }
@@ -787,6 +826,8 @@ class SkillSyncService extends ChangeNotifier {
       onProgress: (done, total) =>
           _reportProgress('正在上传 ${resource.label}', done, total),
     );
+    final uploadedAt = DateTime.now().toUtc();
+    await _rememberPackageUploadedAt(resource, uploadedAt);
     final packages = resource == AgentResourceKind.skill
         ? await _folderCopy.countSkillPackages(deployPath)
         : 0;
@@ -798,6 +839,7 @@ class SkillSyncService extends ChangeNotifier {
       message:
           '已从 Cursor 正式目录打包上传 ${resource.label}：$pushed 个文件'
           '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+          '（版本 ${formatPackageTime(uploadedAt)}）'
           ' → $remoteZip（已覆盖同名压缩包）',
     );
   }
@@ -914,6 +956,15 @@ class SkillSyncService extends ChangeNotifier {
     } else {
       resourceFailures[resource] = message;
     }
+  }
+
+  Future<void> _rememberPackageUploadedAt(
+    AgentResourceKind resource,
+    DateTime? time,
+  ) async {
+    if (time == null) return;
+    packageUploadedAt[resource] = time;
+    await _versionStore.save(resource.wireName, time);
   }
 
   void _reportProgress(String label, int done, int total) {

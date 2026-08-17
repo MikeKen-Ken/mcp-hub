@@ -4,11 +4,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
 
+import '../common/package_time.dart';
 import '../common/sync_progress.dart';
 import 'catalog_merge.dart';
 import 'catalog_sync_base_store.dart';
 import 'catalog_sync_document.dart';
 import 'catalog_zip_codec.dart';
+import 'package_version_store.dart';
 import 'webdav_config.dart';
 import 'webdav_zip_paths.dart';
 import 'webdav_zip_transfer.dart';
@@ -24,9 +26,11 @@ class WebDavSyncService extends ChangeNotifier {
     CatalogSyncBaseStore? baseStore,
     CatalogZipCodec? catalogZip,
     WebDavZipTransfer? zipTransfer,
+    PackageVersionStore? versionStore,
   }) : _baseStore = baseStore ?? CatalogSyncBaseStore(),
        _catalogZip = catalogZip ?? CatalogZipCodec(),
-       _zipTransfer = zipTransfer ?? WebDavZipTransfer();
+       _zipTransfer = zipTransfer ?? WebDavZipTransfer(),
+       _versionStore = versionStore ?? PackageVersionStore();
 
   final Future<WebDavConfig> Function() _loadConfig;
   final Future<CatalogSyncDocument> Function() _loadLocalDocument;
@@ -34,10 +38,12 @@ class WebDavSyncService extends ChangeNotifier {
   final CatalogSyncBaseStore _baseStore;
   final CatalogZipCodec _catalogZip;
   final WebDavZipTransfer _zipTransfer;
+  final PackageVersionStore _versionStore;
 
   CatalogSyncStatus status = CatalogSyncStatus.idle;
   String? lastError;
   DateTime? lastSyncedAt;
+  DateTime? catalogUploadedAt;
   SyncProgress? progress;
   String? lastAction;
 
@@ -57,6 +63,28 @@ class WebDavSyncService extends ChangeNotifier {
   }
 
   Client? _client(WebDavConfig config) => _zipTransfer.clientFor(config);
+
+  void hydrateCatalogUploadedAt(DateTime? value) {
+    catalogUploadedAt = value;
+  }
+
+  Future<void> seedCatalogUploadedAtIfMissing() async {
+    if (catalogUploadedAt != null) return;
+    final base = await _baseStore.load();
+    catalogUploadedAt = dateTimeFromEpochMs(base.updatedAt);
+  }
+
+  Future<DateTime?> peekCatalogUploadedAt() async {
+    final config = await _loadConfig();
+    final client = _client(config);
+    if (client == null || !config.enabled || !config.isConfigured) {
+      return null;
+    }
+    return _zipTransfer.readRemoteModifiedAt(
+      client: client,
+      remotePath: WebDavZipPaths.catalogZip(config),
+    );
+  }
 
   Future<bool> testConnection([WebDavConfig? override]) async {
     final config = override ?? await _loadConfig();
@@ -128,6 +156,9 @@ class WebDavSyncService extends ChangeNotifier {
       await _baseStore.save(doc);
       _tombstones = Map<String, int>.from(doc.tombstones);
       lastSyncedAt = DateTime.now();
+      await _rememberCatalogUploadedAt(
+        dateTimeFromEpochMs(doc.updatedAt) ?? lastSyncedAt,
+      );
       lastError = null;
       progress = const SyncProgress(label: '上传完成', current: 2, total: 2);
       _setStatus(CatalogSyncStatus.success);
@@ -203,6 +234,13 @@ class WebDavSyncService extends ChangeNotifier {
       }
       await _baseStore.save(next);
       lastSyncedAt = DateTime.now();
+      await _rememberCatalogUploadedAt(
+        dateTimeFromEpochMs(remoteDoc.updatedAt) ??
+            await _zipTransfer.readRemoteModifiedAt(
+              client: client,
+              remotePath: WebDavZipPaths.catalogZip(config),
+            ),
+      );
       lastError = null;
       progress = SyncProgress(
         label: merge ? '合并完成' : '下载完成',
@@ -219,6 +257,12 @@ class WebDavSyncService extends ChangeNotifier {
       _inFlight = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _rememberCatalogUploadedAt(DateTime? time) async {
+    if (time == null) return;
+    catalogUploadedAt = time;
+    await _versionStore.save(PackageVersionStore.catalogKey, time);
   }
 
   bool _sameDoc(CatalogSyncDocument a, CatalogSyncDocument b) {

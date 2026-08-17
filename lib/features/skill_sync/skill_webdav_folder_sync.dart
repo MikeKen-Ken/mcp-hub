@@ -8,7 +8,19 @@ import '../../webdav/webdav_config.dart';
 import '../../webdav/webdav_zip_paths.dart';
 import '../../webdav/webdav_zip_transfer.dart';
 import '../../webdav/zip_directory_codec.dart';
+import '../../webdav/zip_package_meta.dart';
 import 'skill_folder_copy.dart';
+
+/// 一次文件夹压缩包传输的结果。
+class SkillFolderTransferResult {
+  const SkillFolderTransferResult({
+    required this.fileCount,
+    this.uploadedAt,
+  });
+
+  final int fileCount;
+  final DateTime? uploadedAt;
+}
 
 /// WebDAV 与本地 Skill 文件夹之间的压缩包下载/上传/合并。
 class SkillWebDavFolderSync {
@@ -44,8 +56,19 @@ class SkillWebDavFolderSync {
     return WebDavZipPaths.resourceZip(config, resourceWireName);
   }
 
+  Future<DateTime?> peekRemoteUploadedAt({
+    required Client client,
+    required WebDavConfig config,
+    required String resourceWireName,
+  }) {
+    return _zipTransfer.readRemoteModifiedAt(
+      client: client,
+      remotePath: remoteResourceZip(config, resourceWireName),
+    );
+  }
+
   /// 将远端压缩包镜像到本地（先清空本地目录再解压）。
-  Future<int> pullFolder({
+  Future<SkillFolderTransferResult> pullFolder({
     required Client client,
     required WebDavConfig config,
     required String resourceWireName,
@@ -67,16 +90,17 @@ class SkillWebDavFolderSync {
     }
 
     debugPrint('未找到 $zipRemote，回退旧目录树下载');
-    return _pullLegacyTree(
+    final files = await _pullLegacyTree(
       client: client,
       remoteDir: remoteResourceDir(config, resourceWireName, targetWireName),
       localDir: localDir,
       onProgress: onProgress,
     );
+    return SkillFolderTransferResult(fileCount: files);
   }
 
   /// 下载压缩包后合并复制到本地（覆盖同名，不删除本地多余项）。
-  Future<int> mergeFolder({
+  Future<SkillFolderTransferResult> mergeFolder({
     required Client client,
     required WebDavConfig config,
     required String resourceWireName,
@@ -112,14 +136,20 @@ class SkillWebDavFolderSync {
       await io.Directory(localDir).create(recursive: true);
       if (!await staging.exists()) {
         onProgress?.call(1, 1);
-        return 0;
+        return SkillFolderTransferResult(
+          fileCount: 0,
+          uploadedAt: extracted?.uploadedAt,
+        );
       }
       final copied = await _folderCopy.copyContents(
         sourceDir: staging.path,
         targetDir: localDir,
       );
       onProgress?.call(1, 1);
-      return copied.copiedFiles;
+      return SkillFolderTransferResult(
+        fileCount: copied.copiedFiles,
+        uploadedAt: extracted?.uploadedAt,
+      );
     } finally {
       try {
         if (await staging.exists()) await staging.delete(recursive: true);
@@ -145,9 +175,11 @@ class SkillWebDavFolderSync {
       '.zip',
     );
     try {
+      final meta = ZipPackageMeta(uploadedAt: DateTime.now().toUtc());
       await _zipCodec.packDirectory(
         sourceDir: localDir,
         zipPath: zipFile.path,
+        extraEntries: {ZipPackageMeta.entryName: meta.toUtf8Json()},
       );
       onProgress?.call(1, 2);
       await _zipTransfer.uploadFile(
@@ -164,7 +196,7 @@ class SkillWebDavFolderSync {
     }
   }
 
-  Future<int?> _downloadZipToDir({
+  Future<SkillFolderTransferResult?> _downloadZipToDir({
     required Client client,
     required String remoteZip,
     required String localDir,
@@ -172,16 +204,25 @@ class SkillWebDavFolderSync {
   }) async {
     final zipFile = await _zipTransfer.createTempFile('mcp_hub_dl', '.zip');
     try {
+      final remoteModified = await _zipTransfer.readRemoteModifiedAt(
+        client: client,
+        remotePath: remoteZip,
+      );
       final ok = await _zipTransfer.downloadFile(
         client: client,
         remotePath: remoteZip,
         localPath: zipFile.path,
       );
       if (!ok) return null;
-      return _zipCodec.extractTo(
+      final meta = await _zipCodec.readPackageMeta(zipFile.path);
+      final files = await _zipCodec.extractTo(
         zipPath: zipFile.path,
         targetDir: localDir,
         wipeTarget: wipeTarget,
+      );
+      return SkillFolderTransferResult(
+        fileCount: files,
+        uploadedAt: meta?.uploadedAt ?? remoteModified,
       );
     } finally {
       try {

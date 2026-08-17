@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
+import 'zip_package_meta.dart';
+
 /// 目录 ↔ zip（条目路径相对根目录，不含外层文件夹名）。
 class ZipDirectoryCodec {
   const ZipDirectoryCodec();
@@ -12,6 +14,7 @@ class ZipDirectoryCodec {
     required String sourceDir,
     required String zipPath,
     bool skipDotEntries = true,
+    Map<String, List<int>> extraEntries = const {},
   }) async {
     final archive = Archive();
     final source = Directory(sourceDir);
@@ -25,9 +28,15 @@ class ZipDirectoryCodec {
           p.split(p.relative(entity.path, from: source.path)),
         );
         if (skipDotEntries && _hasDotSegment(rel)) continue;
+        if (ZipPackageMeta.isReservedEntry(rel)) continue;
         final data = await entity.readAsBytes();
         archive.addFile(ArchiveFile(rel, data.length, data));
       }
+    }
+    for (final extra in extraEntries.entries) {
+      archive.addFile(
+        ArchiveFile(extra.key, extra.value.length, extra.value),
+      );
     }
     if (archive.files.isEmpty) {
       archive.addFile(ArchiveFile('.keep', 0, <int>[]));
@@ -38,6 +47,12 @@ class ZipDirectoryCodec {
     if (await out.exists()) await out.delete();
     final encoded = ZipEncoder().encode(archive);
     await out.writeAsBytes(encoded, flush: true);
+  }
+
+  Future<ZipPackageMeta?> readPackageMeta(String zipPath) async {
+    final zipFile = File(zipPath);
+    if (!await zipFile.exists()) return null;
+    return ZipPackageMeta.fromArchiveBytes(await zipFile.readAsBytes());
   }
 
   Future<int> extractTo({
@@ -62,6 +77,7 @@ class ZipDirectoryCodec {
       if (!entry.isFile) continue;
       final rel = entry.name.replaceAll('\\', '/');
       if (rel.contains('..')) continue;
+      if (ZipPackageMeta.isReservedEntry(rel)) continue;
       if (skipDotEntries && _hasDotSegment(rel)) continue;
       final dest = File(p.joinAll([target.path, ...rel.split('/')]));
       await dest.parent.create(recursive: true);
