@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:webdav_client/webdav_client.dart';
 
+import '../../common/writable_temp.dart';
 import '../../webdav/webdav_config.dart';
 import '../../webdav/webdav_zip_paths.dart';
 import '../../webdav/webdav_zip_transfer.dart';
@@ -109,8 +110,8 @@ class SkillWebDavFolderSync {
     void Function(int done, int total)? onProgress,
   }) async {
     onProgress?.call(0, 1);
-    final staging = await io.Directory.systemTemp.createTemp(
-      'mcp_hub_merge_${resourceWireName}_',
+    final staging = await WritableTemp.createDir(
+      'mcp_hub_merge_${resourceWireName}',
     );
     try {
       final zipRemote = remoteResourceZip(config, resourceWireName);
@@ -202,33 +203,25 @@ class SkillWebDavFolderSync {
     required String localDir,
     required bool wipeTarget,
   }) async {
-    final zipFile = await _zipTransfer.createTempFile('mcp_hub_dl', '.zip');
-    try {
-      final remoteModified = await _zipTransfer.readRemoteModifiedAt(
-        client: client,
-        remotePath: remoteZip,
-      );
-      final ok = await _zipTransfer.downloadFile(
-        client: client,
-        remotePath: remoteZip,
-        localPath: zipFile.path,
-      );
-      if (!ok) return null;
-      final meta = await _zipCodec.readPackageMeta(zipFile.path);
-      final files = await _zipCodec.extractTo(
-        zipPath: zipFile.path,
-        targetDir: localDir,
-        wipeTarget: wipeTarget,
-      );
-      return SkillFolderTransferResult(
-        fileCount: files,
-        uploadedAt: meta?.uploadedAt ?? remoteModified,
-      );
-    } finally {
-      try {
-        if (await zipFile.exists()) await zipFile.delete();
-      } catch (_) {}
-    }
+    final remoteModified = await _zipTransfer.readRemoteModifiedAt(
+      client: client,
+      remotePath: remoteZip,
+    );
+    final bytes = await _zipTransfer.downloadBytes(
+      client: client,
+      remotePath: remoteZip,
+    );
+    if (bytes == null) return null;
+    final meta = ZipPackageMeta.fromArchiveBytes(bytes);
+    final files = await _zipCodec.extractBytes(
+      zipBytes: bytes,
+      targetDir: localDir,
+      wipeTarget: wipeTarget,
+    );
+    return SkillFolderTransferResult(
+      fileCount: files,
+      uploadedAt: meta?.uploadedAt ?? remoteModified,
+    );
   }
 
   Future<int> _countPackedFiles(String localDir) async {

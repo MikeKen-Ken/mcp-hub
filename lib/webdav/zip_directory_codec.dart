@@ -65,13 +65,31 @@ class ZipDirectoryCodec {
     if (!await zipFile.exists()) {
       throw StateError('压缩包不存在：$zipPath');
     }
+    return extractBytes(
+      zipBytes: await zipFile.readAsBytes(),
+      targetDir: targetDir,
+      wipeTarget: wipeTarget,
+      skipDotEntries: skipDotEntries,
+    );
+  }
+
+  /// 用已经在内存里的固定名 zip 字节解压，避免再打开临时文件。
+  Future<int> extractBytes({
+    required List<int> zipBytes,
+    required String targetDir,
+    bool wipeTarget = false,
+    bool skipDotEntries = true,
+  }) async {
+    if (zipBytes.isEmpty) {
+      throw StateError('压缩包为空，无法解压');
+    }
     final target = Directory(targetDir);
     if (wipeTarget && await target.exists()) {
       await target.delete(recursive: true);
     }
     await target.create(recursive: true);
 
-    final archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
+    final archive = ZipDecoder().decodeBytes(zipBytes);
     var files = 0;
     for (final entry in archive.files) {
       if (!entry.isFile) continue;
@@ -81,7 +99,7 @@ class ZipDirectoryCodec {
       if (skipDotEntries && _hasDotSegment(rel)) continue;
       final dest = File(p.joinAll([target.path, ...rel.split('/')]));
       await dest.parent.create(recursive: true);
-      await dest.writeAsBytes(entry.content, flush: true);
+      await dest.writeAsBytes(entry.content as List<int>, flush: true);
       files += 1;
     }
     return files;

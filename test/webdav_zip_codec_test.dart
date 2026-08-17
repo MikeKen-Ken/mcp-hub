@@ -67,6 +67,18 @@ void main() {
       'world',
     );
     expect(File(p.join(dest.path, '.secret')).existsSync(), isFalse);
+
+    final destFromBytes = Directory(p.join(temp.path, 'dest_bytes'));
+    final fromBytes = await codec.extractBytes(
+      zipBytes: await File(zipPath).readAsBytes(),
+      targetDir: destFromBytes.path,
+      wipeTarget: true,
+    );
+    expect(fromBytes, 2);
+    expect(
+      await File(p.join(destFromBytes.path, 'a.txt')).readAsString(),
+      'hello',
+    );
   });
 
   test('catalog.zip 可往返清单文档', () async {
