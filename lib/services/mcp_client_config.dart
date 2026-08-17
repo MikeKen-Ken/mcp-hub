@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
+import 'codex_mcp_toml_rewriter.dart';
 
 /// 单个 MCP 在客户端配置中的字段差异。
 class McpClientFieldDiff {
@@ -107,14 +108,43 @@ abstract final class McpClientConfig {
     Set<String> removeIds = const {},
   }) {
     var text = existing ?? '';
+    final nestedById = <String, String>{};
+    final liveLowers = {
+      for (final server in servers) server.id.toLowerCase(),
+    };
+    final removeLowers = {for (final id in removeIds) id.toLowerCase()};
+    final seenLowers = <String>{};
     for (final id in {...managedIds, ...removeIds}) {
-      text = _removeTomlTable(text, 'mcp_servers.$id');
+      final lower = id.toLowerCase();
+      if (!seenLowers.add(lower)) continue;
+      final canonicalId = servers
+              .where((s) => s.id.toLowerCase() == lower)
+              .map((s) => s.id)
+              .firstOrNull ??
+          id;
+      final keepNested =
+          liveLowers.contains(lower) && !removeLowers.contains(lower);
+      final stripped = CodexMcpTomlRewriter.stripServerTables(
+        text,
+        id,
+        keepNested: keepNested,
+        canonicalId: canonicalId,
+      );
+      text = stripped.text;
+      if (keepNested && stripped.nested.isNotEmpty) {
+        nestedById[canonicalId] = stripped.nested;
+      }
     }
     text = _ensureCodexRmcpClient(text);
 
     final blocks = <String>[];
     for (final server in servers) {
-      blocks.add(_codexBlock(server));
+      final nested = nestedById[server.id];
+      if (nested == null || nested.isEmpty) {
+        blocks.add(_codexBlock(server));
+      } else {
+        blocks.add('${_codexBlock(server)}\n\n$nested');
+      }
     }
     if (blocks.isEmpty) {
       final trimmed = text.trimRight();
@@ -847,32 +877,6 @@ abstract final class McpClientConfig {
     return '${source.substring(0, insertAt)}\n'
         'rmcp_client = true'
         '${source.substring(insertAt)}';
-  }
-
-  static String _removeTomlTable(String source, String tableName) {
-    final exact = RegExp(
-      '^\\[${RegExp.escape(tableName)}\\]\\s*\$',
-      multiLine: true,
-    ).firstMatch(source);
-    if (exact == null) {
-      // Also strip nested env table if present alone after parent removal.
-      final envExact = RegExp(
-        '^\\[${RegExp.escape('$tableName.env')}\\]\\s*\$',
-        multiLine: true,
-      ).firstMatch(source);
-      if (envExact == null) return source;
-      return _removeTomlTable(source, '$tableName.env');
-    }
-    final afterHeader = exact.end;
-    final rest = source.substring(afterHeader);
-    final next = RegExp(r'^\[', multiLine: true).firstMatch(rest);
-    final end = next == null ? source.length : afterHeader + next.start;
-    final before = source.substring(0, exact.start);
-    final after = source.substring(end);
-    var result = '$before$after'.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    // Remove orphaned env table for this server.
-    result = _removeTomlTable(result, '$tableName.env');
-    return result;
   }
 }
 

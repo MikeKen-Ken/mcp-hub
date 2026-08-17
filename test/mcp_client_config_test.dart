@@ -154,6 +154,73 @@ url = "http://127.0.0.1:1/mcp"
       expect(text, contains('[mcp_servers.kanbanMCP]'));
       expect(text, contains('url = "${httpServer.url}"'));
     });
+
+    test('preserves Codex tool tables when rewriting parent', () {
+      const existing = '''
+[mcp_servers.kanbanMCP]
+enabled = true
+url = "http://127.0.0.1:1/mcp"
+
+[mcp_servers.kanbanMCP.tools.list_projects]
+approval_mode = "approve"
+
+[mcp_servers.unityMCP]
+url = "http://127.0.0.1:8080/mcp"
+''';
+      final text = McpClientConfig.upsertCodexToml(
+        existing,
+        servers: [httpServer],
+        managedIds: {'kanbanMCP'},
+      );
+      expect(text, contains('[mcp_servers.kanbanMCP]'));
+      expect(text, contains('url = "${httpServer.url}"'));
+      expect(text, contains('[mcp_servers.kanbanMCP.tools.list_projects]'));
+      expect(text, contains('approval_mode = "approve"'));
+      expect(text, contains('[mcp_servers.unityMCP]'));
+    });
+
+    test('drops tool tables when server is tombstoned', () {
+      const existing = '''
+[mcp_servers.removed]
+command = "echo"
+
+[mcp_servers.removed.tools.list_board]
+approval_mode = "approve"
+''';
+      final text = McpClientConfig.upsertCodexToml(
+        existing,
+        servers: [httpServer],
+        managedIds: {'kanbanMCP'},
+        removeIds: {'removed'},
+      );
+      expect(text, isNot(contains('[mcp_servers.removed]')));
+      expect(text, isNot(contains('list_board')));
+      expect(text, contains('[mcp_servers.kanbanMCP]'));
+    });
+
+    test('migrates case-variant orphan tool tables onto Hub id', () {
+      const existing = '''
+[features]
+rmcp_client = true
+
+[mcp_servers.kanbanMCP.tools.list_projects]
+approval_mode = "approve"
+
+[mcp_servers.kanbanmcp]
+enabled = true
+url = "http://127.0.0.1:1/mcp"
+''';
+      final lowercase = httpServer.copyWith(id: 'kanbanmcp');
+      final text = McpClientConfig.upsertCodexToml(
+        existing,
+        servers: [lowercase],
+        managedIds: {'kanbanmcp'},
+      );
+      expect(text, contains('[mcp_servers.kanbanmcp]'));
+      expect(text, contains('url = "${httpServer.url}"'));
+      expect(text, contains('[mcp_servers.kanbanmcp.tools.list_projects]'));
+      expect(text, isNot(contains('[mcp_servers.kanbanMCP.tools.list_projects]')));
+    });
   });
 
   group('diagnoseCursorServer', () {
