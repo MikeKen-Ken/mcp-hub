@@ -170,6 +170,11 @@ abstract final class AgentPlatforms {
           McpPaths.codexRulesPath,
         (AgentResourceKind.rule, AgentPlatformId.openCode) =>
           McpPaths.openCodeConfigDirectory,
+        (AgentResourceKind.hook, AgentPlatformId.cursor) =>
+          McpPaths.cursorHooksPath,
+        (AgentResourceKind.hook, AgentPlatformId.codex) =>
+          McpPaths.codexHooksPath,
+        (AgentResourceKind.hook, AgentPlatformId.openCode) => null,
       };
 
   static String? _cursorMcpConfigPath() => McpPaths.cursorMcpJsonPath;

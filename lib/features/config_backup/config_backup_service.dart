@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../app_brand.dart';
 import '../../features/skill_sync/agent_resource_kind.dart';
+import '../../features/skill_sync/cursor_hooks_bundle.dart';
 import '../../features/skill_sync/skill_folder_copy.dart';
 import '../../features/skill_sync/skill_target.dart';
 import '../../models/mcp_server_entry.dart';
@@ -59,16 +60,23 @@ class ConfigBackupService {
     SkillFolderCopy? folderCopy,
     Iterable<ConfigBackupResourceSource> Function()? resourceSourcesProvider,
     String? Function()? codexAgentsMdPathProvider,
+    CursorHooksBundle? hooksBundle,
+    CursorHooksLayout? Function()? cursorHooksLayoutProvider,
   }) : _folderCopy = folderCopy ?? const SkillFolderCopy(),
        _resourceSourcesProvider =
            resourceSourcesProvider ?? _defaultResourceSources,
        _codexAgentsMdPathProvider =
-           codexAgentsMdPathProvider ?? (() => McpPaths.codexAgentsMdPath);
+           codexAgentsMdPathProvider ?? (() => McpPaths.codexAgentsMdPath),
+       _hooksBundle = hooksBundle ?? const CursorHooksBundle(),
+       _cursorHooksLayoutProvider =
+           cursorHooksLayoutProvider ?? CursorHooksLayout.cursorUser;
 
   final SkillFolderCopy _folderCopy;
   final Iterable<ConfigBackupResourceSource> Function()
   _resourceSourcesProvider;
   final String? Function() _codexAgentsMdPathProvider;
+  final CursorHooksBundle _hooksBundle;
+  final CursorHooksLayout? Function() _cursorHooksLayoutProvider;
 
   /// 建议的备份文件名（含时间戳）。
   String suggestedFileName([DateTime? at]) {
@@ -116,6 +124,16 @@ class ConfigBackupService {
         fileCount += copied.copiedFiles;
       }
 
+      fileCount += await _exportCursorHooks(
+        p.join(
+          staging.path,
+          ConfigBackupPaths.resourceZipDir(
+            AgentResourceKind.hook,
+            SkillTarget.cursor,
+          ),
+        ),
+      );
+
       final agentsMd = _codexAgentsMdPathProvider();
       if (agentsMd != null) {
         final src = File(agentsMd);
@@ -135,8 +153,8 @@ class ConfigBackupService {
         appName: AppBrand.displayName,
         fileCount: fileCount,
         notes:
-            '含 MCP 清单与本机 Cursor Skill/Command/Rule，以及 Codex AGENTS.md；'
-            '不含 WebDAV 密码与 servers 仓库克隆。Codex Skills 请由 Cursor 转换生成。',
+            '含 MCP 清单与本机 Cursor Skill/Command/Rule/Hook，以及 Codex AGENTS.md；'
+            '不含 WebDAV 密码与 servers 仓库克隆。Codex Skills / Hooks 请由 Cursor 转换生成。',
       );
       await File(
         p.join(staging.path, ConfigBackupManifest.fileName),
@@ -221,6 +239,8 @@ class ConfigBackupService {
       }
     }
 
+    await _hashCursorHooks(addText, converter.add);
+
     final agentsMd = _codexAgentsMdPathProvider();
     if (agentsMd != null) {
       final file = File(agentsMd);
@@ -238,6 +258,7 @@ class ConfigBackupService {
 
   static Iterable<ConfigBackupResourceSource> _defaultResourceSources() sync* {
     for (final resource in AgentResourceKind.values) {
+      if (resource == AgentResourceKind.hook) continue;
       for (final target in resource.webDavTargets) {
         final path = ConfigBackupPaths.localDeployPath(resource, target);
         if (path == null) continue;
@@ -319,6 +340,7 @@ class ConfigBackupService {
 
       var restoredFiles = 0;
       for (final resource in AgentResourceKind.values) {
+        if (resource == AgentResourceKind.hook) continue;
         for (final target in resource.webDavTargets) {
           final zipRel = ConfigBackupPaths.resourceZipDir(resource, target);
           final zipAbs = p.join(root.path, zipRel);
@@ -338,6 +360,8 @@ class ConfigBackupService {
           }
         }
       }
+
+      restoredFiles += await _importCursorHooks(root);
 
       // 兼容旧备份中的 resources/*/codex（新导出不再写入；忽略缺失即可）。
       for (final resource in [
@@ -393,6 +417,87 @@ class ConfigBackupService {
       );
     } finally {
       await _safeDeleteDir(staging);
+    }
+  }
+
+  Future<int> _exportCursorHooks(String zipAbs) async {
+    final layout = _cursorHooksLayoutProvider();
+    if (layout == null) return 0;
+    final copied = await _hooksBundle.exportFromLayout(
+      layout: layout,
+      bundleDir: zipAbs,
+    );
+    return copied.copiedFiles;
+  }
+
+  Future<int> _importCursorHooks(Directory root) async {
+    final zipRel = ConfigBackupPaths.resourceZipDir(
+      AgentResourceKind.hook,
+      SkillTarget.cursor,
+    );
+    final zipAbs = p.join(root.path, zipRel);
+    if (!await Directory(zipAbs).exists()) return 0;
+    final layout = _cursorHooksLayoutProvider();
+    var count = 0;
+    if (layout != null) {
+      final applied = await _hooksBundle.applyToLayout(
+        bundleDir: zipAbs,
+        layout: layout,
+      );
+      count += applied.copiedFiles;
+    }
+    final cache = ConfigBackupPaths.localCachePath(
+      AgentResourceKind.hook,
+      SkillTarget.cursor,
+    );
+    if (cache != null) {
+      await _folderCopy.copyContents(sourceDir: zipAbs, targetDir: cache);
+    }
+    return count;
+  }
+
+  Future<void> _hashCursorHooks(
+    void Function(String value) addText,
+    void Function(List<int> bytes) addBytes,
+  ) async {
+    final layout = _cursorHooksLayoutProvider();
+    if (layout == null) return;
+    final zipPrefix = ConfigBackupPaths.resourceZipDir(
+      AgentResourceKind.hook,
+      SkillTarget.cursor,
+    );
+    final jsonFile = File(layout.hooksJsonPath);
+    if (await jsonFile.exists()) {
+      addText('$zipPrefix/${CursorHooksBundle.jsonFileName}');
+      await for (final bytes in jsonFile.openRead()) {
+        addBytes(bytes);
+      }
+    }
+    final hooksDir = Directory(layout.hooksDirectoryPath);
+    if (!await hooksDir.exists()) return;
+    final files = <File>[];
+    await for (final entity in hooksDir.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File || _hasDotPathSegment(entity.path, hooksDir.path)) {
+        continue;
+      }
+      files.add(entity);
+    }
+    files.sort(
+      (a, b) => p
+          .relative(a.path, from: hooksDir.path)
+          .compareTo(p.relative(b.path, from: hooksDir.path)),
+    );
+    for (final file in files) {
+      final relativePath = p.posix.joinAll(
+        p.split(p.relative(file.path, from: hooksDir.path)),
+      );
+      addText('$zipPrefix/${CursorHooksBundle.scriptsDirName}/$relativePath');
+      await for (final bytes in file.openRead()) {
+        addBytes(bytes);
+      }
     }
   }
 

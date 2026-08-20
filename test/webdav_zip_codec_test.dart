@@ -39,6 +39,7 @@ void main() {
       '/AgentHub/commands.zip',
     );
     expect(WebDavZipPaths.resourceZip(config, 'rules'), '/AgentHub/rules.zip');
+    expect(WebDavZipPaths.resourceZip(config, 'hooks'), '/AgentHub/hooks.zip');
   });
 
   test('目录打包再解压可还原文件，并跳过点开头条目', () async {

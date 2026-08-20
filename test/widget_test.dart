@@ -70,6 +70,7 @@ void main() {
     expect(find.text('Skill'), findsOneWidget);
     expect(find.text('Command'), findsOneWidget);
     expect(find.text('Rule'), findsOneWidget);
+    expect(find.text('Hook'), findsOneWidget);
     expect(find.text('打开 MCP 设置'), findsOneWidget);
     expect(find.text('一键转换'), findsWidgets);
 

@@ -562,7 +562,7 @@ class _BulkResourceSyncCard extends StatelessWidget {
                             context,
                             title: '确认下载全部 Agent 配置？',
                             body:
-                                '即将下载远端 Skill / Command / Rule 压缩包并覆盖本机缓存。\n\n'
+                                '即将下载远端 Skill / Command / Rule / Hook 压缩包并覆盖本机缓存。\n\n'
                                 '不会写入 Cursor 正式目录。',
                             packages: [
                               for (final resource in AgentResourceKind.values)
@@ -888,6 +888,7 @@ class _ResourceSyncCard extends StatelessWidget {
                     AgentResourceKind.skill => Icons.auto_awesome_outlined,
                     AgentResourceKind.command => Icons.terminal_outlined,
                     AgentResourceKind.rule => Icons.rule_outlined,
+                    AgentResourceKind.hook => Icons.account_tree_outlined,
                   }),
                 ),
                 const SizedBox(width: 12),
@@ -937,9 +938,8 @@ class _ResourceSyncCard extends StatelessWidget {
                             packages: [
                               RemotePackageDateQuery(
                                 label: resource.label,
-                                load: () => hub.peekRemoteResourceUploadedAt(
-                                  resource,
-                                ),
+                                load: () =>
+                                    hub.peekRemoteResourceUploadedAt(resource),
                               ),
                             ],
                           );
@@ -1068,6 +1068,8 @@ class _ResourceSyncCard extends StatelessWidget {
       '一键转换：从 Cursor rules 生成 Codex / Open Code 的 AGENTS.md',
     AgentResourceKind.command =>
       '一键转换：从 Cursor commands 镜像写入 Open Code commands/<name>.md（多余命令会删除；Codex 无对等目录）',
+    AgentResourceKind.hook =>
+      '一键转换：从 Cursor hooks.json 与 hooks/ 生成 Codex hooks.json 与 hooks/（事件名与 matcher 按 Codex 结构调整；Open Code 无对等 hooks.json）',
   };
 
   bool get _canConvert =>
@@ -1078,11 +1080,23 @@ class _ResourceSyncCard extends StatelessWidget {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
       return McpPaths.codexAgentsMdPath;
     }
+    if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
+      return '${McpPaths.cursorHooksJsonPath}  +  ${McpPaths.cursorHooksPath}';
+    }
+    if (resource == AgentResourceKind.hook && target == SkillTarget.codex) {
+      return '${McpPaths.codexHooksJsonPath}  +  ${McpPaths.codexHooksPath}';
+    }
     return hub.skillSync.resourceDeployPathFor(resource, target);
   }
 
   String? _directoryFor(SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
+      return McpPaths.codexConfigDirectory;
+    }
+    if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
+      return McpPaths.cursorConfigDirectory;
+    }
+    if (resource == AgentResourceKind.hook && target == SkillTarget.codex) {
       return McpPaths.codexConfigDirectory;
     }
     return hub.skillSync.resourceDeployPathFor(resource, target);

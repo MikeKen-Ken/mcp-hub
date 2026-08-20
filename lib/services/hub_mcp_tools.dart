@@ -402,4 +402,75 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       }
     },
   );
+
+  server.registerTool(
+    'sync_hooks',
+    description:
+        'WebDAV 仅下载/上传 Cursor Hook（固定名 hooks.zip，含 hooks.json 与 hooks/）。'
+        'direction=pull：远端压缩包解压覆盖到本机缓存（不覆盖正式目录）；'
+        'direction=merge：远端压缩包解压后合并到缓存（覆盖同名，不删多余项）；'
+        'direction=apply：缓存写入正式 Cursor hooks.json 与 hooks/（不碰其它 .cursor 文件）；'
+        'direction=push：本机 Cursor 正式 Hook 打包为 hooks.zip 覆盖远端（不经缓存）。'
+        'target=codex 且 direction=pull/apply/merge 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'target': JsonSchema.string(
+          description: 'all | cursor | codex，默认 all',
+        ),
+        'direction': JsonSchema.string(
+          description: 'pull（默认）| merge | apply | push',
+        ),
+      },
+    ),
+    annotations: const ToolAnnotations(
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    ),
+    callback: (args, extra) async {
+      final targetRaw =
+          mcpTrimmedString(args['target'])?.toLowerCase() ?? 'all';
+      final direction =
+          mcpTrimmedString(args['direction'])?.toLowerCase() ?? 'pull';
+      final isPush = direction == 'push';
+      final isApply = direction == 'apply';
+      final isMerge = direction == 'merge';
+
+      Map<String, Object?> pack(SkillSyncResult r) => {
+            'ok': r.ok,
+            'message': r.message,
+            'pulledFiles': r.pulledFiles,
+            'pushedFiles': r.pushedFiles,
+            'deployedFiles': r.deployedFiles,
+            'packageCount': r.packageCount,
+          };
+
+      try {
+        if (targetRaw == 'codex') {
+          if (isPush) {
+            return mcpJsonResult({
+              'ok': false,
+              'message':
+                  '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
+            });
+          }
+          final r = await hub.convertResourceFromCursor(AgentResourceKind.hook);
+          return mcpJsonResult(pack(r));
+        }
+        final SkillSyncResult r;
+        if (isPush) {
+          r = await hub.pushResourceToAllTargets(AgentResourceKind.hook);
+        } else if (isApply) {
+          r = await hub.applyResourceFromCache(AgentResourceKind.hook);
+        } else if (isMerge) {
+          r = await hub.mergeResourceToAllTargets(AgentResourceKind.hook);
+        } else {
+          r = await hub.syncResourceToAllTargets(AgentResourceKind.hook);
+        }
+        return mcpJsonResult(pack(r));
+      } catch (error) {
+        return mcpErrorResult('$error');
+      }
+    },
+  );
 }

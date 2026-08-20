@@ -33,6 +33,15 @@ void main() {
       expect(push.message, contains('仅下载/上传 Cursor'));
     });
 
+    test('Hook 一键转换明确不支持 Open Code', () async {
+      final result = await service.convertFromCursor(
+        AgentResourceKind.hook,
+        target: SkillTarget.openCode,
+      );
+      expect(result.ok, isFalse);
+      expect(result.message, contains('暂无 Open Code'));
+    });
+
     test('Command 一键转换明确不支持', () async {
       final result = await service.convertFromCursor(AgentResourceKind.command);
       expect(result.ok, isFalse);

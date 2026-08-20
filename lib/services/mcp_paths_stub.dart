@@ -17,9 +17,13 @@ abstract final class McpPaths {
   static String? get codexSkillsPath => null;
   static String? get cursorCommandsPath => null;
   static String? get codexCommandsPath => null;
+  static String? get cursorHooksJsonPath => null;
+  static String? get cursorHooksPath => null;
   static String? get cursorRulesPath => null;
   static String? get codexRulesPath => null;
   static String? get codexAgentsMdPath => null;
+  static String? get codexHooksJsonPath => null;
+  static String? get codexHooksPath => null;
   static String? get openCodeConfigDirectory => null;
   static String? get openCodeMcpConfigPath => null;
   static String? get openCodeSkillsPath => null;

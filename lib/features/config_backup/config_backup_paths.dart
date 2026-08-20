@@ -8,7 +8,7 @@ abstract final class ConfigBackupPaths {
   static const catalogFile = 'catalog.json';
   static const resourcesRoot = 'resources';
 
-  /// zip 内：`resources/{skills|commands|rules}/cursor/`（权威源与 WebDAV 一致）。
+  /// zip 内：`resources/{skills|commands|rules|hooks}/cursor/`（权威源与 WebDAV 一致）。
   /// 旧包中可能仍有 `.../codex/`，导入时可选兼容恢复。
   static String resourceZipDir(
     AgentResourceKind resource,
@@ -21,12 +21,10 @@ abstract final class ConfigBackupPaths {
   static String? localDeployPath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      AgentPlatforms.localResourcePath(resource, target);
+  ) => AgentPlatforms.localResourcePath(resource, target);
 
   static String? localCachePath(
     AgentResourceKind resource,
     SkillTarget target,
-  ) =>
-      AgentPlatforms.of(target).cacheResourcePath(resource);
+  ) => AgentPlatforms.of(target).cacheResourcePath(resource);
 }

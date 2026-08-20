@@ -61,7 +61,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('从备份恢复？'),
         content: const Text(
-          '将用备份中的 MCP 清单覆盖当前清单，并把 Skill / Command / Rule '
+          '将用备份中的 MCP 清单覆盖当前清单，并把 Skill / Command / Rule / Hook '
           '合并写回本机客户端目录（同名覆盖，不删除多余文件）。\n'
           'WebDAV 账号密码不会被改动。',
         ),
@@ -247,7 +247,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '定期导出本机 MCP 清单与 Agent 配置（Skill / Command / Rule）为 zip，'
+            '定期导出本机 MCP 清单与 Agent 配置（Skill / Command / Rule / Hook）为 zip，'
             '用于误下载或误上传后的恢复。不含 WebDAV 密码，也不含 MCP 仓库克隆目录。',
             style: Theme.of(context).textTheme.bodySmall,
           ),

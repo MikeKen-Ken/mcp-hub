@@ -12,7 +12,10 @@ void main() {
     test('tryParse', () {
       expect(AgentPlatformDefinition.tryParse('cursor'), SkillTarget.cursor);
       expect(AgentPlatformDefinition.tryParse('CODEX'), SkillTarget.codex);
-      expect(AgentPlatformDefinition.tryParse('open_code'), SkillTarget.openCode);
+      expect(
+        AgentPlatformDefinition.tryParse('open_code'),
+        SkillTarget.openCode,
+      );
       expect(AgentPlatformDefinition.tryParse('all'), isNull);
       expect(
         AgentPlatforms.skillConversionTargets.map((p) => p.id),
@@ -28,6 +31,7 @@ void main() {
       expect(AgentResourceKind.skill.wireName, 'skills');
       expect(AgentResourceKind.command.wireName, 'commands');
       expect(AgentResourceKind.rule.wireName, 'rules');
+      expect(AgentResourceKind.hook.wireName, 'hooks');
     });
 
     test('WebDAV 仅 Cursor；Codex 靠本机转换', () {
@@ -39,7 +43,16 @@ void main() {
       }
       expect(AgentResourceKind.skill.canConvertToCodex, isTrue);
       expect(AgentResourceKind.rule.canConvertToCodex, isTrue);
+      expect(AgentResourceKind.hook.canConvertToCodex, isTrue);
       expect(AgentResourceKind.command.canConvertToCodex, isFalse);
+      expect(
+        AgentResourceKind.hook.canConvertTo(SkillTarget.openCode),
+        isFalse,
+      );
+      expect(
+        AgentResourceKind.hook.supportsLocalPath(SkillTarget.openCode),
+        isFalse,
+      );
       expect(
         AgentResourceKind.command.supportsLocalPath(SkillTarget.codex),
         isFalse,

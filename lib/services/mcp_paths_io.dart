@@ -57,6 +57,11 @@ abstract final class McpPaths {
 
   static String? get codexCommandsPath => null;
 
+  static String get cursorHooksJsonPath =>
+      p.join(_userProfile, '.cursor', 'hooks.json');
+
+  static String get cursorHooksPath => p.join(_userProfile, '.cursor', 'hooks');
+
   static String get cursorRulesPath => p.join(_userProfile, '.cursor', 'rules');
 
   static String get codexRulesPath => p.join(_userProfile, '.codex', 'rules');
@@ -64,6 +69,11 @@ abstract final class McpPaths {
   /// Codex 全局 Agent 指引（由 Cursor `~/.cursor/rules` 一键转换写入）。
   static String get codexAgentsMdPath =>
       p.join(_userProfile, '.codex', 'AGENTS.md');
+
+  static String get codexHooksJsonPath =>
+      p.join(_userProfile, '.codex', 'hooks.json');
+
+  static String get codexHooksPath => p.join(_userProfile, '.codex', 'hooks');
 
   /// OpenCode 全局配置目录（Windows：`%USERPROFILE%\\.config\\opencode`）。
   static String get openCodeConfigDirectory =>
