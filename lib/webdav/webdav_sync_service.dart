@@ -140,8 +140,12 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
-    lastAction = '上传';
-    progress = const SyncProgress(label: '正在打包 MCP 清单', current: 0, total: 2);
+    lastAction = 'Upload';
+    progress = const SyncProgress(
+      label: 'Packaging MCP catalog',
+      current: 0,
+      total: 2,
+    );
     _setStatus(CatalogSyncStatus.syncing);
     try {
       final local = await _loadLocalDocument();
@@ -150,7 +154,11 @@ class WebDavSyncService extends ChangeNotifier {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         tombstones: {...local.tombstones, ..._tombstones},
       );
-      progress = const SyncProgress(label: '正在上传压缩包', current: 1, total: 2);
+      progress = const SyncProgress(
+        label: 'Uploading archive',
+        current: 1,
+        total: 2,
+      );
       notifyListeners();
       await _writeCatalogZip(client, config, doc);
       await _baseStore.save(doc);
@@ -160,7 +168,11 @@ class WebDavSyncService extends ChangeNotifier {
         dateTimeFromEpochMs(doc.updatedAt) ?? lastSyncedAt,
       );
       lastError = null;
-      progress = const SyncProgress(label: '上传完成', current: 2, total: 2);
+      progress = const SyncProgress(
+        label: 'Upload complete',
+        current: 2,
+        total: 2,
+      );
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
@@ -191,9 +203,11 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
-    lastAction = merge ? '合并' : '下载';
+    lastAction = merge ? 'Merge' : 'Download';
     progress = SyncProgress(
-      label: merge ? '正在下载并合并 MCP 清单' : '正在下载 MCP 清单',
+      label: merge
+          ? 'Downloading and merging MCP catalog'
+          : 'Downloading MCP catalog',
       current: 0,
       total: 3,
     );
@@ -203,13 +217,17 @@ class WebDavSyncService extends ChangeNotifier {
       if (!merge && remote == null) {
         lastSyncedAt = DateTime.now();
         lastError = null;
-        progress = const SyncProgress(label: '远端暂无清单', current: 3, total: 3);
+        progress = const SyncProgress(
+          label: 'No remote catalog',
+          current: 3,
+          total: 3,
+        );
         _setStatus(CatalogSyncStatus.success);
         return;
       }
       final remoteDoc = remote ?? CatalogSyncDocument.empty;
       progress = SyncProgress(
-        label: merge ? '正在合并清单' : '正在覆盖本机清单',
+        label: merge ? 'Merging catalog' : 'Replacing local catalog',
         current: 1,
         total: 3,
       );
@@ -225,7 +243,11 @@ class WebDavSyncService extends ChangeNotifier {
       } else {
         next = remoteDoc;
       }
-      progress = const SyncProgress(label: '正在写入本机', current: 2, total: 3);
+      progress = const SyncProgress(
+        label: 'Writing locally',
+        current: 2,
+        total: 3,
+      );
       notifyListeners();
       await _applyDocument(next);
       _tombstones = Map<String, int>.from(next.tombstones);

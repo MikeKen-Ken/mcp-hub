@@ -44,9 +44,9 @@ Future<bool> confirmCatalogReplace(
     context,
     title: 'Replace the local MCP catalog?',
     body:
-        '即将下载远端 catalog.zip 并覆盖本机 MCP 列表。\n\n'
-        '本机多出的条目会被去掉；路径、密钥和开/关状态仍留在本机。\n\n'
-        '若希望两边都保留，请改用「合并」。',
+        'This will download the remote catalog.zip and replace the local MCP list.\n\n'
+        'Extra local entries will be removed; paths, secrets, and enabled states remain local.\n\n'
+        'Use “Merge” if you want to keep entries from both sides.',
     packages: [
       RemotePackageDateQuery(label: 'MCP catalog', load: loadRemoteUploadedAt),
     ],
@@ -120,7 +120,10 @@ class _RemoteDateLine extends StatelessWidget {
               style: style,
             );
           }
-          return Text('$label：远端版本 ${formatPackageTime(time)}', style: style);
+          return Text(
+            '$label: remote version ${formatPackageTime(time)}',
+            style: style,
+          );
         },
       ),
     );

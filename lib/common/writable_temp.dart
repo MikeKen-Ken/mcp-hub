@@ -120,7 +120,7 @@ class WritableTemp {
       final resolved = await _canonicalizeIfUsable(raw);
       if (resolved != null) return resolved;
     }
-    throw StateError('找不到可写临时目录（已尝试：${tried.join('；')}）');
+    throw StateError('No writable temporary directory found (tried: ${tried.join('; ')})');
   }
 
   static Future<Directory?> _canonicalizeIfUsable(String raw) async {

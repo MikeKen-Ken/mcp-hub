@@ -36,7 +36,9 @@ abstract final class McpRepoPostPull {
     return await File(p.join(localPath, 'pyproject.toml')).exists();
   }
 
-  static Future<Map<String, dynamic>?> _readPackageScripts(String localPath) async {
+  static Future<Map<String, dynamic>?> _readPackageScripts(
+    String localPath,
+  ) async {
     final file = File(p.join(localPath, 'package.json'));
     if (!await file.exists()) return null;
     try {
@@ -76,7 +78,7 @@ abstract final class McpRepoPostPull {
       command: 'npm',
       args: ['run', 'build'],
       label: 'npm run build',
-      successMessage: '已执行 npm 构建',
+      successMessage: 'npm build completed',
     );
   }
 
@@ -89,7 +91,7 @@ abstract final class McpRepoPostPull {
       command: 'uv',
       args: ['sync'],
       label: 'uv sync',
-      successMessage: '已执行 uv sync',
+      successMessage: 'uv sync completed',
     );
   }
 
@@ -114,8 +116,8 @@ abstract final class McpRepoPostPull {
         ok: false,
         localPath: localPath,
         message: detail.isEmpty
-            ? '$label 失败 (code ${result.exitCode})'
-            : '$label 失败：$detail',
+            ? '$label failed (code ${result.exitCode})'
+            : '$label failed: $detail',
       );
     }
     return McpRepoCloneResult(

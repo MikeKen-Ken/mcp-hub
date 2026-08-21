@@ -43,7 +43,7 @@ class McpProcessManager {
     if (command == null || command.trim().isEmpty) {
       final state = const McpProcessState(
         status: McpProcessStatus.error,
-        lastError: '缺少启动命令',
+        lastError: 'Start command is missing',
       );
       _states[server.id] = state;
       _notifyStateChanged();
@@ -78,7 +78,7 @@ class McpProcessManager {
             _processes.remove(server.id);
             _states[server.id] = McpProcessState(
               status: McpProcessStatus.stopped,
-              lastError: code == 0 ? null : '进程退出 code $code',
+              lastError: code == 0 ? null : 'Process exited with code $code',
             );
             _notifyStateChanged();
           }

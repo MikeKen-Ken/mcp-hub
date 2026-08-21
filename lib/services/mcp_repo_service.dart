@@ -25,7 +25,11 @@ class McpRepoService {
   }) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(ok: false, message: '当前平台不支持本地仓库管理');
+      return const McpRepoCloneResult(
+        ok: false,
+        message:
+            'Local repository management is not supported on this platform',
+      );
     }
 
     final target = p.join(root, id);
@@ -33,7 +37,7 @@ class McpRepoService {
     if (await dir.exists()) {
       return McpRepoCloneResult(
         ok: true,
-        message: '目录已存在，跳过 clone',
+        message: 'Directory already exists; clone skipped',
         localPath: target,
       );
     }
@@ -48,12 +52,14 @@ class McpRepoService {
       final err = (result.stderr as String).trim();
       return McpRepoCloneResult(
         ok: false,
-        message: err.isEmpty ? 'git clone 失败 (code ${result.exitCode})' : err,
+        message: err.isEmpty
+            ? 'git clone failed (code ${result.exitCode})'
+            : err,
       );
     }
     return McpRepoCloneResult(
       ok: true,
-      message: '已 clone 到 $target',
+      message: 'Cloned to $target',
       localPath: target,
     );
   }
@@ -83,13 +89,17 @@ class McpRepoService {
   Future<McpRepoCloneResult> pull({required String localPath}) async {
     final dir = Directory(localPath);
     if (!await dir.exists()) {
-      return McpRepoCloneResult(ok: false, message: '本地目录不存在：$localPath');
+      return McpRepoCloneResult(
+        ok: false,
+        message: 'Local directory does not exist: $localPath',
+      );
     }
     if (!await isHubGitCheckout(localPath)) {
       return McpRepoCloneResult(
         ok: false,
         localPath: localPath,
-        message: '不是 Hub 管理的 Git 仓库，无法 git 更新',
+        message:
+            'This is not a Hub-managed Git repository; it cannot be updated',
       );
     }
     final result = await Process.run(
@@ -106,8 +116,8 @@ class McpRepoService {
         ok: false,
         localPath: localPath,
         message: detail.isEmpty
-            ? 'git pull 失败 (code ${result.exitCode})'
-            : 'git pull 失败：$detail',
+            ? 'git pull failed (code ${result.exitCode})'
+            : 'git pull failed: $detail',
       );
     }
     final out = (result.stdout as String).trim();
@@ -117,13 +127,13 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: localPath,
-        message: '已是最新',
+        message: 'Already up to date',
       );
     }
     return McpRepoCloneResult(
       ok: true,
       localPath: localPath,
-      message: '已更新；$out',
+      message: 'Updated; $out',
     );
   }
 
@@ -158,14 +168,19 @@ class McpRepoService {
   Future<McpRepoCloneResult> deleteLocal({required String localPath}) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(ok: false, message: '当前平台不支持本地仓库管理');
+      return const McpRepoCloneResult(
+        ok: false,
+        message:
+            'Local repository management is not supported on this platform',
+      );
     }
 
     if (!_isUnderServersRoot(localPath)) {
       return McpRepoCloneResult(
         ok: true,
         localPath: p.normalize(localPath),
-        message: '路径不在 Hub servers 下，跳过删除本地目录',
+        message:
+            'Path is outside Hub servers; local directory deletion skipped',
       );
     }
     final normalizedPath = p.normalize(localPath);
@@ -175,7 +190,7 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: normalizedPath,
-        message: '本地目录不存在，跳过删除',
+        message: 'Local directory does not exist; deletion skipped',
       );
     }
 
@@ -184,13 +199,13 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: normalizedPath,
-        message: '已删除本地目录 $normalizedPath',
+        message: 'Deleted local directory $normalizedPath',
       );
     } catch (error) {
       return McpRepoCloneResult(
         ok: false,
         localPath: normalizedPath,
-        message: '删除本地目录失败：$error',
+        message: 'Failed to delete local directory: $error',
       );
     }
   }

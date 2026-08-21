@@ -39,7 +39,8 @@ class HubMcpHost extends ChangeNotifier {
 
   Future<void> start({int port = HubMcpConstants.defaultPort}) async {
     if (!isSupported) {
-      lastError = '当前平台不支持内嵌 MCP（请用 Windows/macOS/Linux 桌面端）';
+      lastError =
+          'Embedded MCP is not supported on this platform (use the Windows, macOS, or Linux desktop app)';
       status = HubMcpStatus.error;
       notifyListeners();
       return;
@@ -100,9 +101,7 @@ class HubMcpHost extends ChangeNotifier {
       ),
       options: const McpServerOptions(
         protocol: McpProtocol.stable,
-        capabilities: ServerCapabilities(
-          tools: ServerCapabilitiesTools(),
-        ),
+        capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
       ),
     );
     registerHubMcpTools(server, _hub);

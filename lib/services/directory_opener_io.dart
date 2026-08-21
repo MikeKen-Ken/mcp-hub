@@ -3,7 +3,7 @@ import 'dart:io';
 abstract final class DirectoryOpener {
   static Future<void> open(String? path) async {
     if (path == null || path.trim().isEmpty) {
-      throw StateError('目录路径不可用');
+      throw StateError('Directory path is unavailable');
     }
 
     final directory = Directory(path);
@@ -28,6 +28,8 @@ abstract final class DirectoryOpener {
       return;
     }
 
-    throw UnsupportedError('当前平台不支持打开本地目录');
+    throw UnsupportedError(
+      'Opening local directories is not supported on this platform',
+    );
   }
 }

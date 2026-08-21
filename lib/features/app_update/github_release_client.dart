@@ -27,8 +27,8 @@ class GithubReleaseClient {
     this.owner = AppUpdateConstants.owner,
     this.repo = AppUpdateConstants.repo,
     Future<ReleaseHttpResult> Function(Uri uri)? httpGet,
-  })  : _httpClient = httpClient ?? HttpClient(),
-        _httpGetOverride = httpGet {
+  }) : _httpClient = httpClient ?? HttpClient(),
+       _httpGetOverride = httpGet {
     _httpClient.userAgent = AppUpdateConstants.userAgent;
   }
 
@@ -37,17 +37,16 @@ class GithubReleaseClient {
   final String owner;
   final String repo;
 
-  Uri get _atomUri =>
-      Uri.https('github.com', '/$owner/$repo/releases.atom');
+  Uri get _atomUri => Uri.https('github.com', '/$owner/$repo/releases.atom');
 
   Uri get _jsdelivrUri =>
       Uri.https('data.jsdelivr.com', '/v1/packages/gh/$owner/$repo');
 
   Uri get _apiUri => Uri.https(
-        'api.github.com',
-        '/repos/$owner/$repo/releases',
-        {'per_page': '10'},
-      );
+    'api.github.com',
+    '/repos/$owner/$repo/releases',
+    {'per_page': '10'},
+  );
 
   Future<List<GithubReleaseInfo>> fetchReleases() async {
     final errors = <String>[];
@@ -70,7 +69,7 @@ class GithubReleaseClient {
       errors.add('API：$e');
     }
 
-    throw StateError('读取 Release 失败。${errors.join('；')}');
+    throw StateError('Failed to read Release: ${errors.join('; ')}');
   }
 
   Future<List<GithubReleaseInfo>> _fetchViaAtom() async {
@@ -78,7 +77,7 @@ class GithubReleaseClient {
     _ensureOk(result, label: 'Atom');
     final releases = parseReleasesAtom(result.body, owner: owner, repo: repo);
     if (releases.isEmpty) {
-      throw StateError('Atom 中没有可用 Release');
+      throw StateError('Atom contains no available Release');
     }
     return releases;
   }
@@ -95,13 +94,11 @@ class GithubReleaseClient {
       final hint = result.statusCode == 403 && result.rateLimitRemaining == '0'
           ? '（GitHub API 未认证限额已用尽；请稍后重试，或检查网络能否访问 github.com / data.jsdelivr.com）'
           : '';
-      throw StateError(
-        '读取 GitHub Release 失败（HTTP ${result.statusCode}）$hint',
-      );
+      throw StateError('读取 GitHub Release 失败（HTTP ${result.statusCode}）$hint');
     }
     final decoded = jsonDecode(result.body);
     if (decoded is! List) {
-      throw const FormatException('GitHub Release 响应格式无效');
+      throw const FormatException('Invalid GitHub Release response format');
     }
     return decoded
         .whereType<Map<String, dynamic>>()
@@ -122,7 +119,7 @@ class GithubReleaseClient {
     request.followRedirects = true;
     final response = await request.close();
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('下载失败（HTTP ${response.statusCode}）');
+      throw StateError('Download failed (HTTP ${response.statusCode})');
     }
     final total = response.contentLength;
     var received = 0;
@@ -260,23 +257,26 @@ List<GithubReleaseInfo> parseReleasesAtom(
   final entryPattern = RegExp(r'<entry>([\s\S]*?)</entry>');
   for (final match in entryPattern.allMatches(atom)) {
     final block = match.group(1)!;
-    final link = RegExp(r'rel="alternate"[^>]*href="([^"]+)"')
-            .firstMatch(block)
-            ?.group(1) ??
-        RegExp(r'href="([^"]+/releases/tag/[^"]+)"')
-            .firstMatch(block)
-            ?.group(1);
+    final link =
+        RegExp(
+          r'rel="alternate"[^>]*href="([^"]+)"',
+        ).firstMatch(block)?.group(1) ??
+        RegExp(
+          r'href="([^"]+/releases/tag/[^"]+)"',
+        ).firstMatch(block)?.group(1);
     if (link == null) continue;
     final tagMatch = RegExp(r'/releases/tag/([^/"\s]+)').firstMatch(link);
     if (tagMatch == null) continue;
     final tagName = tagMatch.group(1)!;
     final title =
         RegExp(r'<title>([^<]*)</title>').firstMatch(block)?.group(1) ??
-            tagName;
-    final updated =
-        RegExp(r'<updated>([^<]*)</updated>').firstMatch(block)?.group(1);
-    final rawContent =
-        RegExp(r'<content[^>]*>([\s\S]*?)</content>').firstMatch(block)?.group(1);
+        tagName;
+    final updated = RegExp(
+      r'<updated>([^<]*)</updated>',
+    ).firstMatch(block)?.group(1);
+    final rawContent = RegExp(
+      r'<content[^>]*>([\s\S]*?)</content>',
+    ).firstMatch(block)?.group(1);
     // Atom 的 content 是 HTML（实体编码），解码后转为软件内可读纯文本
     final body = rawContent == null
         ? ''
@@ -306,11 +306,11 @@ List<GithubReleaseInfo> parseJsdelivrGhPackage(
 }) {
   final decoded = jsonDecode(jsonText);
   if (decoded is! Map<String, dynamic>) {
-    throw const FormatException('jsDelivr 响应格式无效');
+    throw const FormatException('Invalid jsDelivr response format');
   }
   final versions = decoded['versions'];
   if (versions is! List || versions.isEmpty) {
-    throw StateError('jsDelivr 中没有可用版本');
+    throw StateError('jsDelivr contains no available versions');
   }
 
   final results = <GithubReleaseInfo>[];

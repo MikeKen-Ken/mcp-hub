@@ -75,57 +75,57 @@ class McpClientAlignReport {
 
   /// 按钮等短标签。
   String get shortLabel => switch (status) {
-        McpClientAlignStatus.aligned => '已对齐',
-        McpClientAlignStatus.platformUnsupported => '平台不支持',
-        McpClientAlignStatus.pathUnresolved => '路径不可用',
-        McpClientAlignStatus.noServers => '无 MCP',
-        McpClientAlignStatus.noEnabledServers => '无 MCP',
-        McpClientAlignStatus.fileMissing => '配置文件不存在',
-        McpClientAlignStatus.parseError => '解析失败',
-        McpClientAlignStatus.incomplete => _incompleteShortLabel(),
-      };
+    McpClientAlignStatus.aligned => 'Aligned',
+    McpClientAlignStatus.platformUnsupported => 'Unsupported platform',
+    McpClientAlignStatus.pathUnresolved => 'Path unavailable',
+    McpClientAlignStatus.noServers => 'No MCPs',
+    McpClientAlignStatus.noEnabledServers => 'No MCPs',
+    McpClientAlignStatus.fileMissing => 'Configuration file missing',
+    McpClientAlignStatus.parseError => 'Parse failed',
+    McpClientAlignStatus.incomplete => _incompleteShortLabel(),
+  };
 
   String _incompleteShortLabel() {
     if (missingServerIds.isNotEmpty &&
         fieldDiffs.isEmpty &&
         !rmcpClientMissing &&
         extraServerIds.isEmpty) {
-      return '缺少 ${missingServerIds.length} 个 MCP';
+      return 'Missing ${missingServerIds.length} MCPs';
     }
     if (extraServerIds.isNotEmpty &&
         missingServerIds.isEmpty &&
         fieldDiffs.isEmpty &&
         !rmcpClientMissing) {
-      return '未登记 ${extraServerIds.length} 个';
+      return '${extraServerIds.length} unregistered';
     }
     if (fieldDiffs.isNotEmpty &&
         missingServerIds.isEmpty &&
         !rmcpClientMissing) {
-      return '字段不一致';
+      return 'Fields differ';
     }
-    return '未对齐';
+    return 'Not aligned';
   }
 
   /// 具体原因（不含客户端名前缀），用于汇总与详情。
   String get reasonText {
     switch (status) {
       case McpClientAlignStatus.aligned:
-        return '已对齐';
+        return 'Aligned';
       case McpClientAlignStatus.platformUnsupported:
-        return '当前平台不支持';
+        return 'Unsupported platform';
       case McpClientAlignStatus.pathUnresolved:
-        return '无法解析配置路径';
+        return 'Configuration path unavailable';
       case McpClientAlignStatus.noServers:
-        return '无 MCP';
+        return 'No MCPs';
       case McpClientAlignStatus.noEnabledServers:
-        return '无 MCP';
+        return 'No MCPs';
       case McpClientAlignStatus.fileMissing:
-        return '配置文件不存在';
+        return 'Configuration file missing';
       case McpClientAlignStatus.parseError:
         final detail = parseErrorMessage;
         return detail == null || detail.isEmpty
-            ? '配置解析失败'
-            : '配置解析失败：$detail';
+            ? 'Configuration parse failed'
+            : 'Configuration parse failed: $detail';
       case McpClientAlignStatus.incomplete:
         return _incompleteReasonText();
     }
@@ -134,10 +134,10 @@ class McpClientAlignReport {
   String _incompleteReasonText() {
     final parts = <String>[];
     if (missingServerIds.isNotEmpty) {
-      parts.add('缺少 ${missingServerIds.join('、')}');
+      parts.add('Missing ${missingServerIds.join(', ')}');
     }
     if (extraServerIds.isNotEmpty) {
-      parts.add('未登记 ${extraServerIds.join('、')}');
+      parts.add('Unregistered ${extraServerIds.join(', ')}');
     }
     if (fieldDiffs.isNotEmpty) {
       final seen = <String>{};
@@ -145,12 +145,12 @@ class McpClientAlignReport {
       for (final diff in fieldDiffs) {
         if (seen.add(diff.label)) unique.add(diff.label);
       }
-      parts.add('${unique.join('、')} 不一致');
+      parts.add('${unique.join(', ')} differ');
     }
     if (rmcpClientMissing) {
       parts.add('缺少 rmcp_client');
     }
-    return parts.isEmpty ? '未对齐' : parts.join('；');
+    return parts.isEmpty ? 'Not aligned' : parts.join('; ');
   }
 
   /// 带客户端前缀的说明，例如 `Cursor：缺少 hubMCP`。
@@ -274,7 +274,7 @@ abstract final class McpClientConfigurator {
             platform: platform,
             status: McpClientAlignStatus.parseError,
             configPath: path,
-            parseErrorMessage: '根节点必须是对象',
+            parseErrorMessage: 'The root node must be an object',
           );
         }
       } on FormatException catch (error) {
@@ -298,7 +298,8 @@ abstract final class McpClientConfigurator {
       }
     }
 
-    final rmcpMissing = platform == AgentPlatformId.codex &&
+    final rmcpMissing =
+        platform == AgentPlatformId.codex &&
         !McpClientConfig.hasCodexRmcpClient(text);
 
     final hubIds = servers.map((s) => s.id).toSet();
@@ -351,12 +352,13 @@ abstract final class McpClientConfigurator {
     if (!McpPaths.isDesktopSupported) {
       return const McpClientImportResult(
         ok: false,
-        message: '仅桌面端支持从客户端导入',
+        message: 'Import from clients is supported on desktop only',
       );
     }
 
     final hubIds = hubServers.map((s) => s.id).toSet();
-    final platformSources = sources ?? AgentPlatforms.mcpConfigurable.map((p) => p.id).toList();
+    final platformSources =
+        sources ?? AgentPlatforms.mcpConfigurable.map((p) => p.id).toList();
     final extraByPlatform = <AgentPlatformId, List<String>>{};
     final toImport = <McpServerEntry>[];
     final skipped = <String>[];
@@ -375,7 +377,9 @@ abstract final class McpClientConfigurator {
         if (seenImportIds.add(server.id)) {
           toImport.add(
             server.copyWith(
-              notes: server.notes ?? '从 ${AgentPlatforms.labelOf(platform)} 导入',
+              notes:
+                  server.notes ??
+                  'Imported from ${AgentPlatforms.labelOf(platform)}',
             ),
           );
         }
@@ -388,7 +392,7 @@ abstract final class McpClientConfigurator {
     if (toImport.isEmpty) {
       return McpClientImportResult(
         ok: true,
-        message: '没有需要从客户端导入的新 MCP',
+        message: 'No new MCPs to import from clients',
         skippedIds: skipped,
         extraByPlatform: extraByPlatform,
       );
@@ -400,7 +404,7 @@ abstract final class McpClientConfigurator {
         .join('、');
     return McpClientImportResult(
       ok: true,
-      message: '可从客户端导入 ${toImport.length} 个 MCP（$labels）',
+      message: '${toImport.length} MCPs can be imported from clients ($labels)',
       imported: toImport,
       skippedIds: skipped,
       extraByPlatform: extraByPlatform,
@@ -439,23 +443,23 @@ abstract final class McpClientConfigurator {
   static List<McpServerEntry> _parseClientServers(
     AgentMcpConfigFormat format,
     String text,
-  ) =>
-      switch (format) {
-        AgentMcpConfigFormat.cursorJson =>
-          McpClientConfigReader.parseCursorServers(text),
-        AgentMcpConfigFormat.codexToml =>
-          McpClientConfigReader.parseCodexServers(text),
-        AgentMcpConfigFormat.openCodeJson =>
-          McpClientConfigReader.parseOpenCodeServers(text),
-      };
+  ) => switch (format) {
+    AgentMcpConfigFormat.cursorJson => McpClientConfigReader.parseCursorServers(
+      text,
+    ),
+    AgentMcpConfigFormat.codexToml => McpClientConfigReader.parseCodexServers(
+      text,
+    ),
+    AgentMcpConfigFormat.openCodeJson =>
+      McpClientConfigReader.parseOpenCodeServers(text),
+  };
 
   /// 兼容旧 API；现在检查全部 MCP，而不是仅检查启用项。
   @Deprecated('使用 diagnoseAll')
   static Future<McpClientAlignReport> diagnoseEnabled(
     AgentPlatformId platform, {
     required List<McpServerEntry> servers,
-  }) =>
-      diagnoseAll(platform, servers: servers);
+  }) => diagnoseAll(platform, servers: servers);
 
   /// 兼容封装：是否全部 MCP 已对齐。
   static Future<bool> areEnabledConfigured(
@@ -474,7 +478,8 @@ abstract final class McpClientConfigurator {
     if (!McpPaths.isDesktopSupported) {
       return const McpConfigureResult(
         ok: false,
-        message: '仅桌面端支持一键配置 MCP 客户端',
+        message:
+            'One-click MCP client configuration is supported on desktop only',
       );
     }
 
@@ -483,7 +488,8 @@ abstract final class McpClientConfigurator {
     if (mcpConfig == null) {
       return McpConfigureResult(
         ok: false,
-        message: '${definition.label} 暂不支持 MCP 配置写入',
+        message:
+            '${definition.label} does not support MCP configuration writes yet',
       );
     }
 
@@ -491,7 +497,7 @@ abstract final class McpClientConfigurator {
     if (path == null) {
       return const McpConfigureResult(
         ok: false,
-        message: '无法解析用户配置路径',
+        message: 'Unable to resolve the user configuration path',
       );
     }
 
@@ -513,13 +519,13 @@ abstract final class McpClientConfigurator {
         ok: true,
         path: path,
         message:
-            '已同步 ${definition.label}（启用 $enabledCount / 共 ${servers.length}），请重载 MCP 或重启 ${definition.label}',
+            'Synced ${definition.label} (enabled $enabledCount / ${servers.length}); reload MCPs or restart ${definition.label}',
       );
     } catch (error) {
       return McpConfigureResult(
         ok: false,
         path: path,
-        message: '写入失败：$error',
+        message: 'Write failed: $error',
       );
     }
   }
@@ -532,19 +538,21 @@ abstract final class McpClientConfigurator {
     AgentMcpConfigFormat format,
     String text,
     McpServerEntry server,
-  ) =>
-      switch (format) {
-        AgentMcpConfigFormat.cursorJson =>
-          McpClientConfig.diagnoseCursorServer(text, server: server),
-        AgentMcpConfigFormat.codexToml =>
-          McpClientConfig.diagnoseCodexServer(text, server: server),
-        AgentMcpConfigFormat.openCodeJson =>
-          McpClientConfig.diagnoseOpenCodeServer(
-            text,
-            server: server,
-            environment: Platform.environment,
-          ),
-      };
+  ) => switch (format) {
+    AgentMcpConfigFormat.cursorJson => McpClientConfig.diagnoseCursorServer(
+      text,
+      server: server,
+    ),
+    AgentMcpConfigFormat.codexToml => McpClientConfig.diagnoseCodexServer(
+      text,
+      server: server,
+    ),
+    AgentMcpConfigFormat.openCodeJson => McpClientConfig.diagnoseOpenCodeServer(
+      text,
+      server: server,
+      environment: Platform.environment,
+    ),
+  };
 
   static String _upsertConfig(
     AgentMcpConfigFormat format,
@@ -552,26 +560,25 @@ abstract final class McpClientConfigurator {
     required List<McpServerEntry> servers,
     required Set<String> managedIds,
     Set<String> removeIds = const {},
-  }) =>
-      switch (format) {
-        AgentMcpConfigFormat.cursorJson => McpClientConfig.upsertCursorJson(
-            existing,
-            servers: servers,
-            managedIds: managedIds,
-            removeIds: removeIds,
-          ),
-        AgentMcpConfigFormat.codexToml => McpClientConfig.upsertCodexToml(
-            existing,
-            servers: servers,
-            managedIds: managedIds,
-            removeIds: removeIds,
-          ),
-        AgentMcpConfigFormat.openCodeJson => McpClientConfig.upsertOpenCodeJson(
-            existing,
-            servers: servers,
-            managedIds: managedIds,
-            removeIds: removeIds,
-            environment: Platform.environment,
-          ),
-      };
+  }) => switch (format) {
+    AgentMcpConfigFormat.cursorJson => McpClientConfig.upsertCursorJson(
+      existing,
+      servers: servers,
+      managedIds: managedIds,
+      removeIds: removeIds,
+    ),
+    AgentMcpConfigFormat.codexToml => McpClientConfig.upsertCodexToml(
+      existing,
+      servers: servers,
+      managedIds: managedIds,
+      removeIds: removeIds,
+    ),
+    AgentMcpConfigFormat.openCodeJson => McpClientConfig.upsertOpenCodeJson(
+      existing,
+      servers: servers,
+      managedIds: managedIds,
+      removeIds: removeIds,
+      environment: Platform.environment,
+    ),
+  };
 }

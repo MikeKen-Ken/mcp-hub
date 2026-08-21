@@ -76,7 +76,7 @@ class _FailureStrip extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '上次失败：${notice.title}',
+                  'Last failure: ${notice.title}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(

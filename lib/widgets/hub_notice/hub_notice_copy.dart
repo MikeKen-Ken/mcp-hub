@@ -27,9 +27,9 @@ class HubNotice {
   }
 
   String get kindLabel => switch (kind) {
-    HubNoticeKind.success => '成功',
-    HubNoticeKind.error => '失败',
-    HubNoticeKind.info => '提示',
+    HubNoticeKind.success => 'Success',
+    HubNoticeKind.error => 'Error',
+    HubNoticeKind.info => 'Notice',
   };
 }
 
@@ -51,25 +51,30 @@ HubNoticeKind _resolveKind(String message, bool? ok) {
   if (ok == false) return HubNoticeKind.error;
   if (ok == true) return HubNoticeKind.success;
   final lower = message.toLowerCase();
-  if (message.contains('失败') ||
-      message.contains('错误') ||
+  if (message.contains('failed') ||
+      message.contains('Failed') ||
+      message.contains('error') ||
+      message.contains('Error') ||
       lower.contains('fatal:') ||
       lower.contains('exception') ||
       RegExp(r'\berror\b').hasMatch(lower)) {
     return HubNoticeKind.error;
   }
-  if (message.startsWith('已') ||
-      message.contains('完成') ||
-      message.contains('成功')) {
+  if (message.startsWith('Downloaded') ||
+      message.startsWith('Applied') ||
+      message.startsWith('Uploaded') ||
+      message.startsWith('Updated') ||
+      message.contains('complete') ||
+      message.contains('success')) {
     return HubNoticeKind.success;
   }
   return HubNoticeKind.info;
 }
 
 bool _isPartialFailure(String message) {
-  return message.contains('部分失败') ||
-      (message.contains('失败') &&
-          (message.contains('成功') || message.contains('已')));
+  return message.contains('partially failed') ||
+      (message.contains('failed') &&
+          (message.contains('success') || message.contains('Downloaded')));
 }
 
 String _buildTitle(String message, HubNoticeKind kind) {
@@ -77,30 +82,30 @@ String _buildTitle(String message, HubNoticeKind kind) {
     return _gitTitle(message, kind);
   }
   final parts = message
-      .split(RegExp(r'[；\n]'))
+      .split(RegExp(r'[；;\n]'))
       .map(_stripPathTail)
       .map((part) => part.trim())
       .where((part) => part.isNotEmpty)
       .toList();
   if (parts.isEmpty) {
-    return kind == HubNoticeKind.error ? '失败' : '完成';
+    return kind == HubNoticeKind.error ? 'Error' : 'Complete';
   }
   if (parts.length == 1) {
     return _ellipsis(parts.first);
   }
   final failed = parts.where(_partLooksFailed).length;
   if (failed > 0 && failed < parts.length) {
-    return '部分失败（${parts.length - failed} 成功 / $failed 失败）';
+    return 'Partially failed (${parts.length - failed} succeeded / $failed failed)';
   }
   if (failed == parts.length) {
-    return _ellipsis('失败：${parts.first}');
+    return _ellipsis('Failed: ${parts.first}');
   }
   return _ellipsis('${parts.first}（共 ${parts.length} 项）');
 }
 
 bool _partLooksFailed(String part) {
   final lower = part.toLowerCase();
-  return part.contains('失败') ||
+  return part.contains('failed') ||
       lower.contains('fatal:') ||
       lower.contains('error:');
 }
@@ -124,13 +129,13 @@ bool _looksLikeGitDump(String message) {
 }
 
 String _gitTitle(String message, HubNoticeKind kind) {
-  if (kind == HubNoticeKind.error) return '更新失败';
+  if (kind == HubNoticeKind.error) return 'Update failed';
   if (message.contains('Already up to date') ||
       message.contains('Already up-to-date') ||
-      message.contains('已是最新')) {
-    return '已是最新';
+      message.contains('already up to date')) {
+    return 'Already up to date';
   }
-  return '已更新';
+  return 'Updated';
 }
 
 String _ellipsis(String text) {

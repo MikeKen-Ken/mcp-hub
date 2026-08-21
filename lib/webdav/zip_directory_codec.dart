@@ -34,9 +34,7 @@ class ZipDirectoryCodec {
       }
     }
     for (final extra in extraEntries.entries) {
-      archive.addFile(
-        ArchiveFile(extra.key, extra.value.length, extra.value),
-      );
+      archive.addFile(ArchiveFile(extra.key, extra.value.length, extra.value));
     }
     if (archive.files.isEmpty) {
       archive.addFile(ArchiveFile('.keep', 0, <int>[]));
@@ -63,7 +61,7 @@ class ZipDirectoryCodec {
   }) async {
     final zipFile = File(zipPath);
     if (!await zipFile.exists()) {
-      throw StateError('压缩包不存在：$zipPath');
+      throw StateError('Archive does not exist: $zipPath');
     }
     return extractBytes(
       zipBytes: await zipFile.readAsBytes(),
@@ -81,7 +79,7 @@ class ZipDirectoryCodec {
     bool skipDotEntries = true,
   }) async {
     if (zipBytes.isEmpty) {
-      throw StateError('压缩包为空，无法解压');
+      throw StateError('Archive is empty and cannot be extracted');
     }
     final target = Directory(targetDir);
     if (wipeTarget && await target.exists()) {

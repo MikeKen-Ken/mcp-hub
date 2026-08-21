@@ -949,8 +949,8 @@ class _ResourceSyncCard extends StatelessWidget {
                             context,
                             title: 'Download remote ${resource.label}?',
                             body:
-                                '即将下载远端 ${resource.label} 压缩包并覆盖本机缓存。\n\n'
-                                '不会写入 Cursor 正式目录。',
+                                'This will download the remote ${resource.label} archive and replace the local cache.\n\n'
+                                'The official Cursor directory will not be changed.',
                             packages: [
                               RemotePackageDateQuery(
                                 label: resource.label,
@@ -1079,13 +1079,13 @@ class _ResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      '一键转换：整包镜像后按格式转换（Codex：openai.yaml；Open Code：SKILL.md frontmatter）',
+      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter)',
     AgentResourceKind.rule =>
-      '一键转换：从 Cursor rules 生成 Codex / Open Code 的 AGENTS.md',
+      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules',
     AgentResourceKind.command =>
-      '一键转换：从 Cursor commands 镜像写入 Open Code commands/<name>.md（多余命令会删除；Codex 无对等目录）',
+      'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
     AgentResourceKind.hook =>
-      '一键转换：从 Cursor hooks.json 与 hooks/ 生成 Codex hooks.json 与 hooks/（事件名与 matcher 按 Codex 结构调整；Open Code 无对等 hooks.json）',
+      'One-click conversion: generate Codex hooks.json and hooks/ from Cursor hooks.json and hooks/ (event names and matchers are adapted to Codex; OpenCode has no equivalent hooks.json)',
   };
 
   bool get _canConvert =>
@@ -1128,9 +1128,9 @@ Future<bool> _confirmLocalOverwrite(
         builder: (dialogContext) => AlertDialog(
           title: const Text('Apply to Cursor?'),
           content: Text(
-            '即将把缓存中的$scope镜像到 Cursor 正式目录。\n\n'
-            '缓存中不存在的本地 Cursor 文件和目录也会被删除。\n\n'
-            '本操作不会转换 Codex / Open Code；需要时请再点「一键转换」。',
+            'This will mirror the cached $scope into the official Cursor directory.\n\n'
+            'Local Cursor files and directories missing from the cache will also be deleted.\n\n'
+            'This does not convert Codex / OpenCode; use “One-click conversion” when needed.',
           ),
           actions: [
             TextButton(
@@ -1153,7 +1153,7 @@ class _ClientConfigCard extends StatelessWidget {
   final HubController hub;
 
   String _buttonLabel(McpClientAlignReport? report) {
-    if (report == null) return '正在检测…';
+    if (report == null) return 'Checking…';
     return report.shortLabel;
   }
 
@@ -1164,7 +1164,7 @@ class _ClientConfigCard extends StatelessWidget {
     final detailLines = <String>[];
     final reports = platforms.map((p) => hub.clientAlignReport(p.id)).toList();
     if (reports.any((r) => r == null)) {
-      detailLines.add('正在检测…');
+      detailLines.add('Checking…');
     } else {
       for (final platform in platforms) {
         final report = hub.clientAlignReport(platform.id);
@@ -1173,11 +1173,12 @@ class _ClientConfigCard extends StatelessWidget {
         }
       }
       if (detailLines.isEmpty) {
-        detailLines.add('${platforms.map((p) => p.label).join(' / ')} 已对齐');
+        detailLines.add('${platforms.map((p) => p.label).join(' / ')} aligned');
       }
     }
 
-    final configureAllLabel = '配置 ${platforms.map((p) => p.label).join(' + ')}';
+    final configureAllLabel =
+        'Configure ${platforms.map((p) => p.label).join(' + ')}';
 
     return Card(
       child: Padding(
@@ -1191,8 +1192,8 @@ class _ClientConfigCard extends StatelessWidget {
               title: const Text('Configure Clients'),
               subtitle: Text(
                 supported
-                    ? '把 Hub 中的全部 MCP 写入各客户端，并移除 Hub 已删除的条目'
-                    : '当前平台不支持写入客户端配置',
+                    ? 'Write all Hub MCPs to the clients and remove entries deleted from Hub'
+                    : 'Writing client configuration is not supported on this platform',
               ),
             ),
             FilledButton.icon(
@@ -1459,7 +1460,7 @@ class _ServerTile extends StatelessWidget {
                           builder: (ctx) => AlertDialog(
                             title: const Text('Remove MCP?'),
                             content: Text(
-                              '将从 Hub 目录移除，并删除本地 clone 目录。\n${server.name}',
+                              'This will remove the MCP from Hub and delete its local clone directory.\n${server.name}',
                             ),
                             actions: [
                               TextButton(

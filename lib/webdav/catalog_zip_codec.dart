@@ -49,7 +49,9 @@ class CatalogZipCodec {
       }
     }
     if (entry == null) {
-      throw FormatException('压缩包内缺少 ${WebDavZipPaths.catalogEntryName}');
+      throw FormatException(
+        'Archive is missing ${WebDavZipPaths.catalogEntryName}',
+      );
     }
     final decoded = jsonDecode(utf8.decode(entry.content as List<int>));
     if (decoded is Map<String, dynamic>) {
@@ -60,6 +62,6 @@ class CatalogZipCodec {
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
     }
-    throw FormatException('catalog.json 不是对象');
+    throw FormatException('catalog.json is not an object');
   }
 }

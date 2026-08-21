@@ -33,7 +33,8 @@ class ResourceConversion {
         const SkillSyncResult(
           ok: false,
           target: SkillTarget.codex,
-          message: 'Command 暂无 Codex 对等目录，无法一键转换',
+          message:
+              'Command has no Codex equivalent directory and cannot be converted',
         ),
       ),
     };
@@ -46,7 +47,7 @@ class ResourceConversion {
     if (openCodeSkillsPath == null ||
         openCodeRulesPath == null ||
         openCodeCommandsPath == null) {
-      throw StateError('当前平台不支持 OpenCode 转换');
+      throw StateError('OpenCode conversion is not supported on this platform');
     }
     final cursorSkillsPath = McpPaths.cursorSkillsPath;
     final cursorRulesPath = McpPaths.cursorRulesPath;
@@ -54,7 +55,7 @@ class ResourceConversion {
     if (cursorSkillsPath == null ||
         cursorRulesPath == null ||
         cursorCommandsPath == null) {
-      throw StateError('当前平台不支持 Cursor 转换');
+      throw StateError('Cursor conversion is not supported on this platform');
     }
 
     return switch (resource) {
@@ -73,7 +74,8 @@ class ResourceConversion {
       AgentResourceKind.hook => const SkillSyncResult(
         ok: false,
         target: SkillTarget.openCode,
-        message: 'Hook 暂无 Open Code 对等 hooks.json，无法一键转换',
+        message:
+            'Hook has no OpenCode equivalent hooks.json and cannot be converted',
       ),
     };
   }
@@ -82,7 +84,7 @@ class ResourceConversion {
     final cursor = CursorHooksLayout.cursorUser();
     final codex = CursorHooksLayout.codexUser();
     if (cursor == null || codex == null) {
-      throw StateError('当前平台不支持 Hook 转换');
+      throw StateError('Hook conversion is not supported on this platform');
     }
     final converted = await hooksConverter.convertAll(
       cursor: cursor,
@@ -204,7 +206,7 @@ class ResourceConversion {
     final source = McpPaths.cursorSkillsPath;
     final target = McpPaths.codexSkillsPath;
     if (source == null || target == null) {
-      throw StateError('当前平台不支持 Skill 转换');
+      throw StateError('Skill conversion is not supported on this platform');
     }
     final sourceDir = Directory(source);
     if (!await sourceDir.exists()) {
@@ -246,7 +248,7 @@ class ResourceConversion {
     final source = McpPaths.cursorRulesPath;
     final target = McpPaths.codexAgentsMdPath;
     if (source == null || target == null) {
-      throw StateError('当前平台不支持 Rule 转换');
+      throw StateError('Rule conversion is not supported on this platform');
     }
     final sourceDir = Directory(source);
     if (!await sourceDir.exists()) {

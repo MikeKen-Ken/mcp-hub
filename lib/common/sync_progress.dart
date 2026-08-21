@@ -18,7 +18,7 @@ class SyncProgress {
   String get caption {
     final max = total;
     if (max != null && max > 0) return '$label  $current / $max';
-    if (current > 0) return '$label  已处理 $current 个';
+    if (current > 0) return '$label  $current processed';
     return label;
   }
 }

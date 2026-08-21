@@ -10,8 +10,8 @@ Future<bool> confirmRemoteOverwrite(
         builder: (dialogContext) => AlertDialog(
           title: const Text('Replace remote package?'),
           content: Text(
-            '即将把本机「$scope」打包上传到 WebDAV。\n\n'
-            '远端同名压缩包会被整包覆盖，其他设备上尚未同步下来的远端内容会丢失。',
+            'This will package the local "$scope" and upload it to WebDAV.\n\n'
+            'The remote archive with the same name will be completely replaced. Unsynced content from other devices will be lost.',
           ),
           actions: [
             TextButton(

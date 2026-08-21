@@ -478,7 +478,7 @@ class HubController extends ChangeNotifier {
     }
     if (wasRunning && server.shouldAutoStartByHub) {
       await _processManager.start(server);
-      _lastMessage = '${server.name}: ${result.message}（已重启进程）';
+      _lastMessage = '${server.name}: ${result.message} (process restarted)';
       notifyListeners();
     }
   }
@@ -489,7 +489,7 @@ class HubController extends ChangeNotifier {
         .where((s) => !s.builtIn && isGitManaged(s.id))
         .toList();
     if (withPath.isEmpty) {
-      _lastMessage = '没有可更新的本地仓库';
+      _lastMessage = 'No local repositories can be updated';
       notifyListeners();
       return;
     }
@@ -506,7 +506,7 @@ class HubController extends ChangeNotifier {
         failCount++;
       } else if (wasRunning && server.shouldAutoStartByHub) {
         await _processManager.start(server);
-        line = '$line（已重启进程）';
+        line = '$line (process restarted)';
       }
       lines.add(line);
     }
@@ -536,7 +536,8 @@ class HubController extends ChangeNotifier {
       final result = await _repoService.deleteLocal(localPath: path);
       deleteMsg = result.message;
       if (!result.ok) {
-        _lastMessage = '已停止进程，但删除本地目录失败：$deleteMsg';
+        _lastMessage =
+            'Process stopped, but deleting the local directory failed: $deleteMsg';
         notifyListeners();
         throw StateError(deleteMsg);
       }
@@ -709,9 +710,9 @@ class HubController extends ChangeNotifier {
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? (webDavSync.catalogUploadedAt == null
-              ? '已从 WebDAV 下载并覆盖 MCP 清单'
-              : '已从 WebDAV 下载并覆盖 MCP 清单（远端版本 ${formatPackageTime(webDavSync.catalogUploadedAt)}）')
-        : '下载失败：${webDavSync.lastError ?? '未知错误'}';
+              ? 'Downloaded and replaced the MCP catalog from WebDAV'
+              : 'Downloaded and replaced the MCP catalog from WebDAV (remote version ${formatPackageTime(webDavSync.catalogUploadedAt)})')
+        : 'Download failed: ${webDavSync.lastError ?? 'Unknown error'}';
     notifyListeners();
   }
 
@@ -720,8 +721,8 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.mergeNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已从 WebDAV 合并 MCP 清单'
-        : '合并失败：${webDavSync.lastError ?? '未知错误'}';
+        ? 'Merged the MCP catalog from WebDAV'
+        : 'Merge failed: ${webDavSync.lastError ?? 'Unknown error'}';
     notifyListeners();
   }
 
@@ -730,8 +731,8 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.pushNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? '已上传 MCP 清单压缩包到 WebDAV'
-        : '上传失败：${webDavSync.lastError ?? '未知错误'}';
+        ? 'Uploaded the MCP catalog archive to WebDAV'
+        : 'Upload failed: ${webDavSync.lastError ?? 'Unknown error'}';
     notifyListeners();
   }
 
