@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/features/skill_sync/agent_resource_kind.dart';
+import 'package:mcp_hub/features/skill_sync/convert/cursor_to_codex_agents_converter.dart';
+import 'package:mcp_hub/features/skill_sync/convert/cursor_to_codex_hooks_converter.dart';
+import 'package:mcp_hub/features/skill_sync/convert/cursor_to_codex_skill_converter.dart';
 import 'package:mcp_hub/features/skill_sync/convert/cursor_to_opencode_converter.dart';
+import 'package:mcp_hub/features/skill_sync/cursor_hooks_bundle.dart';
 import 'package:mcp_hub/features/skill_sync/skill_folder_copy.dart';
 import 'package:mcp_hub/features/skill_sync/skill_sync_service.dart';
 import 'package:mcp_hub/features/skill_sync/skill_target.dart';
@@ -101,7 +105,71 @@ void main() {
       expect(openCodeCalls, 1);
       expect(convert.message, contains('Open Code'));
     });
+
+    test('批量一键转换包含 Skill 到 Codex', () async {
+      var codexSkillCalls = 0;
+      var openCodeSkillCalls = 0;
+      final sync = SkillSyncService(
+        loadConfig: () async => WebDavConfig.empty,
+        skillConverter: _RecordingCodexSkillConverter(
+          () => codexSkillCalls += 1,
+        ),
+        agentsConverter: _NoopAgentsConverter(),
+        hooksConverter: _NoopHooksConverter(),
+        openCodeConverter: _RecordingOpenCodeConverter(
+          () => openCodeSkillCalls += 1,
+        ),
+      );
+
+      final result = await sync.convertAllFromCursor();
+
+      expect(result.ok, isTrue);
+      expect(codexSkillCalls, 1);
+      expect(openCodeSkillCalls, 1);
+      expect(result.message, contains('Codex'));
+      expect(result.message, contains('Open Code'));
+    });
   });
+}
+
+class _RecordingCodexSkillConverter extends CursorToCodexSkillConverter {
+  _RecordingCodexSkillConverter(this.onCall);
+
+  final void Function() onCall;
+
+  @override
+  Future<CodexSkillConvertAllResult> convertAll({
+    required String cursorSkillsDir,
+    required String codexSkillsDir,
+  }) async {
+    onCall();
+    return const CodexSkillConvertAllResult(items: []);
+  }
+}
+
+class _NoopAgentsConverter extends CursorToCodexAgentsConverter {
+  _NoopAgentsConverter();
+
+  @override
+  Future<List<CodexAgentsRuleItem>> convertAll({
+    required String cursorRulesDir,
+    required String agentsMdPath,
+  }) async => const [];
+}
+
+class _NoopHooksConverter extends CursorToCodexHooksConverter {
+  _NoopHooksConverter();
+
+  @override
+  Future<CodexHooksConvertResult> convertAll({
+    required CursorHooksLayout cursor,
+    required CursorHooksLayout codex,
+    String? codexConfigTomlPath,
+  }) async => const CodexHooksConvertResult(
+    copiedFiles: 0,
+    convertedHooks: 0,
+    skippedEvents: [],
+  );
 }
 
 class _NoopFolderCopy extends SkillFolderCopy {

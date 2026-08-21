@@ -87,14 +87,14 @@ class _AddServerScreenState extends State<AddServerScreen> {
     final inferred = _inferredName;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('添加 MCP')),
+      appBar: AppBar(title: const Text('Add MCP')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
             controller: _repo,
             decoration: const InputDecoration(
-              labelText: 'Git 仓库 URL',
+              labelText: 'Git repository URL',
               hintText: 'https://github.com/org/mcp-server.git',
               border: OutlineInputBorder(),
             ),
@@ -106,12 +106,12 @@ class _AddServerScreenState extends State<AddServerScreen> {
               if (!_nameEdited) setState(() => _nameEdited = true);
             },
             decoration: InputDecoration(
-              labelText: '名称（可留空）',
-              hintText: inferred ?? '自动取仓库名',
+              labelText: 'Name (optional)',
+              hintText: inferred ?? 'Use repository name automatically',
               border: const OutlineInputBorder(),
               suffixIcon: _nameEdited
                   ? IconButton(
-                      tooltip: '恢复为仓库名',
+                      tooltip: 'Restore repository name',
                       onPressed: () {
                         final value = RepoName.fromGitUrl(_repo.text);
                         _name.text = value ?? '';
@@ -124,7 +124,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Clone 到 ~/.mcp-hub/servers'),
+            title: const Text('Clone to ~/.mcp-hub/servers'),
             value: _clone,
             onChanged: (v) => setState(() => _clone = v),
           ),
@@ -179,7 +179,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
             TextField(
               controller: _command,
               decoration: const InputDecoration(
-                labelText: '启动命令（可选）',
+                labelText: 'Start command (optional)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -187,17 +187,21 @@ class _AddServerScreenState extends State<AddServerScreen> {
             TextField(
               controller: _args,
               decoration: const InputDecoration(
-                labelText: '启动 args',
+                labelText: 'Start args',
                 border: OutlineInputBorder(),
               ),
             ),
           ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('启用'),
+            title: const Text('Enabled'),
             subtitle: _transport == McpTransport.http
-                ? const Text('启用后，若填写了启动命令，Hub 会自动拉起进程')
-                : const Text('启用后，若填写了 command，Hub 会自动拉起进程'),
+                ? const Text(
+                    'When enabled, Hub starts the process if a start command is provided',
+                  )
+                : const Text(
+                    'When enabled, Hub starts the process if a command is provided',
+                  ),
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),
@@ -210,7 +214,7 @@ class _AddServerScreenState extends State<AddServerScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('添加'),
+                : const Text('Add'),
           ),
         ],
       ),

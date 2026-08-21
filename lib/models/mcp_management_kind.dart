@@ -21,11 +21,11 @@ enum McpManagementKind {
 
 extension McpManagementKindLabels on McpManagementKind {
   String get label => switch (this) {
-        McpManagementKind.builtInHttp => '内置',
-        McpManagementKind.hubGitStdio => 'Git',
-        McpManagementKind.hubStdio => '本地',
-        McpManagementKind.remoteBridge => '桥接',
-        McpManagementKind.externalHttp => '远端',
-        McpManagementKind.unconfigured => '未配置',
-      };
+    McpManagementKind.builtInHttp => 'Built-in',
+    McpManagementKind.hubGitStdio => 'Git',
+    McpManagementKind.hubStdio => 'Local',
+    McpManagementKind.remoteBridge => 'Bridge',
+    McpManagementKind.externalHttp => 'Remote',
+    McpManagementKind.unconfigured => 'Unconfigured',
+  };
 }

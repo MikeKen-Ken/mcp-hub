@@ -86,7 +86,9 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
     if (!mounted) return;
     setState(() {
       _testing = false;
-      _testResult = ok ? '连接成功' : '连接失败，请检查地址与账号';
+      _testResult = ok
+          ? 'Connection successful'
+          : 'Connection failed; check the URL and credentials';
     });
   }
 
@@ -99,10 +101,10 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
     showHubNotice(
       context,
       message: !_enabled
-          ? '已保存'
+          ? 'Saved'
           : (!_autoSync && !_autoPull)
-          ? '已保存；仅手动下载/上传'
-          : '已保存',
+          ? 'Saved; manual download/upload only'
+          : 'Saved',
       ok: true,
     );
     Navigator.pop(context);
@@ -111,7 +113,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('WebDAV 下载/上传')),
+      appBar: AppBar(title: const Text('WebDAV Download/Upload')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -121,8 +123,10 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               clipBehavior: Clip.antiAlias,
               child: ListTile(
                 leading: const Icon(Icons.folder_zip_outlined),
-                title: const Text('配置备份'),
-                subtitle: const Text('导出、恢复与自动备份本机 MCP 和 Agent 配置'),
+                title: const Text('Configuration Backup'),
+                subtitle: const Text(
+                  'Export, restore, and automatically back up local MCP and Agent configuration',
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -134,8 +138,10 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
             const SizedBox(height: 12),
             Card(
               child: SwitchListTile(
-                title: const Text('启用 WebDAV 下载/上传'),
-                subtitle: const Text('连接配置仅保存在本机，不会把密码传到远端'),
+                title: const Text('Enable WebDAV Download/Upload'),
+                subtitle: const Text(
+                  'Connection settings stay on this computer; the password is never uploaded',
+                ),
                 value: _enabled,
                 onChanged: (v) => setState(() => _enabled = v),
               ),
@@ -145,13 +151,14 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               TextFormField(
                 controller: _urlController,
                 decoration: const InputDecoration(
-                  labelText: '服务器地址',
+                  labelText: 'Server URL',
                   hintText: 'https://dav.jianguoyun.com/dav/',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   if (!_enabled) return null;
-                  if (v == null || v.trim().isEmpty) return '请输入服务器地址';
+                  if (v == null || v.trim().isEmpty)
+                    return 'Enter a server URL';
                   return null;
                 },
               ),
@@ -159,12 +166,12 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               TextFormField(
                 controller: _userController,
                 decoration: const InputDecoration(
-                  labelText: '用户名',
+                  labelText: 'Username',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   if (!_enabled) return null;
-                  if (v == null || v.trim().isEmpty) return '请输入用户名';
+                  if (v == null || v.trim().isEmpty) return 'Enter a username';
                   return null;
                 },
               ),
@@ -173,7 +180,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                 controller: _passController,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  labelText: '密码 / 应用密码',
+                  labelText: 'Password / App Password',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     onPressed: () =>
@@ -187,7 +194,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                 ),
                 validator: (v) {
                   if (!_enabled) return null;
-                  if (v == null || v.isEmpty) return '请输入密码';
+                  if (v == null || v.isEmpty) return 'Enter a password';
                   return null;
                 },
               ),
@@ -195,7 +202,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               TextField(
                 controller: _pathController,
                 decoration: const InputDecoration(
-                  labelText: '远端目录',
+                  labelText: 'Remote directory',
                   hintText: WebDavConfig.defaultRemotePath,
                   border: OutlineInputBorder(),
                 ),
@@ -203,21 +210,25 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('变更后自动上传'),
-                subtitle: const Text('把 MCP 清单打成 catalog.zip 覆盖远端同名文件'),
+                title: const Text('Upload changes automatically'),
+                subtitle: const Text(
+                  'Package the MCP catalog as catalog.zip and replace the remote copy',
+                ),
                 value: _autoSync,
                 onChanged: (v) => setState(() => _autoSync = v),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('启动 / 定时自动合并'),
-                subtitle: const Text('下载 catalog.zip 后与本机三路合并，不会整包覆盖'),
+                title: const Text('Merge automatically on startup / schedule'),
+                subtitle: const Text(
+                  'Download catalog.zip and merge it with local data without replacing the whole package',
+                ),
                 value: _autoPull,
                 onChanged: (v) => setState(() => _autoPull = v),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('合并间隔：${_pollSeconds}s'),
+                title: Text('Merge interval: ${_pollSeconds}s'),
                 subtitle: Slider(
                   min: WebDavConfig.minPollIntervalSeconds.toDouble(),
                   max: WebDavConfig.maxPollIntervalSeconds.toDouble(),
@@ -229,7 +240,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('上传防抖：${_pushDebounceSeconds}s'),
+                title: Text('Upload debounce: ${_pushDebounceSeconds}s'),
                 subtitle: Slider(
                   min: WebDavConfig.minPushDebounceSeconds.toDouble(),
                   max: WebDavConfig.maxPushDebounceSeconds.toDouble(),
@@ -250,7 +261,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.wifi_tethering),
-                label: const Text('测试连接'),
+                label: const Text('Test connection'),
               ),
               if (_testResult != null) ...[
                 const SizedBox(height: 8),
@@ -258,16 +269,16 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ],
               const SizedBox(height: 12),
               Text(
-                '下载/上传内容：MCP 清单与 Skill / Command / Rule / Hook 均使用固定名压缩包覆盖传输'
-                '（catalog.zip、skills.zip、commands.zip、rules.zip、hooks.zip），不会按日期堆积文件。\n'
-                '上传时会写入版本日期：MCP 清单用 catalog.json 的 updatedAt；'
-                'Skill / Command / Rule / Hook 压缩包内写入上传时间。旧包没有该字段时，下载确认会回退显示 WebDAV 文件修改时间。\n'
-                '「下载」解压后覆盖对应缓存或清单；「合并」解压后再与本机合并'
-                '（清单为三路合并，资源为覆盖同名、保留本地多余项）。\n'
-                '不下载/上传：WebDAV 密码、本机路径、cwd、env 密钥、MCP 开/关状态、内置 hubMCP。\n'
-                '旧版 catalog.json 与 {skills|commands|rules|hooks}/cursor/ 目录仅在压缩包不存在时回退读取，上传不再写入。\n'
-                '换电脑后：配置好同一 WebDAV → 下载或合并清单 → '
-                '下载 Agent 配置到缓存 → 应用到 Cursor 正式目录 → 再按需 clone / 一键写入客户端。',
+                'Downloads/uploads use fixed-name packages for the MCP catalog and Skill / Command / Rule / Hook resources '
+                '(catalog.zip, skills.zip, commands.zip, rules.zip, hooks.zip); files do not accumulate by date.\n'
+                'Uploads include version timestamps: the catalog uses catalog.json updatedAt; resource packages include '
+                'their upload time. Older packages fall back to the WebDAV file modification time.\n'
+                'Download replaces the corresponding cache or catalog; Merge combines it with local data '
+                '(catalogs use a three-way merge; resources replace matching items and keep local extras).\n'
+                'Never transferred: WebDAV password, local paths, cwd, environment secrets, MCP enabled state, or built-in hubMCP.\n'
+                'Legacy catalog.json and {skills|commands|rules|hooks}/cursor/ directories are read only when packages are absent.\n'
+                'To move to another computer: configure the same WebDAV → download or merge the catalog → '
+                'download Agent configuration to the cache → apply it to Cursor → clone repositories or write client configuration as needed.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -280,7 +291,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('保存'),
+                  : const Text('Save'),
             ),
           ],
         ),

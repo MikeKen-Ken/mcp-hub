@@ -5,11 +5,7 @@ import 'agent_platform_id.dart';
 export 'agent_platform_id.dart';
 
 /// 客户端 MCP 配置文件格式。
-enum AgentMcpConfigFormat {
-  cursorJson,
-  codexToml,
-  openCodeJson,
-}
+enum AgentMcpConfigFormat { cursorJson, codexToml, openCodeJson }
 
 /// 单个平台的元数据与能力标记。
 class AgentPlatformDefinition {
@@ -112,11 +108,7 @@ abstract final class AgentPlatforms {
     skillConversionFromCursor: true,
   );
 
-  static const all = <AgentPlatformDefinition>[
-    cursor,
-    codex,
-    openCode,
-  ];
+  static const all = <AgentPlatformDefinition>[cursor, codex, openCode];
 
   /// 支持一键写入 MCP 配置的客户端。
   static List<AgentPlatformDefinition> get mcpConfigurable =>
@@ -127,55 +119,52 @@ abstract final class AgentPlatforms {
       all.where((p) => p.skillConversionFromCursor).toList();
 
   static AgentPlatformDefinition of(AgentPlatformId id) => switch (id) {
-        AgentPlatformId.cursor => cursor,
-        AgentPlatformId.codex => codex,
-        AgentPlatformId.openCode => openCode,
-      };
+    AgentPlatformId.cursor => cursor,
+    AgentPlatformId.codex => codex,
+    AgentPlatformId.openCode => openCode,
+  };
 
   static String labelOf(AgentPlatformId id) => of(id).label;
 
   /// Skill 缓存根目录（skills 与 agent-resources 分流逻辑与 [McpPaths] 一致）。
   static String? skillCachePath(AgentPlatformId id) => switch (id) {
-        AgentPlatformId.cursor => McpPaths.cursorSkillsCachePath,
-        AgentPlatformId.codex => McpPaths.codexSkillsCachePath,
-        AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
-      };
+    AgentPlatformId.cursor => McpPaths.cursorSkillsCachePath,
+    AgentPlatformId.codex => McpPaths.codexSkillsCachePath,
+    AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
+  };
 
   static String? localSkillPath(AgentPlatformId id) => switch (id) {
-        AgentPlatformId.cursor => McpPaths.cursorSkillsPath,
-        AgentPlatformId.codex => McpPaths.codexSkillsPath,
-        AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
-      };
+    AgentPlatformId.cursor => McpPaths.cursorSkillsPath,
+    AgentPlatformId.codex => McpPaths.codexSkillsPath,
+    AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
+  };
 
   static String? localResourcePath(
     AgentResourceKind resource,
     AgentPlatformId id,
-  ) =>
-      switch ((resource, id)) {
-        (AgentResourceKind.skill, AgentPlatformId.cursor) =>
-          McpPaths.cursorSkillsPath,
-        (AgentResourceKind.skill, AgentPlatformId.codex) =>
-          McpPaths.codexSkillsPath,
-        (AgentResourceKind.skill, AgentPlatformId.openCode) =>
-          McpPaths.openCodeSkillsPath,
-        (AgentResourceKind.command, AgentPlatformId.cursor) =>
-          McpPaths.cursorCommandsPath,
-        (AgentResourceKind.command, AgentPlatformId.codex) =>
-          McpPaths.codexCommandsPath,
-        (AgentResourceKind.command, AgentPlatformId.openCode) =>
-          McpPaths.openCodeCommandsPath,
-        (AgentResourceKind.rule, AgentPlatformId.cursor) =>
-          McpPaths.cursorRulesPath,
-        (AgentResourceKind.rule, AgentPlatformId.codex) =>
-          McpPaths.codexRulesPath,
-        (AgentResourceKind.rule, AgentPlatformId.openCode) =>
-          McpPaths.openCodeConfigDirectory,
-        (AgentResourceKind.hook, AgentPlatformId.cursor) =>
-          McpPaths.cursorHooksPath,
-        (AgentResourceKind.hook, AgentPlatformId.codex) =>
-          McpPaths.codexHooksPath,
-        (AgentResourceKind.hook, AgentPlatformId.openCode) => null,
-      };
+  ) => switch ((resource, id)) {
+    (AgentResourceKind.skill, AgentPlatformId.cursor) =>
+      McpPaths.cursorSkillsPath,
+    (AgentResourceKind.skill, AgentPlatformId.codex) =>
+      McpPaths.codexSkillsPath,
+    (AgentResourceKind.skill, AgentPlatformId.openCode) =>
+      McpPaths.openCodeSkillsPath,
+    (AgentResourceKind.command, AgentPlatformId.cursor) =>
+      McpPaths.cursorCommandsPath,
+    (AgentResourceKind.command, AgentPlatformId.codex) =>
+      McpPaths.codexCommandsPath,
+    (AgentResourceKind.command, AgentPlatformId.openCode) =>
+      McpPaths.openCodeCommandsPath,
+    (AgentResourceKind.rule, AgentPlatformId.cursor) =>
+      McpPaths.cursorRulesPath,
+    (AgentResourceKind.rule, AgentPlatformId.codex) => McpPaths.codexRulesPath,
+    (AgentResourceKind.rule, AgentPlatformId.openCode) =>
+      McpPaths.openCodeConfigDirectory,
+    (AgentResourceKind.hook, AgentPlatformId.cursor) =>
+      McpPaths.cursorHooksPath,
+    (AgentResourceKind.hook, AgentPlatformId.codex) => McpPaths.codexHooksPath,
+    (AgentResourceKind.hook, AgentPlatformId.openCode) => null,
+  };
 
   static String? _cursorMcpConfigPath() => McpPaths.cursorMcpJsonPath;
 
@@ -200,5 +189,5 @@ extension AgentPlatformIdCompat on AgentPlatformId {
 
   String? get conversionBlockReason => hasConfirmedConversionFormat
       ? null
-      : '仓库未确认该目标的本地配置格式，当前仅提供入口，不会写入文件';
+      : 'The local configuration format for this target is unconfirmed. This entry will not write any files';
 }

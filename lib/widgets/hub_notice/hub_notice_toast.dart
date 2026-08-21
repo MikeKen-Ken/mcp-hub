@@ -62,11 +62,11 @@ void _showNoticeDetail(BuildContext context, HubNotice notice) {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: detail));
             },
-            child: const Text('复制'),
+            child: const Text('Copy'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: const Text('Close'),
           ),
         ],
       );
@@ -119,7 +119,7 @@ class _HubNoticeSnackContent extends StatelessWidget {
               foregroundColor: onBar,
               visualDensity: VisualDensity.compact,
             ),
-            child: const Text('详情'),
+            child: const Text('Details'),
           ),
       ],
     );

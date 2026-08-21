@@ -72,11 +72,17 @@ class AutoConfigBackupService extends ChangeNotifier {
   /// 立即生成备份，不受内容是否变化限制。
   Future<ConfigBackupResult> backupNow() async {
     if (_inFlight) {
-      return const ConfigBackupResult(ok: false, message: '自动备份正在进行中，请稍候');
+      return const ConfigBackupResult(
+        ok: false,
+        message: 'Automatic backup is already running; please wait',
+      );
     }
     final directoryPath = effectiveDirectory;
     if (directoryPath == null || directoryPath.trim().isEmpty) {
-      return const ConfigBackupResult(ok: false, message: '当前平台没有可用的自动备份目录');
+      return const ConfigBackupResult(
+        ok: false,
+        message: 'No automatic backup directory is available on this platform',
+      );
     }
 
     _inFlight = true;
@@ -115,7 +121,10 @@ class AutoConfigBackupService extends ChangeNotifier {
       lastError = '$error';
       status = AutoBackupStatus.error;
       notifyListeners();
-      return ConfigBackupResult(ok: false, message: '自动备份失败：$error');
+      return ConfigBackupResult(
+        ok: false,
+        message: 'Automatic backup failed: $error',
+      );
     } finally {
       _inFlight = false;
     }
@@ -124,7 +133,10 @@ class AutoConfigBackupService extends ChangeNotifier {
   /// 定时备份入口：仅在 MCP 清单或实际导出的 Agent 配置发生变化时导出。
   Future<ConfigBackupResult> backupIfChanged() async {
     if (_inFlight) {
-      return const ConfigBackupResult(ok: false, message: '自动备份正在进行中，请稍候');
+      return const ConfigBackupResult(
+        ok: false,
+        message: 'Automatic backup is already running; please wait',
+      );
     }
     List<McpServerEntry> servers;
     String fingerprint;
@@ -138,7 +150,10 @@ class AutoConfigBackupService extends ChangeNotifier {
       return ConfigBackupResult(ok: false, message: lastError!);
     }
     if (_lastContentFingerprint == fingerprint) {
-      return const ConfigBackupResult(ok: true, message: '配置未变化，已跳过自动备份');
+      return const ConfigBackupResult(
+        ok: true,
+        message: 'Configuration unchanged; automatic backup skipped',
+      );
     }
     return backupNow();
   }
@@ -158,25 +173,33 @@ class AutoConfigBackupService extends ChangeNotifier {
   Future<ConfigBackupResult> cleanupNow() async {
     final directoryPath = effectiveDirectory;
     if (directoryPath == null || directoryPath.trim().isEmpty) {
-      return const ConfigBackupResult(ok: false, message: '当前平台没有可用的自动备份目录');
+      return const ConfigBackupResult(
+        ok: false,
+        message: 'No automatic backup directory is available on this platform',
+      );
     }
     try {
       final deleted = await cleanupExpiredBackups(directoryPath);
       if (deleted == 0) {
         return ConfigBackupResult(
           ok: true,
-          message: '当前目录没有超过 ${settings.retentionDays} 天的自动备份',
+          message:
+              'No automatic backups older than ${settings.retentionDays} days were found in the current directory',
           path: directoryPath,
         );
       }
       return ConfigBackupResult(
         ok: true,
-        message: '已在当前目录清理 $deleted 个超过 ${settings.retentionDays} 天的自动备份',
+        message:
+            'Removed $deleted automatic backups older than ${settings.retentionDays} days',
         path: directoryPath,
         fileCount: deleted,
       );
     } catch (error) {
-      return ConfigBackupResult(ok: false, message: '清理自动备份失败：$error');
+      return ConfigBackupResult(
+        ok: false,
+        message: 'Failed to clean up automatic backups: $error',
+      );
     }
   }
 

@@ -17,7 +17,7 @@ class HubNotice {
       final kind = ok == false ? HubNoticeKind.error : HubNoticeKind.info;
       return HubNotice(
         kind: kind,
-        title: kind == HubNoticeKind.error ? '失败' : '完成',
+        title: kind == HubNoticeKind.error ? 'Failed' : 'Complete',
       );
     }
     final kind = _resolveKind(cleaned, ok);

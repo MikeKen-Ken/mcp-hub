@@ -10,8 +10,9 @@ import 'package:path_provider/path_provider.dart';
 /// 平台安装：Android 调起 APK 安装器；Windows 写 updater 并退出替换。
 class AppUpdateInstaller {
   AppUpdateInstaller({MethodChannel? androidChannel})
-      : _androidChannel = androidChannel ??
-            const MethodChannel('com.mikeken.mcphub/app_update');
+    : _androidChannel =
+          androidChannel ??
+          const MethodChannel('com.mikeken.mcphub/app_update');
 
   final MethodChannel _androidChannel;
 
@@ -43,7 +44,8 @@ class AppUpdateInstaller {
     Directory extracted, {
     String? exeFileName,
   }) async {
-    final exeName = exeFileName ??
+    final exeName =
+        exeFileName ??
         (Platform.isWindows
             ? p.basename(Platform.resolvedExecutable)
             : 'mcp_hub.exe');
@@ -67,8 +69,9 @@ class AppUpdateInstaller {
 
   Future<bool> canRequestPackageInstalls() async {
     if (!Platform.isAndroid) return true;
-    final result =
-        await _androidChannel.invokeMethod<bool>('canRequestPackageInstalls');
+    final result = await _androidChannel.invokeMethod<bool>(
+      'canRequestPackageInstalls',
+    );
     return result ?? false;
   }
 
@@ -79,12 +82,14 @@ class AppUpdateInstaller {
 
   Future<void> installAndroidApk(File apkFile) async {
     if (!Platform.isAndroid) {
-      throw UnsupportedError('仅 Android 支持 APK 安装');
+      throw UnsupportedError('APK installation is supported only on Android');
     }
     final allowed = await canRequestPackageInstalls();
     if (!allowed) {
       await openUnknownSourcesSettings();
-      throw StateError('请允许安装未知应用后再次点击更新');
+      throw StateError(
+        'Allow installation from unknown sources, then click Update again',
+      );
     }
     await _androidChannel.invokeMethod<void>('installApk', {
       'path': apkFile.path,
@@ -94,16 +99,13 @@ class AppUpdateInstaller {
   /// 启动 PowerShell updater，等待本进程退出后覆盖安装目录并重启。
   Future<void> applyWindowsZipUpdate(Directory extractedDir) async {
     if (!Platform.isWindows) {
-      throw UnsupportedError('仅 Windows 支持 zip 自更新');
+      throw UnsupportedError('ZIP self-update is supported only on Windows');
     }
     final exePath = Platform.resolvedExecutable;
     final installDir = File(exePath).parent.path;
     final payloadDir = await resolveWindowsPayloadRoot(extractedDir);
     final scriptFile = File(
-      p.join(
-        Directory.systemTemp.path,
-        'mcp_hub_updater_$pid.ps1',
-      ),
+      p.join(Directory.systemTemp.path, 'mcp_hub_updater_$pid.ps1'),
     );
     // UTF-8 BOM：降低 PS 5.1 误用系统 ANSI 码页的风险；脚本本身保持 ASCII。
     await scriptFile.writeAsBytes(

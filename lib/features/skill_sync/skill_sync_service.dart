@@ -333,50 +333,60 @@ class SkillSyncService extends ChangeNotifier {
       if (!McpPaths.isDesktopSupported) {
         throw StateError('当前平台不支持目录转换');
       }
-      final parts = <String>[];
-      var deployedFiles = 0;
-      var packageCount = 0;
-      var allOk = true;
-
-      if (resource.canConvertToCodex) {
-        try {
-          final codex = await _conversion.convertCodex(resource);
-          deployedFiles += codex.deployedFiles;
-          packageCount += codex.packageCount;
-          parts.add(codex.message);
-          if (!codex.ok) allOk = false;
-        } catch (error) {
-          allOk = false;
-          parts.add('Codex：失败（$error）');
-          debugPrint('${resource.label} 转换 Codex 失败: $error');
-        }
-      }
-
-      if (resource.canConvertTo(SkillTarget.openCode)) {
-        try {
-          final openCode = await _conversion.convertOpenCode(resource);
-          deployedFiles += openCode.deployedFiles;
-          packageCount += openCode.packageCount;
-          parts.add(openCode.message);
-          if (!openCode.ok) allOk = false;
-        } catch (error) {
-          allOk = false;
-          parts.add('Open Code：失败（$error）');
-          debugPrint('${resource.label} 转换 Open Code 失败: $error');
-        }
-      }
-
-      if (parts.isEmpty) {
-        return SkillSyncResult(ok: false, message: '${resource.label} 暂无可转换目标');
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        target: SkillTarget.cursor,
-        deployedFiles: deployedFiles,
-        packageCount: packageCount,
-        message: parts.join('；'),
-      );
+      return _convertResourceToTargets(resource);
     }, activity: '转换');
+  }
+
+  Future<SkillSyncResult> _convertResourceToTargets(
+    AgentResourceKind resource,
+  ) async {
+    final parts = <String>[];
+    var deployedFiles = 0;
+    var packageCount = 0;
+    var allOk = true;
+
+    if (resource.canConvertToCodex) {
+      try {
+        final codex = await _conversion.convertCodex(resource);
+        deployedFiles += codex.deployedFiles;
+        packageCount += codex.packageCount;
+        parts.add(codex.message);
+        if (!codex.ok) allOk = false;
+      } catch (error) {
+        allOk = false;
+        parts.add('Codex：失败（$error）');
+        debugPrint('${resource.label} 转换 Codex 失败: $error');
+      }
+    }
+
+    if (resource.canConvertTo(SkillTarget.openCode)) {
+      try {
+        final openCode = await _conversion.convertOpenCode(resource);
+        deployedFiles += openCode.deployedFiles;
+        packageCount += openCode.packageCount;
+        parts.add(openCode.message);
+        if (!openCode.ok) allOk = false;
+      } catch (error) {
+        allOk = false;
+        parts.add('Open Code：失败（$error）');
+        debugPrint('${resource.label} 转换 Open Code 失败: $error');
+      }
+    }
+
+    if (parts.isEmpty) {
+      return SkillSyncResult(
+        ok: false,
+        target: SkillTarget.cursor,
+        message: '${resource.label} 暂无可转换目标',
+      );
+    }
+    return SkillSyncResult(
+      ok: allOk,
+      target: SkillTarget.cursor,
+      deployedFiles: deployedFiles,
+      packageCount: packageCount,
+      message: parts.join('；'),
+    );
   }
 
   /// 一键转换全部可转换资源（Skill / Rule / Command / Hook → Codex / Open Code）。
@@ -395,29 +405,11 @@ class SkillSyncService extends ChangeNotifier {
           continue;
         }
         try {
-          // 避免嵌套 _run：直接组合单资源转换逻辑
-          final oneParts = <String>[];
-          var oneOk = true;
-          var oneDeployed = 0;
-          var onePackages = 0;
-          if (resource.canConvertToCodex) {
-            final codex = await _conversion.convertCodex(resource);
-            oneDeployed += codex.deployedFiles;
-            onePackages += codex.packageCount;
-            oneParts.add(codex.message);
-            if (!codex.ok) oneOk = false;
-          }
-          if (resource.canConvertTo(SkillTarget.openCode)) {
-            final openCode = await _conversion.convertOpenCode(resource);
-            oneDeployed += openCode.deployedFiles;
-            onePackages += openCode.packageCount;
-            oneParts.add(openCode.message);
-            if (!openCode.ok) oneOk = false;
-          }
-          deployedFiles += oneDeployed;
-          packageCount += onePackages;
-          parts.addAll(oneParts);
-          if (!oneOk) allOk = false;
+          final one = await _convertResourceToTargets(resource);
+          deployedFiles += one.deployedFiles;
+          packageCount += one.packageCount;
+          parts.add(one.message);
+          if (!one.ok) allOk = false;
         } catch (error) {
           allOk = false;
           parts.add('${resource.label}：失败（$error）');

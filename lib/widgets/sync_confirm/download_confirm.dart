@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import '../../common/package_time.dart';
 
 class RemotePackageDateQuery {
-  const RemotePackageDateQuery({
-    required this.label,
-    required this.load,
-  });
+  const RemotePackageDateQuery({required this.label, required this.load});
 
   final String label;
   final Future<DateTime?> Function() load;
@@ -27,11 +24,11 @@ Future<bool> confirmRemoteDownload(
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认下载'),
+              child: const Text('Confirm download'),
             ),
           ],
         ),
@@ -45,13 +42,13 @@ Future<bool> confirmCatalogReplace(
 }) {
   return confirmRemoteDownload(
     context,
-    title: '确认覆盖本机 MCP 清单？',
+    title: 'Replace the local MCP catalog?',
     body:
         '即将下载远端 catalog.zip 并覆盖本机 MCP 列表。\n\n'
         '本机多出的条目会被去掉；路径、密钥和开/关状态仍留在本机。\n\n'
         '若希望两边都保留，请改用「合并」。',
     packages: [
-      RemotePackageDateQuery(label: 'MCP 清单', load: loadRemoteUploadedAt),
+      RemotePackageDateQuery(label: 'MCP catalog', load: loadRemoteUploadedAt),
     ],
   );
 }
@@ -111,19 +108,19 @@ class _RemoteDateLine extends StatelessWidget {
         future: future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return Text('$label：正在读取远端日期…', style: style);
+            return Text('$label: Reading remote date…', style: style);
           }
           if (snapshot.hasError) {
-            return Text('$label：无法读取远端日期', style: style);
+            return Text('$label: Could not read remote date', style: style);
           }
           final time = snapshot.data;
           if (time == null) {
-            return Text('$label：远端暂无该压缩包或没有日期', style: style);
+            return Text(
+              '$label: No remote package or date available',
+              style: style,
+            );
           }
-          return Text(
-            '$label：远端版本 ${formatPackageTime(time)}',
-            style: style,
-          );
+          return Text('$label：远端版本 ${formatPackageTime(time)}', style: style);
         },
       ),
     );

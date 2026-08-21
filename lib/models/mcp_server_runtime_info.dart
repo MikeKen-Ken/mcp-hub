@@ -28,20 +28,20 @@ class McpServerRuntimeInfo {
 
   String get phaseBadgeLabel {
     if (phase == McpRuntimePhase.running && pid != null) {
-      return '运行中 · pid $pid';
+      return 'Running · pid $pid';
     }
     return phaseLabel;
   }
 
   Map<String, dynamic> toJson() => {
-        'kind': kind.name,
-        'kindLabel': kindLabel,
-        'phase': phase.name,
-        'phaseLabel': phaseLabel,
-        'canStart': canStart,
-        'canStop': canStop,
-        'canUpdate': canUpdate,
-        if (pid != null) 'pid': pid,
-        if (lastError != null) 'lastError': lastError,
-      };
+    'kind': kind.name,
+    'kindLabel': kindLabel,
+    'phase': phase.name,
+    'phaseLabel': phaseLabel,
+    'canStart': canStart,
+    'canStop': canStop,
+    'canUpdate': canUpdate,
+    if (pid != null) 'pid': pid,
+    if (lastError != null) 'lastError': lastError,
+  };
 }

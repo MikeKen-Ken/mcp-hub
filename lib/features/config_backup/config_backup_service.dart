@@ -93,7 +93,10 @@ class ConfigBackupService {
     required List<McpServerEntry> servers,
   }) async {
     if (!McpPaths.isDesktopSupported) {
-      return const ConfigBackupResult(ok: false, message: '当前平台不支持配置备份');
+      return const ConfigBackupResult(
+        ok: false,
+        message: 'Configuration backup is not supported on this platform',
+      );
     }
 
     final staging = await _createStagingDir('export');
@@ -153,8 +156,8 @@ class ConfigBackupService {
         appName: AppBrand.displayName,
         fileCount: fileCount,
         notes:
-            '含 MCP 清单与本机 Cursor Skill/Command/Rule/Hook，以及 Codex AGENTS.md；'
-            '不含 WebDAV 密码与 servers 仓库克隆。Codex Skills / Hooks 请由 Cursor 转换生成。',
+            'Includes the MCP catalog, local Cursor Skill/Command/Rule/Hook resources, and Codex AGENTS.md; '
+            'excludes the WebDAV password and server repository clones. Generate Codex Skills / Hooks by converting from Cursor.',
       );
       await File(
         p.join(staging.path, ConfigBackupManifest.fileName),
@@ -174,11 +177,12 @@ class ConfigBackupService {
         path: zipPath,
         fileCount: fileCount,
         serverCount: servers.length,
-        message: '已导出备份：${servers.length} 个 MCP，$fileCount 个文件 → $zipPath',
+        message:
+            'Backup exported: ${servers.length} MCPs, $fileCount files → $zipPath',
       );
     } catch (error) {
       debugPrint('配置导出失败: $error');
-      return ConfigBackupResult(ok: false, message: '导出失败：$error');
+      return ConfigBackupResult(ok: false, message: 'Export failed: $error');
     } finally {
       await _safeDeleteDir(staging);
     }
@@ -278,14 +282,20 @@ class ConfigBackupService {
   Future<ConfigBackupImportPayload> importFromZip(String zipPath) async {
     if (!McpPaths.isDesktopSupported) {
       return const ConfigBackupImportPayload(
-        result: ConfigBackupResult(ok: false, message: '当前平台不支持配置备份'),
+        result: ConfigBackupResult(
+          ok: false,
+          message: 'Configuration backup is not supported on this platform',
+        ),
       );
     }
 
     final zipFile = File(zipPath);
     if (!await zipFile.exists()) {
       return ConfigBackupImportPayload(
-        result: ConfigBackupResult(ok: false, message: '备份文件不存在：$zipPath'),
+        result: ConfigBackupResult(
+          ok: false,
+          message: 'Backup file not found: $zipPath',
+        ),
       );
     }
 
@@ -301,7 +311,8 @@ class ConfigBackupService {
         return const ConfigBackupImportPayload(
           result: ConfigBackupResult(
             ok: false,
-            message: '不是有效的 Agent Hub 备份包（缺少 manifest.json）',
+            message:
+                'Invalid Agent Hub backup package (manifest.json is missing)',
           ),
         );
       }
@@ -314,7 +325,7 @@ class ConfigBackupService {
           result: ConfigBackupResult(
             ok: false,
             message:
-                '备份格式过新（v${manifest.formatVersion}），请先升级 ${AppBrand.displayName}',
+                'Backup format is newer (v${manifest.formatVersion}); update ${AppBrand.displayName} first',
           ),
         );
       }
@@ -406,14 +417,14 @@ class ConfigBackupService {
           fileCount: restoredFiles,
           serverCount: serverCount,
           message: servers == null
-              ? '已恢复 Agent 配置：$restoredFiles 个文件（备份中无 MCP 清单）'
-              : '已恢复备份：$serverCount 个 MCP，$restoredFiles 个文件',
+              ? 'Agent configuration restored: $restoredFiles files (backup contained no MCP catalog)'
+              : 'Backup restored: $serverCount MCPs, $restoredFiles files',
         ),
       );
     } catch (error) {
       debugPrint('配置导入失败: $error');
       return ConfigBackupImportPayload(
-        result: ConfigBackupResult(ok: false, message: '导入失败：$error'),
+        result: ConfigBackupResult(ok: false, message: 'Import failed: $error'),
       );
     } finally {
       await _safeDeleteDir(staging);

@@ -238,7 +238,7 @@ class HubController extends ChangeNotifier {
     await _repairInvalidWorkingDirectories();
     await _catalogStore.save(_servers);
     await _refreshGitManagedFlags();
-    _lastMessage = '已从 WebDAV 合并目录（${doc.servers.length} 个 MCP）';
+    _lastMessage = 'Merged catalog from WebDAV (${doc.servers.length} MCPs)';
     notifyListeners();
     await refreshClientStatus();
     // 合并后补拉本机已启用且有启动命令的 MCP。
@@ -254,7 +254,8 @@ class HubController extends ChangeNotifier {
       url: hubEndpointUrl,
       enabled: true,
       builtIn: true,
-      notes: '内置：用 AI 管理本 Hub（添加仓库、开关、一键配置等）',
+      notes:
+          'Built-in: use AI to manage this Hub (add repositories, toggle services, configure clients, and more)',
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -347,8 +348,8 @@ class HubController extends ChangeNotifier {
     final sync = await configureAllClients();
     if (sync.ok) {
       _lastMessage = enabled
-          ? '已启用 $id，并同步到 Cursor / Codex / OpenCode'
-          : '已禁用 $id，并同步到 Cursor / Codex / OpenCode';
+          ? 'Enabled $id and synced to Cursor / Codex / OpenCode'
+          : 'Disabled $id and synced to Cursor / Codex / OpenCode';
       notifyListeners();
     }
   }
@@ -370,7 +371,9 @@ class HubController extends ChangeNotifier {
     final resolvedName = name.trim().isNotEmpty ? name.trim() : (fromUrl ?? '');
     final id = _slug(resolvedName.isNotEmpty ? resolvedName : fromUrl ?? '');
     if (id == HubMcpConstants.serverKey) {
-      throw StateError('不能使用保留名 ${HubMcpConstants.serverKey}');
+      throw StateError(
+        'Reserved name cannot be used: ${HubMcpConstants.serverKey}',
+      );
     }
 
     String? localPath;
@@ -428,7 +431,7 @@ class HubController extends ChangeNotifier {
     );
 
     if (_servers.any((s) => s.id == entry.id)) {
-      throw StateError('已存在同名 MCP：$id');
+      throw StateError('An MCP with the same name already exists: $id');
     }
 
     _servers = [..._servers, entry];
@@ -437,7 +440,7 @@ class HubController extends ChangeNotifier {
     if (entry.shouldAutoStartByHub) {
       await _processManager.start(entry);
     }
-    _lastMessage = '已添加 ${entry.name}';
+    _lastMessage = 'Added ${entry.name}';
     notifyListeners();
     await refreshClientStatus();
     return entry.id;
@@ -452,17 +455,19 @@ class HubController extends ChangeNotifier {
       }
     }
     if (server == null) {
-      throw StateError('找不到 MCP：$id');
+      throw StateError('MCP not found: $id');
     }
     if (server.builtIn) {
-      throw StateError('内置 hubMCP 无需 git pull');
+      throw StateError('Built-in hubMCP does not need git pull');
     }
     final path = server.localPath;
     if (path == null || path.isEmpty) {
-      throw StateError('没有本地仓库路径，无法更新');
+      throw StateError('No local repository path; cannot update');
     }
     if (!await _repoService.isHubGitCheckout(path)) {
-      throw StateError('不是 Hub 管理的 Git 仓库，无法 git 更新');
+      throw StateError(
+        'This is not a Git repository managed by Hub; cannot update',
+      );
     }
     final wasRunning = processState(id).status == McpProcessStatus.running;
     final result = await _repoService.updateCheckout(localPath: path);
@@ -506,15 +511,15 @@ class HubController extends ChangeNotifier {
       lines.add(line);
     }
     final summary = failCount == 0
-        ? '已更新 ${lines.length} 个仓库'
-        : '部分失败（${lines.length - failCount} 成功 / $failCount 失败）';
+        ? 'Updated ${lines.length} repositories'
+        : 'Partially failed (${lines.length - failCount} succeeded / $failCount failed)';
     _lastMessage = '$summary\n${lines.join('\n')}';
     notifyListeners();
   }
 
   Future<void> removeServer(String id) async {
     if (id == HubMcpConstants.serverKey) {
-      throw StateError('不能移除内置 hubMCP');
+      throw StateError('Built-in hubMCP cannot be removed');
     }
     McpServerEntry? server;
     for (final s in _servers) {
@@ -541,7 +546,9 @@ class HubController extends ChangeNotifier {
     _servers = _servers.where((s) => s.id != id).toList();
     await _persist();
     await _refreshGitManagedFlags();
-    _lastMessage = deleteMsg == null ? '已移除 $id' : '已移除 $id；$deleteMsg';
+    _lastMessage = deleteMsg == null
+        ? 'Removed $id'
+        : 'Removed $id; $deleteMsg';
     notifyListeners();
     await refreshClientStatus();
   }
@@ -550,8 +557,8 @@ class HubController extends ChangeNotifier {
     if (id == HubMcpConstants.serverKey) {
       await hubMcpHost.start();
       _lastMessage = hubMcpHost.isRunning
-          ? 'hubMCP 已启动 $hubEndpointUrl'
-          : (hubMcpHost.lastError ?? '启动失败');
+          ? 'hubMCP started at $hubEndpointUrl'
+          : (hubMcpHost.lastError ?? 'Failed to start');
       notifyListeners();
       return;
     }
@@ -565,9 +572,9 @@ class HubController extends ChangeNotifier {
     if (server == null) return;
     final state = await _processManager.start(server);
     _lastMessage = switch (state.status) {
-      McpProcessStatus.running => '已启动 ${server.name} (pid ${state.pid})',
-      McpProcessStatus.error => state.lastError ?? '启动失败',
-      _ => state.lastError ?? '未启动',
+      McpProcessStatus.running => 'Started ${server.name} (pid ${state.pid})',
+      McpProcessStatus.error => state.lastError ?? 'Failed to start',
+      _ => state.lastError ?? 'Not started',
     };
     notifyListeners();
   }
@@ -575,12 +582,12 @@ class HubController extends ChangeNotifier {
   Future<void> stopServer(String id) async {
     if (id == HubMcpConstants.serverKey) {
       await hubMcpHost.stop();
-      _lastMessage = 'hubMCP 已停止';
+      _lastMessage = 'hubMCP stopped';
       notifyListeners();
       return;
     }
     await _processManager.stop(id);
-    _lastMessage = '已停止 $id';
+    _lastMessage = 'Stopped $id';
     notifyListeners();
   }
 
@@ -629,7 +636,7 @@ class HubController extends ChangeNotifier {
     }
     await _mergeImportedServers(result.imported);
     _lastMessage =
-        '已导入 ${result.importedCount} 个 MCP：${result.imported.map((s) => s.id).join('、')}';
+        'Imported ${result.importedCount} MCPs: ${result.imported.map((s) => s.id).join(', ')}';
     notifyListeners();
     return result.copyWith(message: _lastMessage!);
   }
@@ -669,7 +676,9 @@ class HubController extends ChangeNotifier {
         webDavSync.schedulePush();
       }
     }
-    _lastMessage = config.enabled ? 'WebDAV 已保存并启用' : 'WebDAV 已关闭';
+    _lastMessage = config.enabled
+        ? 'WebDAV saved and enabled'
+        : 'WebDAV disabled';
     notifyListeners();
   }
 
@@ -689,8 +698,8 @@ class HubController extends ChangeNotifier {
     if (!_ensureWebDavReadyForManualSync()) return;
     await webDavSync.syncNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'WebDAV 合并并上传完成'
-        : '合并/上传失败：${webDavSync.lastError ?? '未知错误'}';
+        ? 'WebDAV merge and upload complete'
+        : 'Merge/upload failed: ${webDavSync.lastError ?? 'Unknown error'}';
     notifyListeners();
   }
 
@@ -700,8 +709,8 @@ class HubController extends ChangeNotifier {
     await webDavSync.pullNow();
     _lastMessage = webDavSync.status == CatalogSyncStatus.success
         ? (webDavSync.catalogUploadedAt == null
-            ? '已从 WebDAV 下载并覆盖 MCP 清单'
-            : '已从 WebDAV 下载并覆盖 MCP 清单（远端版本 ${formatPackageTime(webDavSync.catalogUploadedAt)}）')
+              ? '已从 WebDAV 下载并覆盖 MCP 清单'
+              : '已从 WebDAV 下载并覆盖 MCP 清单（远端版本 ${formatPackageTime(webDavSync.catalogUploadedAt)}）')
         : '下载失败：${webDavSync.lastError ?? '未知错误'}';
     notifyListeners();
   }
@@ -728,12 +737,12 @@ class HubController extends ChangeNotifier {
 
   bool _ensureWebDavReadyForManualSync() {
     if (!isWebDavReady) {
-      _lastMessage = '请先启用并配置 WebDAV';
+      _lastMessage = 'Enable and configure WebDAV first';
       notifyListeners();
       return false;
     }
     if (isWebDavSyncing) {
-      _lastMessage = '下载/上传进行中，请稍候';
+      _lastMessage = 'Download/upload in progress; please wait';
       notifyListeners();
       return false;
     }
@@ -906,7 +915,9 @@ class HubController extends ChangeNotifier {
 
   Future<void> saveAutoBackupSettings(AutoBackupSettings settings) async {
     await autoConfigBackup.updateSettings(settings);
-    _lastMessage = settings.enabled ? '自动备份已启用' : '自动备份已关闭';
+    _lastMessage = settings.enabled
+        ? 'Automatic backup enabled'
+        : 'Automatic backup disabled';
     notifyListeners();
   }
 

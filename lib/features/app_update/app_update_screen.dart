@@ -88,7 +88,12 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
       );
       if (!mounted) return;
       setState(() => _busy = false);
-      showHubNotice(context, message: '已调起安装；完成后请按提示完成更新', ok: true);
+      showHubNotice(
+        context,
+        message:
+            'Installer launched; follow the prompts to complete the update',
+        ok: true,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -103,30 +108,33 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
     final info = _info;
     final check = _check;
     final versionLabel = info == null
-        ? '读取中…'
+        ? 'Loading…'
         : '${info.version}（${info.buildNumber}）';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('检查更新')),
+      appBar: AppBar(title: const Text('Check for Updates')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           SettingsSection(
             icon: Icons.system_update_alt_outlined,
-            title: '软件更新',
-            subtitle: '从 GitHub Release 获取安装包',
+            title: 'Software Updates',
+            subtitle: 'Get installers from GitHub Releases',
             children: [
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('当前版本'),
+                title: const Text('Current version'),
                 subtitle: Text(versionLabel),
               ),
               if (check?.release != null)
                 ListTile(
                   leading: const Icon(Icons.new_releases_outlined),
-                  title: Text('远端 ${check!.release!.versionLabel}'),
+                  title: Text('Latest ${check!.release!.versionLabel}'),
                   subtitle: Text(
-                    check.message ?? (check.updateAvailable ? '有可用更新' : '已是最新'),
+                    check.message ??
+                        (check.updateAvailable
+                            ? 'An update is available'
+                            : 'You are up to date'),
                   ),
                 ),
               if (_progress != null) ...[
@@ -138,7 +146,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                       LinearProgressIndicator(value: _progress),
                       const SizedBox(height: 6),
                       Text(
-                        '下载 ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
+                        'Download ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -162,7 +170,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _busy ? null : _checkUpdate,
-                        child: const Text('重新检查'),
+                        child: const Text('Check again'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -176,7 +184,9 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                             ? null
                             : _install,
                         child: Text(
-                          check?.updateAvailable == true ? '下载并安装' : '无需更新',
+                          check?.updateAvailable == true
+                              ? 'Download and install'
+                              : 'No update needed',
                         ),
                       ),
                     ),
@@ -189,7 +199,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
             const SizedBox(height: 16),
             SettingsSection(
               icon: Icons.notes_outlined,
-              title: '更新说明',
+              title: 'Release Notes',
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -222,20 +232,20 @@ Future<void> maybePromptAppUpdate(BuildContext context) async {
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('发现新版本 ${result.release!.versionLabel}'),
-        content: Text(result.message ?? '是否前往更新？'),
+        title: Text('New version ${result.release!.versionLabel} found'),
+        content: Text(result.message ?? 'Open the update page?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'skip'),
-            child: const Text('跳过此版本'),
+            child: const Text('Skip this version'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'later'),
-            child: const Text('稍后'),
+            child: const Text('Later'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, 'update'),
-            child: const Text('去更新'),
+            child: const Text('Update'),
           ),
         ],
       ),

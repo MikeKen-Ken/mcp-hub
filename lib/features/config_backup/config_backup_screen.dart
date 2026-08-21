@@ -59,20 +59,20 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('从备份恢复？'),
+        title: const Text('Restore from backup?'),
         content: const Text(
-          '将用备份中的 MCP 清单覆盖当前清单，并把 Skill / Command / Rule / Hook '
-          '合并写回本机客户端目录（同名覆盖，不删除多余文件）。\n'
-          'WebDAV 账号密码不会被改动。',
+          'The backup catalog will replace the current catalog, and Skill / Command / Rule / Hook '
+          'resources will be merged into local client directories (matching items are replaced; extras are kept).\n'
+          'WebDAV credentials will not be changed.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('恢复'),
+            child: const Text('Restore'),
           ),
         ],
       ),
@@ -96,7 +96,11 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       await DirectoryOpener.open(p.dirname(path));
     } catch (error) {
       if (!mounted) return;
-      showHubNotice(context, message: '打开目录失败：$error', ok: false);
+      showHubNotice(
+        context,
+        message: 'Failed to open directory: $error',
+        ok: false,
+      );
     }
   }
 
@@ -111,7 +115,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final hub = context.read<HubController>();
     final selected = await getDirectoryPath(
       initialDirectory: hub.autoConfigBackup.effectiveDirectory,
-      confirmButtonText: '选择目录',
+      confirmButtonText: 'Choose directory',
     );
     if (selected == null || !mounted) return;
     await hub.saveAutoBackupSettings(
@@ -134,27 +138,27 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final minutes = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('自动备份间隔'),
+        title: const Text('Automatic backup interval'),
         content: TextField(
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: '分钟',
-            helperText: '最短 1 分钟，默认 10 分钟',
+            labelText: 'Minutes',
+            helperText: 'Minimum 1 minute; default 10 minutes',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
               final value = int.tryParse(controller.text.trim());
               Navigator.pop(ctx, value);
             },
-            child: const Text('保存'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -174,27 +178,28 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final days = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('自动备份保留天数'),
+        title: const Text('Automatic backup retention'),
         content: TextField(
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: '天',
-            helperText: '只清理当前目录里的自动备份 zip，最短 1 天，默认 14 天',
+            labelText: 'Days',
+            helperText:
+                'Only automatic backup zips in the current directory are cleaned; minimum 1 day, default 14 days',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
               final value = int.tryParse(controller.text.trim());
               Navigator.pop(ctx, value);
             },
-            child: const Text('保存'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -231,7 +236,11 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
       await DirectoryOpener.open(path);
     } catch (error) {
       if (!mounted) return;
-      showHubNotice(context, message: '打开目录失败：$error', ok: false);
+      showHubNotice(
+        context,
+        message: 'Failed to open directory: $error',
+        ok: false,
+      );
     }
   }
 
@@ -242,13 +251,13 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final automatic = hub.autoConfigBackup;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('配置备份')),
+      appBar: AppBar(title: const Text('Configuration Backup')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            '定期导出本机 MCP 清单与 Agent 配置（Skill / Command / Rule / Hook）为 zip，'
-            '用于误下载或误上传后的恢复。不含 WebDAV 密码，也不含 MCP 仓库克隆目录。',
+            'Periodically export the local MCP catalog and Agent configuration (Skill / Command / Rule / Hook) to a zip '
+            'for recovery after an accidental download or upload. WebDAV passwords and MCP repository clones are excluded.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -261,9 +270,11 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.folder_zip_outlined),
-                    title: const Text('导出 / 导入'),
+                    title: const Text('Export / Import'),
                     subtitle: Text(
-                      supported ? '建议定期保存到网盘或移动硬盘' : '当前平台不支持配置备份',
+                      supported
+                          ? 'Consider saving regularly to cloud storage or an external drive'
+                          : 'Configuration backup is not supported on this platform',
                     ),
                   ),
                   if (_busy) ...[
@@ -276,7 +287,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                         child: FilledButton.tonalIcon(
                           onPressed: !supported || _busy ? null : _export,
                           icon: const Icon(Icons.upload_file_outlined),
-                          label: const Text('导出备份'),
+                          label: const Text('Export backup'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -284,7 +295,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                         child: OutlinedButton.icon(
                           onPressed: !supported || _busy ? null : _import,
                           icon: const Icon(Icons.download_outlined),
-                          label: const Text('从备份恢复'),
+                          label: const Text('Restore backup'),
                         ),
                       ),
                     ],
@@ -300,7 +311,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                           ),
                         ),
                         IconButton(
-                          tooltip: '打开所在目录',
+                          tooltip: 'Open containing directory',
                           onPressed: _openLast,
                           icon: const Icon(Icons.folder_open_outlined),
                         ),
@@ -321,11 +332,11 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     secondary: const Icon(Icons.schedule_outlined),
-                    title: const Text('自动备份'),
+                    title: const Text('Automatic Backup'),
                     subtitle: Text(
                       automatic.settings.enabled
-                          ? '每 ${automatic.settings.intervalMinutes} 分钟备份一次，自动文件保留 ${automatic.settings.retentionDays} 天'
-                          : '关闭时不会在后台生成备份',
+                          ? 'Back up every ${automatic.settings.intervalMinutes} minutes; automatic files are kept for ${automatic.settings.retentionDays} days'
+                          : 'No backups are created in the background when disabled',
                     ),
                     value: automatic.settings.enabled,
                     onChanged: supported && automatic.initialized
@@ -335,17 +346,19 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.timer_outlined),
-                    title: const Text('备份间隔'),
-                    subtitle: Text('${automatic.settings.intervalMinutes} 分钟'),
+                    title: const Text('Backup interval'),
+                    subtitle: Text(
+                      '${automatic.settings.intervalMinutes} minutes',
+                    ),
                     trailing: const Icon(Icons.edit_outlined),
                     onTap: supported ? _editAutoBackupInterval : null,
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.auto_delete_outlined),
-                    title: const Text('保留天数'),
+                    title: const Text('Retention'),
                     subtitle: Text(
-                      '${automatic.settings.retentionDays} 天（只清理当前目录中的自动备份）',
+                      '${automatic.settings.retentionDays} days (only automatic backups in the current directory are cleaned)',
                     ),
                     trailing: const Icon(Icons.edit_outlined),
                     onTap: supported ? _editAutoBackupRetention : null,
@@ -355,11 +368,12 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                     leading: const Icon(Icons.folder_outlined),
                     title: Text(
                       automatic.settings.directory == null
-                          ? '备份目录（默认）'
-                          : '备份目录（自定义）',
+                          ? 'Backup directory (default)'
+                          : 'Backup directory (custom)',
                     ),
                     subtitle: SelectableText(
-                      automatic.effectiveDirectory ?? '当前平台不可用',
+                      automatic.effectiveDirectory ??
+                          'Unavailable on this platform',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: supported ? _chooseAutoBackupDirectory : null,
@@ -369,7 +383,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                       alignment: Alignment.centerLeft,
                       child: TextButton(
                         onPressed: _useDefaultAutoBackupDirectory,
-                        child: const Text('恢复默认目录'),
+                        child: const Text('Restore default directory'),
                       ),
                     ),
                   Row(
@@ -382,7 +396,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                               ? null
                               : _runAutoBackupNow,
                           icon: const Icon(Icons.backup_outlined),
-                          label: const Text('立即备份'),
+                          label: const Text('Back up now'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -392,12 +406,12 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                               ? _cleanupExpiredAutoBackups
                               : null,
                           icon: const Icon(Icons.cleaning_services_outlined),
-                          label: const Text('清理过期'),
+                          label: const Text('Clean up expired'),
                         ),
                       ),
                       const SizedBox(width: 8),
                       IconButton.outlined(
-                        tooltip: '打开自动备份目录',
+                        tooltip: 'Open automatic backup directory',
                         onPressed: supported ? _openAutoBackupDirectory : null,
                         icon: const Icon(Icons.folder_open_outlined),
                       ),
@@ -406,7 +420,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
                   if (automatic.lastBackupAt != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      '最近备份：${automatic.lastBackupAt!.toLocal()}',
+                      'Last backup: ${automatic.lastBackupAt!.toLocal()}',
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                   ],
@@ -425,7 +439,7 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            '数据目录：${McpPaths.hubDataRoot ?? "(不可用)"}',
+            'Data directory: ${McpPaths.hubDataRoot ?? "(unavailable)"}',
             style: Theme.of(context).textTheme.labelSmall,
           ),
         ],

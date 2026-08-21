@@ -8,7 +8,7 @@ Future<bool> confirmRemoteOverwrite(
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('确认覆盖远端？'),
+          title: const Text('Replace remote package?'),
           content: Text(
             '即将把本机「$scope」打包上传到 WebDAV。\n\n'
             '远端同名压缩包会被整包覆盖，其他设备上尚未同步下来的远端内容会丢失。',
@@ -16,11 +16,11 @@ Future<bool> confirmRemoteOverwrite(
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认上传'),
+              child: const Text('Confirm upload'),
             ),
           ],
         ),

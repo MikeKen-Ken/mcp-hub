@@ -11,12 +11,12 @@ enum McpRuntimePhase {
 
 extension McpRuntimePhaseLabels on McpRuntimePhase {
   String get label => switch (this) {
-        McpRuntimePhase.stopped => '已停止',
-        McpRuntimePhase.starting => '启动中',
-        McpRuntimePhase.running => '运行中',
-        McpRuntimePhase.error => '异常',
-        McpRuntimePhase.external => '外部',
-      };
+    McpRuntimePhase.stopped => 'Stopped',
+    McpRuntimePhase.starting => 'Starting',
+    McpRuntimePhase.running => 'Running',
+    McpRuntimePhase.error => 'Error',
+    McpRuntimePhase.external => 'External',
+  };
 
   bool get isActive => this == McpRuntimePhase.running;
 }

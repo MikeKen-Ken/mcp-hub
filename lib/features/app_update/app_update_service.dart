@@ -19,10 +19,10 @@ class AppUpdateService {
     AppUpdateInstaller? installer,
     Future<PackageInfo> Function()? packageInfoLoader,
     Future<SharedPreferences> Function()? prefsLoader,
-  })  : _client = client ?? GithubReleaseClient(),
-        _installer = installer ?? AppUpdateInstaller(),
-        _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
-        _prefsLoader = prefsLoader ?? SharedPreferences.getInstance;
+  }) : _client = client ?? GithubReleaseClient(),
+       _installer = installer ?? AppUpdateInstaller(),
+       _packageInfoLoader = packageInfoLoader ?? PackageInfo.fromPlatform,
+       _prefsLoader = prefsLoader ?? SharedPreferences.getInstance;
 
   final GithubReleaseClient _client;
   final AppUpdateInstaller _installer;
@@ -40,7 +40,7 @@ class AppUpdateService {
       return AppUpdateCheckResult(
         currentVersion: currentVersion,
         currentBuild: currentBuild,
-        message: '当前平台不支持软件内更新',
+        message: 'In-app updates are not supported on this platform',
       );
     }
 
@@ -51,7 +51,8 @@ class AppUpdateService {
       return AppUpdateCheckResult(
         currentVersion: currentVersion,
         currentBuild: currentBuild,
-        message: '没有已发布的正式 Release（草稿对客户端不可见）',
+        message:
+            'No published release is available (drafts are not visible to clients)',
       );
     }
 
@@ -66,7 +67,7 @@ class AppUpdateService {
         currentVersion: currentVersion,
         currentBuild: currentBuild,
         release: release,
-        message: '该 Release 没有适合当前平台的安装包',
+        message: 'This release has no installer for the current platform',
       );
     }
 
@@ -82,9 +83,9 @@ class AppUpdateService {
       updateAvailable: updateAvailable,
       message: updateAvailable
           ? (newer
-              ? '发现新版本 ${release.versionLabel}'
-              : '发现同版本更新包（构建已刷新）')
-          : '已是最新版本',
+                ? 'New version ${release.versionLabel} found'
+                : 'A refreshed build of the same version is available')
+          : 'You are up to date',
     );
   }
 
@@ -92,7 +93,10 @@ class AppUpdateService {
     String remoteVersion,
     GithubReleaseAsset asset,
   ) async {
-    if (VersionCompare.compare(remoteVersion, (await _packageInfoLoader()).version) !=
+    if (VersionCompare.compare(
+          remoteVersion,
+          (await _packageInfoLoader()).version,
+        ) !=
         0) {
       return false;
     }
@@ -133,14 +137,11 @@ class AppUpdateService {
     final release = check.release;
     final asset = check.asset;
     if (release == null || asset == null || !check.updateAvailable) {
-      throw StateError('没有可安装的更新');
+      throw StateError('No update is available to install');
     }
 
     final tempDir = await getTemporaryDirectory();
-    final downloadPath = p.join(
-      tempDir.path,
-      'mcp_hub_download_${asset.name}',
-    );
+    final downloadPath = p.join(tempDir.path, 'mcp_hub_download_${asset.name}');
     final file = File(downloadPath);
     if (await file.exists()) {
       await file.delete();
@@ -162,7 +163,9 @@ class AppUpdateService {
       return;
     }
 
-    throw UnsupportedError('当前平台不支持自动安装');
+    throw UnsupportedError(
+      'Automatic installation is not supported on this platform',
+    );
   }
 
   void dispose() => _client.close();

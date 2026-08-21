@@ -91,7 +91,7 @@ class _FailureStrip extends StatelessWidget {
                   foregroundColor: scheme.onErrorContainer,
                   visualDensity: VisualDensity.compact,
                 ),
-                child: const Text('详情'),
+                child: const Text('Details'),
               ),
             ],
           ),
