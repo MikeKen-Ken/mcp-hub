@@ -111,7 +111,7 @@ class SkillWebDavFolderSync {
   }) async {
     onProgress?.call(0, 1);
     final staging = await WritableTemp.createDir(
-      'mcp_hub_merge_${resourceWireName}',
+      'mcp_hub_merge_$resourceWireName',
     );
     try {
       final zipRemote = remoteResourceZip(config, resourceWireName);

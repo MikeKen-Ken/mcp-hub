@@ -4,22 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../common/agent_platforms.dart';
+import '../common/app_motion.dart';
 import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
+import '../features/local_mcp/local_mcp_screen.dart';
 import '../features/skill_sync/skill_sync.dart';
-import '../models/mcp_runtime_phase.dart';
-import '../models/mcp_transport.dart';
 import '../services/directory_opener.dart';
-import '../services/hub_mcp_constants.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
 import '../widgets/hub_notice/hub_notice.dart';
 import '../widgets/op_status/op_status.dart';
-import '../widgets/status_badge.dart';
 import '../widgets/sync_confirm/sync_confirm.dart';
-import 'add_server_screen.dart';
 import 'webdav_settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -41,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hub = context.watch<HubController>();
+    final loading = context.select<HubController, bool>((hub) => hub.loading);
 
     return Scaffold(
       appBar: AppBar(
@@ -50,51 +47,54 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             tooltip: 'WebDAV settings',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const WebDavSettingsScreen(),
-                ),
-              );
+              pushAppPage<void>(context, const WebDavSettingsScreen());
             },
             icon: const Icon(Icons.settings_outlined),
           ),
           IconButton(
             tooltip: 'Check for updates',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AppUpdateScreen(),
-                ),
-              );
+              pushAppPage<void>(context, const AppUpdateScreen());
             },
             icon: const Icon(Icons.upgrade),
           ),
         ],
       ),
-      body: hub.loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                Text(
-                  'Configuration Center',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'View Agent Hub status and access common management features.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const _SectionHeader('Quick Access'),
-                const SizedBox(height: 8),
-                _AgentConfigHomeSection(hub: hub),
-                const SizedBox(height: 20),
-                Text(
-                  'Data directory: ${McpPaths.hubDataRoot ?? "(unavailable)"}',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ],
-            ),
+      body: AnimatedSwitcher(
+        duration: AppMotion.durationOf(context, AppMotion.standard),
+        switchInCurve: AppMotion.emphasized,
+        switchOutCurve: Curves.easeInCubic,
+        child: loading
+            ? const Center(
+                key: ValueKey('loading'),
+                child: CircularProgressIndicator(),
+              )
+            : ListView(
+                key: const ValueKey('content'),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  Text(
+                    'Configuration Center',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'View Agent Hub status and access common management features.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const _SectionHeader('Quick Access'),
+                  const SizedBox(height: 8),
+                  Consumer<HubController>(
+                    builder: (_, hub, _) => _AgentConfigHomeSection(hub: hub),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Data directory: ${McpPaths.hubDataRoot ?? "(unavailable)"}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -222,59 +222,9 @@ class ClientMcpScreen extends StatelessWidget {
                 'Add, start, stop, and update MCPs · ${hub.servers.length} total',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const LocalMcpScreen()),
-              ),
+              onTap: () => pushAppPage<void>(context, const LocalMcpScreen()),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class LocalMcpScreen extends StatelessWidget {
-  const LocalMcpScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final hub = context.watch<HubController>();
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Local MCP'),
-        actions: [
-          IconButton(
-            tooltip: 'Update all',
-            onPressed: hub.hasUpdatableServers
-                ? () async {
-                    await hub.updateAllServers();
-                    if (!context.mounted) return;
-                    showHubNotice(
-                      context,
-                      message: hub.lastMessage ?? 'Update complete',
-                    );
-                  }
-                : null,
-            icon: const Icon(Icons.system_update_alt),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const AddServerScreen()),
-        ),
-        icon: const Icon(Icons.add),
-        label: const Text('Add MCP'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-        children: [
-          Text(
-            'The switch controls whether this MCP is written to Cursor / Codex; built-in hubMCP is always retained.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          ...hub.servers.map((server) => _ServerTile(serverId: server.id)),
         ],
       ),
     );
@@ -682,7 +632,7 @@ class _McpResourceSyncCard extends StatelessWidget {
     BuildContext context,
     Future<void> Function() action,
   ) async {
-    final result = await action();
+    await action();
     if (!context.mounted) return;
     showHubNotice(
       context,
@@ -799,11 +749,8 @@ class _McpResourceSyncCard extends StatelessWidget {
             ),
             const Divider(height: 24),
             FilledButton.tonalIcon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ClientMcpScreen(),
-                ),
-              ),
+              onPressed: () =>
+                  pushAppPage<void>(context, const ClientMcpScreen()),
               icon: const Icon(Icons.tune_outlined),
               label: const Text('Open MCP Settings'),
             ),
@@ -1307,201 +1254,6 @@ class _DirectoryPathRow extends StatelessWidget {
           icon: const Icon(Icons.folder_open_outlined),
         ),
       ],
-    );
-  }
-}
-
-class _ServerTile extends StatelessWidget {
-  const _ServerTile({required this.serverId});
-
-  final String serverId;
-
-  @override
-  Widget build(BuildContext context) {
-    final hub = context.watch<HubController>();
-    final server = hub.servers.firstWhere((s) => s.id == serverId);
-    final isHub = server.builtIn || server.id == HubMcpConstants.serverKey;
-    final runtime = hub.runtimeInfoFor(server);
-    final transportLabel = server.transport == McpTransport.http
-        ? 'HTTP'
-        : 'stdio';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-        child: Column(
-          children: [
-            SwitchListTile(
-              title: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      server.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  StatusBadge(label: runtime.kindLabel, tonal: true),
-                  const SizedBox(width: 6),
-                  StatusBadge(
-                    label: runtime.phaseBadgeLabel,
-                    active: runtime.phase.isActive,
-                  ),
-                  if (server.shouldAutoStartByHub) ...[
-                    const SizedBox(width: 6),
-                    const StatusBadge(label: 'Auto'),
-                  ],
-                ],
-              ),
-              subtitle: Text(
-                isHub
-                    ? '$transportLabel · ${server.id} · ${hub.hubEndpointUrl}'
-                    : '$transportLabel · ${server.id}',
-              ),
-              value: server.enabled,
-              onChanged: (v) => hub.setEnabled(server.id, v),
-            ),
-            if (runtime.lastError != null &&
-                runtime.phase == McpRuntimePhase.error)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.error_outline, size: 20),
-                title: Text(runtime.lastError!),
-              ),
-            if (server.notes != null)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.info_outline, size: 20),
-                title: Text(server.notes!),
-              ),
-            if (server.repoUrl != null)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.cloud_outlined, size: 20),
-                title: Text(
-                  server.repoUrl!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: server.localPath == null
-                    ? null
-                    : Text(
-                        server.localPath!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              ),
-            if (server.transport == McpTransport.http)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.link, size: 20),
-                title: Text(server.url ?? '(URL not set)'),
-                subtitle: isHub && hub.hubMcpHost.lastError != null
-                    ? Text(hub.hubMcpHost.lastError!)
-                    : null,
-              )
-            else
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.terminal, size: 20),
-                title: Text(
-                  [
-                    server.command ?? '(command not set)',
-                    ...server.args,
-                  ].join(' '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                spacing: 4,
-                children: [
-                  if (runtime.canStart)
-                    TextButton.icon(
-                      onPressed: () => hub.startServer(server.id),
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start'),
-                    ),
-                  if (runtime.canStop)
-                    TextButton.icon(
-                      onPressed: () => hub.stopServer(server.id),
-                      icon: const Icon(Icons.stop),
-                      label: const Text('Stop'),
-                    ),
-                  if (runtime.canUpdate)
-                    TextButton.icon(
-                      onPressed: () async {
-                        try {
-                          await hub.updateServer(server.id);
-                          if (!context.mounted) return;
-                          showHubNotice(
-                            context,
-                            message: hub.lastMessage ?? 'Updated',
-                            ok: true,
-                          );
-                        } catch (error) {
-                          if (!context.mounted) return;
-                          showHubNotice(context, message: '$error', ok: false);
-                        }
-                      },
-                      icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('Update'),
-                    ),
-                  if (!isHub)
-                    TextButton.icon(
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Remove MCP?'),
-                            content: Text(
-                              'This will remove the MCP from Hub and delete its local clone directory.\n${server.name}',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Remove'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (ok == true) {
-                          try {
-                            await hub.removeServer(server.id);
-                            if (!context.mounted) return;
-                            showHubNotice(
-                              context,
-                              message: hub.lastMessage ?? 'Removed',
-                              ok: true,
-                            );
-                          } catch (error) {
-                            if (!context.mounted) return;
-                            showHubNotice(
-                              context,
-                              message: '$error',
-                              ok: false,
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Remove'),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

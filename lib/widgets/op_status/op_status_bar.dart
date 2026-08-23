@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/app_motion.dart';
 import '../../common/sync_progress.dart';
 import '../hub_notice/hub_notice.dart';
 
@@ -12,20 +13,45 @@ class OpStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final duration = AppMotion.durationOf(context, AppMotion.fast);
     final progress = this.progress;
+    Widget child;
     if (progress != null) {
-      return _ProgressStrip(progress: progress);
+      child = _ProgressStrip(
+        key: const ValueKey('progress'),
+        progress: progress,
+      );
+    } else {
+      final error = errorMessage?.trim();
+      child = error != null && error.isNotEmpty
+          ? _FailureStrip(key: const ValueKey('error'), message: error)
+          : const SizedBox.shrink(key: ValueKey('idle'));
     }
-    final error = errorMessage?.trim();
-    if (error != null && error.isNotEmpty) {
-      return _FailureStrip(message: error);
-    }
-    return const SizedBox.shrink();
+
+    return AnimatedSize(
+      duration: duration,
+      curve: AppMotion.emphasized,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: duration,
+        switchInCurve: AppMotion.emphasized,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: child,
+          ),
+        ),
+        child: child,
+      ),
+    );
   }
 }
 
 class _ProgressStrip extends StatelessWidget {
-  const _ProgressStrip({required this.progress});
+  const _ProgressStrip({super.key, required this.progress});
 
   final SyncProgress progress;
 
@@ -54,7 +80,7 @@ class _ProgressStrip extends StatelessWidget {
 }
 
 class _FailureStrip extends StatelessWidget {
-  const _FailureStrip({required this.message});
+  const _FailureStrip({super.key, required this.message});
 
   final String message;
 

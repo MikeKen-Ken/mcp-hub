@@ -4,11 +4,8 @@ import '../common/agent_platforms.dart';
 import '../controllers/hub_controller.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../models/mcp_transport.dart';
-import '../models/mcp_server_runtime_info.dart';
 import 'hub_mcp_constants.dart';
 import 'hub_mcp_results.dart';
-import 'mcp_client_configurator.dart';
-import 'mcp_server_runtime_resolver.dart';
 
 /// Register tools so Cursor/Codex can operate Agent Hub itself.
 void registerHubMcpTools(McpServer server, HubController hub) {

@@ -158,6 +158,6 @@ class _HubNavigatorObserver extends NavigatorObserver {
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   final hub = HubController();
-  await hub.load();
   runApp(ChangeNotifierProvider.value(value: hub, child: const McpHubApp()));
+  await hub.load();
 }

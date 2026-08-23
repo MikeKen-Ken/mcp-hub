@@ -89,6 +89,11 @@ class HubController extends ChangeNotifier {
   final Map<String, bool> _gitManaged = {};
 
   List<McpServerEntry> get servers => List.unmodifiable(_servers);
+  McpServerEntry? serverById(String id) {
+    final index = _servers.indexWhere((server) => server.id == id);
+    return index < 0 ? null : _servers[index];
+  }
+
   bool get loading => _loading;
   String? get lastMessage => _lastMessage;
 

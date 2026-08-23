@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../common/app_motion.dart';
 import '../controllers/hub_controller.dart';
 import '../widgets/hub_notice/hub_notice.dart';
 import '../features/config_backup/config_backup.dart';
@@ -128,11 +129,8 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                   'Export, restore, and automatically back up local MCP and Agent configuration',
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ConfigBackupScreen(),
-                  ),
-                ),
+                onTap: () =>
+                    pushAppPage<void>(context, const ConfigBackupScreen()),
               ),
             ),
             const SizedBox(height: 12),
@@ -157,8 +155,9 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
                 ),
                 validator: (v) {
                   if (!_enabled) return null;
-                  if (v == null || v.trim().isEmpty)
+                  if (v == null || v.trim().isEmpty) {
                     return 'Enter a server URL';
+                  }
                   return null;
                 },
               ),

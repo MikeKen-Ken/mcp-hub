@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../common/app_motion.dart';
+
 /// 与标题文字行高对齐的紧凑状态标签（避免 Material Chip 撑高导致上下不居中）。
 class StatusBadge extends StatelessWidget {
   const StatusBadge({
@@ -28,7 +30,9 @@ class StatusBadge extends StatelessWidget {
         ? scheme.onSecondaryContainer
         : scheme.onSurfaceVariant;
 
-    return Container(
+    return AnimatedContainer(
+      duration: AppMotion.durationOf(context, AppMotion.fast),
+      curve: AppMotion.emphasized,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(

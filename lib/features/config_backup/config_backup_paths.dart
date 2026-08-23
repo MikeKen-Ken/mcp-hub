@@ -1,7 +1,6 @@
 import '../../common/agent_platforms.dart';
 import '../../features/skill_sync/agent_resource_kind.dart';
 import '../../features/skill_sync/skill_target.dart';
-import '../../services/mcp_paths.dart';
 
 /// 备份包内相对路径约定，以及本机源/目标目录映射。
 abstract final class ConfigBackupPaths {

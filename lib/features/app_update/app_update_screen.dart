@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../common/app_motion.dart';
 import '../../widgets/hub_notice/hub_notice.dart';
 import '../../widgets/settings_section.dart';
 import 'app_update_service.dart';
@@ -254,11 +255,7 @@ Future<void> maybePromptAppUpdate(BuildContext context) async {
     if (action == 'skip') {
       await service.skipVersion(result.release!.versionLabel);
     } else if (action == 'update') {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => AppUpdateScreen(service: service),
-        ),
-      );
+      await pushAppPage<void>(context, AppUpdateScreen(service: service));
       return;
     }
   } catch (_) {

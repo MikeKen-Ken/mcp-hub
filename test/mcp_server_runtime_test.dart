@@ -3,10 +3,13 @@ import 'package:mcp_hub/controllers/hub_controller.dart';
 import 'package:mcp_hub/models/mcp_management_kind.dart';
 import 'package:mcp_hub/models/mcp_runtime_phase.dart';
 import 'package:mcp_hub/models/mcp_server_entry.dart';
+import 'package:mcp_hub/models/mcp_server_runtime_info.dart';
 import 'package:mcp_hub/models/mcp_transport.dart';
 import 'package:mcp_hub/services/hub_mcp_constants.dart';
+import 'package:mcp_hub/services/mcp_paths.dart';
 import 'package:mcp_hub/services/mcp_process_manager.dart';
 import 'package:mcp_hub/services/mcp_server_runtime_resolver.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   late HubController hub;
@@ -18,6 +21,28 @@ void main() {
   tearDown(() => hub.dispose());
 
   group('McpServerRuntimeResolver', () {
+    test('equivalent runtime snapshots compare equal for UI selectors', () {
+      const first = McpServerRuntimeInfo(
+        kind: McpManagementKind.hubStdio,
+        phase: McpRuntimePhase.running,
+        canStart: false,
+        canStop: true,
+        canUpdate: true,
+        pid: 42,
+      );
+      const second = McpServerRuntimeInfo(
+        kind: McpManagementKind.hubStdio,
+        phase: McpRuntimePhase.running,
+        canStart: false,
+        canStop: true,
+        canUpdate: true,
+        pid: 42,
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+    });
+
     test('内置 hubMCP 归类为 builtInHttp', () {
       const server = McpServerEntry(
         id: HubMcpConstants.serverKey,
@@ -49,12 +74,12 @@ void main() {
     });
 
     test('Hub Git stdio 运行中时可停止、不可启动', () {
-      const server = McpServerEntry(
+      final server = McpServerEntry(
         id: 'demo',
         name: 'demo',
         transport: McpTransport.stdio,
         repoUrl: 'https://github.com/org/demo',
-        localPath: r'C:\Users\Demo\.mcp-hub\servers\demo',
+        localPath: p.join(McpPaths.serversRoot!, 'demo'),
         command: 'node',
         args: ['index.js'],
         enabled: true,
@@ -73,7 +98,7 @@ void main() {
       expect(info.canStart, isFalse);
       expect(info.canStop, isTrue);
       expect(info.canUpdate, isTrue);
-      expect(info.phaseBadgeLabel, '运行中 · pid 42');
+      expect(info.phaseBadgeLabel, 'Running · pid 42');
     });
 
     test('远端 HTTP 不展示进程控制', () {

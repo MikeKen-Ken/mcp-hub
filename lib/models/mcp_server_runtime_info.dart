@@ -44,4 +44,20 @@ class McpServerRuntimeInfo {
     if (pid != null) 'pid': pid,
     if (lastError != null) 'lastError': lastError,
   };
+
+  @override
+  bool operator ==(Object other) {
+    return other is McpServerRuntimeInfo &&
+        other.kind == kind &&
+        other.phase == phase &&
+        other.canStart == canStart &&
+        other.canStop == canStop &&
+        other.canUpdate == canUpdate &&
+        other.pid == pid &&
+        other.lastError == lastError;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(kind, phase, canStart, canStop, canUpdate, pid, lastError);
 }
