@@ -95,7 +95,7 @@ class ResourceConversion {
         ? ''
         : '；已跳过无 Codex 对应事件：${converted.skippedEvents.join("、")}';
     final flagHint = converted.enabledFeatureFlag
-        ? '；已写入 features.codex_hooks = true'
+        ? '；已写入 features.hooks = true'
         : '';
     return SkillSyncResult(
       ok: true,

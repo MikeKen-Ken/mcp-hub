@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontSubstitutes]
+"Segoe UI"="Mona Medium"
+"Segoe UI Variable"="Mona Medium"
+"MS Shell Dlg"="Mona Medium"
+"MS Shell Dlg 2"="Mona Medium"

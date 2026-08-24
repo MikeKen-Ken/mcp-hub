@@ -205,26 +205,54 @@ class CursorToCodexHooksConverter {
   Future<bool> _ensureCodexHooksFeature(String configTomlPath) async {
     final file = File(configTomlPath);
     var source = await file.exists() ? await file.readAsString() : '';
-    if (RegExp(
-      r'^\s*codex_hooks\s*=\s*true\s*$',
-      multiLine: true,
-    ).hasMatch(source)) {
-      return false;
+    final lines = source.split('\n');
+    final featuresIndex = lines.indexWhere(
+      (line) => line.trim() == '[features]',
+    );
+    var changed = false;
+
+    if (featuresIndex == -1) {
+      final trimmed = source.trimRight();
+      const block = '[features]\nhooks = true\n';
+      final next = trimmed.isEmpty ? block : '$trimmed\n\n$block';
+      await file.parent.create(recursive: true);
+      await file.writeAsString(next);
+      return true;
     }
 
-    final featuresHeader = RegExp(r'^\[features\]\s*$', multiLine: true);
-    final match = featuresHeader.firstMatch(source);
-    String next;
-    if (match == null) {
-      final trimmed = source.trimRight();
-      const block = '[features]\ncodex_hooks = true\n';
-      next = trimmed.isEmpty ? block : '$trimmed\n\n$block';
-    } else {
-      next =
-          '${source.substring(0, match.end)}\n'
-          'codex_hooks = true'
-          '${source.substring(match.end)}';
+    var sectionEnd = lines.length;
+    for (var index = featuresIndex + 1; index < lines.length; index += 1) {
+      if (lines[index].trimLeft().startsWith('[')) {
+        sectionEnd = index;
+        break;
+      }
     }
+
+    final oldFlag = RegExp(r'^\s*codex_hooks\s*=\s*(true|false)\s*(?:#.*)?$');
+    final hooksFlag = RegExp(r'^(\s*)hooks\s*=\s*(true|false)\s*(#.*)?$');
+    var hasHooksFlag = false;
+    for (var index = sectionEnd - 1; index > featuresIndex; index -= 1) {
+      final line = lines[index];
+      if (oldFlag.hasMatch(line)) {
+        lines.removeAt(index);
+        sectionEnd -= 1;
+        changed = true;
+        continue;
+      }
+      final match = hooksFlag.firstMatch(line);
+      if (match != null) {
+        lines[index] = '${match.group(1)}hooks = true${match.group(3) ?? ''}';
+        hasHooksFlag = true;
+        changed = changed || match.group(2) != 'true';
+      }
+    }
+    if (!hasHooksFlag) {
+      lines.insert(featuresIndex + 1, 'hooks = true');
+      changed = true;
+    }
+
+    final next = lines.join('\n');
+    if (!changed) return false;
     await file.parent.create(recursive: true);
     await file.writeAsString(next);
     return true;

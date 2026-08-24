@@ -119,7 +119,28 @@ void main() {
 
     final submit = hooks['UserPromptSubmit'] as List;
     expect(submit, isNotEmpty);
-    expect(await toml.readAsString(), contains('codex_hooks = true'));
+    expect(await toml.readAsString(), contains('hooks = true'));
+  });
+
+  test('迁移旧的 Codex Hook feature flag', () async {
+    final cursorDir = Directory(p.join(temp.path, 'cursor'))..createSync();
+    final codexDir = Directory(p.join(temp.path, 'codex'))..createSync();
+    await File(p.join(cursorDir.path, 'hooks.json')).writeAsString(
+      '{"version":1,"hooks":{}}',
+    );
+    final toml = File(p.join(codexDir.path, 'config.toml'));
+    await toml.writeAsString('[features]\ncodex_hooks = true\nrmcp_client = true\n');
+
+    await const CursorToCodexHooksConverter().convertAll(
+      cursor: CursorHooksLayout(configDirectory: cursorDir.path),
+      codex: CursorHooksLayout(configDirectory: codexDir.path),
+      codexConfigTomlPath: toml.path,
+    );
+
+    final config = await toml.readAsString();
+    expect(config, contains('hooks = true'));
+    expect(config, isNot(contains('codex_hooks')));
+    expect(config, contains('rmcp_client = true'));
   });
 
   test('relocateHookCommand 识别多种相对路径', () {

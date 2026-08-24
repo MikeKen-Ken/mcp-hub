@@ -82,7 +82,7 @@ Hook 压缩包内是 `hooks.json` 与 `hooks/` 脚本目录；应用到 Cursor �
 | Skill | `~/.cursor/skills/` | `~/.codex/skills/` 与 `%USERPROFILE%\\.config\\opencode\\skills/` | 整包镜像后按目标格式转换：Codex 生成 `agents/openai.yaml`；OpenCode 改写 `SKILL.md` frontmatter（`disable-model-invocation` → `metadata.opencode/autoinvoke`） |
 | Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，整文件覆盖对应全局 `AGENTS.md` |
 | Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 按 Cursor 镜像写入并删除多余命令文件 |
-| Hook | `~/.cursor/hooks.json` 与 `~/.cursor/hooks/` | `~/.codex/hooks.json` 与 `~/.codex/hooks/` | 脚本目录镜像；事件改成 Codex 三层结构（如 `beforeShellExecution` → `PreToolUse` + matcher `Bash`）；相对路径改写为 `~/.codex/hooks/`；必要时写入 `features.codex_hooks = true`。Open Code 无对等 `hooks.json` |
+| Hook | `~/.cursor/hooks.json` 与 `~/.cursor/hooks/` | `~/.codex/hooks.json` 与 `~/.codex/hooks/` | 脚本目录镜像；事件改成 Codex 三层结构（如 `beforeShellExecution` → `PreToolUse` + matcher `Bash`）；相对路径改写为 `~/.codex/hooks/`；必要时写入 `features.hooks = true`，并迁移旧的 `codex_hooks` 配置。Open Code 无对等 `hooks.json` |
 
 界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule / Hook 卡片各提供「一键转换」。转换产物以本机 Cursor 为准全量对齐附件后，再写成各客户端格式：Skill 整包镜像（多余文件与多余包会删除），Codex 写入 `agents/openai.yaml`，OpenCode 改写 `SKILL.md` 为其所识别的 frontmatter；Rule 整文件覆盖 `AGENTS.md`；OpenCode Command 删除 Cursor 中已不存在的命令文件；Hook 写入 Codex `hooks.json` 并镜像脚本。OpenCode **不读取、合并或覆盖** 其余 JSON/JSONC 配置。Skill 的正文与 `scripts/`、`references/` 两边共用。Codex `allow_implicit_invocation` **每次以 Cursor 的 `disable-model-invocation` 为准覆盖**（`true` → 禁止隐式调用；缺省则允许），不保留 Codex 旧值。`short_description` 从 description 生成，长度 25–64。OpenCode 将同一字段映射为 `metadata.opencode/autoinvoke`。
 
