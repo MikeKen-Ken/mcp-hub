@@ -4,7 +4,7 @@ import 'package:path/path.dart' as p;
 
 import 'skill_md_document.dart';
 
-/// 单个 Cursor Rule 转成 AGENTS.md 章节的结果。
+/// One Cursor rule converted into an AGENTS.md section.
 class CodexAgentsRuleItem {
   const CodexAgentsRuleItem({
     required this.relativePath,
@@ -17,22 +17,31 @@ class CodexAgentsRuleItem {
   final bool alwaysApply;
 }
 
-/// 把 Cursor `~/.cursor/rules/**/*.mdc` 批量转换成 Codex `AGENTS.md`。
+/// Batch-convert Cursor `~/.cursor/rules/**/*.mdc` into Codex `AGENTS.md`.
 class CursorToCodexAgentsConverter {
   const CursorToCodexAgentsConverter();
 
-  static const managedHeader = '# 全局工作规则';
+  static const managedHeader = '# Global working rules';
 
-  /// 读取 [cursorRulesDir] 下全部 `.mdc`，写入 [agentsMdPath]。
+  static const managedPreamble =
+      'These rules were converted from `~/.cursor/rules` and apply to every '
+      'Codex project. A project-level `AGENTS.md` or `AGENTS.override.md` may '
+      'add to or override them.';
+
+  static const emptyRulesNote =
+      '(The Cursor Rule directory is empty; no sections were written.)';
+
+  /// Read every `.mdc` under [cursorRulesDir] and write [agentsMdPath].
   ///
-  /// 会**整文件覆盖**目标 `AGENTS.md`（与现有手写转换产物一致：整份由 Cursor rules 生成）。
+  /// Overwrites the target `AGENTS.md` in full (the whole file is generated
+  /// from Cursor rules).
   Future<List<CodexAgentsRuleItem>> convertAll({
     required String cursorRulesDir,
     required String agentsMdPath,
   }) async {
     final sourceRoot = Directory(cursorRulesDir);
     if (!await sourceRoot.exists()) {
-      throw StateError('Cursor Rule 目录不存在：$cursorRulesDir');
+      throw StateError('Cursor Rule directory does not exist: $cursorRulesDir');
     }
 
     final files = <File>[];
@@ -68,7 +77,7 @@ class CursorToCodexAgentsConverter {
       parsed.add((item: item, section: '## $heading\n\n$body'));
     }
 
-    // alwaysApply 规则靠前，其余保持路径排序（files 已排序）。
+    // alwaysApply rules first; remaining items keep path order (files are sorted).
     final ordered = [
       ...parsed.where((e) => e.item.alwaysApply),
       ...parsed.where((e) => !e.item.alwaysApply),
@@ -79,14 +88,11 @@ class CursorToCodexAgentsConverter {
     final buffer = StringBuffer()
       ..writeln(managedHeader)
       ..writeln()
-      ..writeln(
-        '以下规则由 `~/.cursor/rules` 转换而来，适用于 Codex 的所有项目；'
-        '项目内更具体的 `AGENTS.md` 或 `AGENTS.override.md` 可补充或覆盖这些规则。',
-      )
+      ..writeln(managedPreamble)
       ..writeln();
 
     if (orderedSections.isEmpty) {
-      buffer.writeln('（当前 Cursor Rule 目录为空，未写入任何章节。）');
+      buffer.writeln(emptyRulesNote);
     } else {
       buffer.writeln(orderedSections.join('\n\n'));
       buffer.writeln();
@@ -115,7 +121,7 @@ class CursorToCodexAgentsConverter {
     return base.replaceAll('-', ' ');
   }
 
-  /// 去掉空的首尾行；保留正文原有 MUST 等字面量（与 Cursor 源一致）。
+  /// Trim leading/trailing blank lines; keep MUST and other literals as in Cursor.
   static String _normalizeRuleBody(String body) {
     final lines = body.replaceAll('\r\n', '\n').split('\n');
     while (lines.isNotEmpty && lines.first.trim().isEmpty) {
@@ -124,7 +130,7 @@ class CursorToCodexAgentsConverter {
     while (lines.isNotEmpty && lines.last.trim().isEmpty) {
       lines.removeLast();
     }
-    // 若正文以与 heading 重复的 `# title` 开头则去掉，避免 AGENTS 出现双标题。
+    // Drop a leading `# title` that duplicates the section heading.
     if (lines.isNotEmpty && lines.first.trim().startsWith('# ')) {
       lines.removeAt(0);
       while (lines.isNotEmpty && lines.first.trim().isEmpty) {

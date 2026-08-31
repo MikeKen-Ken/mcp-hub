@@ -93,7 +93,7 @@ class CursorToCodexHooksConverter {
     if (await cursorJsonFile.exists()) {
       final decoded = jsonDecode(await cursorJsonFile.readAsString());
       if (decoded is! Map) {
-        throw const FormatException('Cursor hooks.json 根节点必须是对象');
+        throw const FormatException('Cursor hooks.json root must be an object');
       }
       final hooksNode = decoded['hooks'];
       if (hooksNode is Map) {
@@ -120,7 +120,8 @@ class CursorToCodexHooksConverter {
     }
 
     final payload = <String, Object?>{
-      'description': '由 Cursor ~/.cursor/hooks.json 一键转换生成',
+      'description':
+          'Generated from Cursor ~/.cursor/hooks.json by one-click conversion',
       'hooks': grouped,
     };
     final destJson = File(codex.hooksJsonPath);

@@ -54,7 +54,9 @@ class CursorToCodexSkillConverter {
   }) async {
     final sourceRoot = Directory(cursorSkillsDir);
     if (!await sourceRoot.exists()) {
-      throw StateError('Cursor Skill 目录不存在：$cursorSkillsDir');
+      throw StateError(
+        'Cursor Skill directory does not exist: $cursorSkillsDir',
+      );
     }
 
     await Directory(codexSkillsDir).create(recursive: true);
@@ -104,8 +106,7 @@ class CursorToCodexSkillConverter {
     final skillMdPath = p.join(targetDir, 'SKILL.md');
     final doc = await SkillMdDocument.parseFile(skillMdPath);
     // 以 Cursor 为准：每次覆盖 Codex 隐式调用开关，不保留旧 yaml。
-    final allowImplicit =
-        doc.allowImplicitInvocationFromFrontmatter ?? true;
+    final allowImplicit = doc.allowImplicitInvocationFromFrontmatter ?? true;
     final yaml = buildOpenAiYaml(
       packageName: packageName,
       document: doc,
@@ -131,8 +132,7 @@ class CursorToCodexSkillConverter {
     required SkillMdDocument document,
     bool? allowImplicitInvocation,
   }) {
-    final displayName =
-        document.title ?? document.name ?? packageName;
+    final displayName = document.title ?? document.name ?? packageName;
     final shortDescription = _shortDescription(
       document.description ?? document.title ?? packageName,
     );
@@ -165,17 +165,18 @@ class CursorToCodexSkillConverter {
     if (original.isEmpty || _blockMarker.hasMatch(original)) {
       return _fitShortDescription('');
     }
-    var cleaned = original
+    var cleaned = original.replaceAll(RegExp(r'\s+'), ' ').trim();
+    cleaned = cleaned
         .replaceFirst(RegExp(r'[。．\.].*用户要求.*$'), '')
         .replaceFirst(RegExp(r'。用户要求.*$'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceFirst(RegExp(r'\.\s*Use when.*$', caseSensitive: false), '')
         .trim();
     var first = cleaned;
     final match = RegExp(r'[。．\.！!？?]').firstMatch(cleaned);
     if (match != null && match.start > 0) {
       first = cleaned.substring(0, match.start).trim();
     }
-    return _fitShortDescription(first, fallbacks: [cleaned, original]);
+    return _fitShortDescription(first, fallbacks: [cleaned]);
   }
 
   static String _fitShortDescription(
@@ -193,9 +194,9 @@ class CursorToCodexSkillConverter {
 
     var grown = preferred.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (grown.isEmpty || _blockMarker.hasMatch(grown)) {
-      grown = '技能工作流';
+      grown = 'Skill workflow';
     }
-    const pad = '。用于相关任务与工作流';
+    const pad = '. For related tasks and workflows';
     while (grown.length < shortDescriptionMin) {
       grown += pad;
     }
@@ -213,9 +214,9 @@ class CursorToCodexSkillConverter {
     final hint = displayName.trim().isNotEmpty
         ? displayName.trim()
         : (description?.trim().isNotEmpty == true
-            ? _shortDescription(description!)
-            : packageName);
-    return '使用 \$$packageName 完成「$hint」。';
+              ? _shortDescription(description!)
+              : packageName);
+    return 'Use \$$packageName to complete: $hint.';
   }
 
   static String _yamlQuote(String value) {

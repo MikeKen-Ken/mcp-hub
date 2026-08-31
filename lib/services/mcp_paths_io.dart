@@ -66,7 +66,7 @@ abstract final class McpPaths {
 
   static String get codexRulesPath => p.join(_userProfile, '.codex', 'rules');
 
-  /// Codex 全局 Agent 指引（由 Cursor `~/.cursor/rules` 一键转换写入）。
+  /// Codex global agent instructions (written by Cursor `~/.cursor/rules` conversion).
   static String get codexAgentsMdPath =>
       p.join(_userProfile, '.codex', 'AGENTS.md');
 

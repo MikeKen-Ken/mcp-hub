@@ -123,7 +123,7 @@ description: 根据当天提交生成分层日报并展示预览。用户要求�
         p.join(codex.path, 'daily-report', 'agents', 'openai.yaml'),
       ).readAsString();
       expect(yaml, contains('display_name: "生成工作日报"'));
-      expect(yaml, contains(r'default_prompt: "使用 $daily-report'));
+      expect(yaml, contains(r'default_prompt: "Use $daily-report'));
       expect(yaml, contains('allow_implicit_invocation: true'));
       expect(_shortDescriptionOf(yaml), isNot(equals('>-')));
       expect(
@@ -218,7 +218,9 @@ disable-model-invocation: true
 
 # 演示
 ''');
-      final existing = File(p.join(codex.path, 'demo', 'agents', 'openai.yaml'));
+      final existing = File(
+        p.join(codex.path, 'demo', 'agents', 'openai.yaml'),
+      );
       await existing.parent.create(recursive: true);
       await existing.writeAsString('''
 interface:
@@ -273,7 +275,37 @@ disable-model-invocation: true
         ),
       );
       expect(yaml, contains('allow_implicit_invocation: false'));
-      expect(yaml, contains(r'default_prompt: "使用 $kanban-complete-tasks'));
+      expect(yaml, contains(r'default_prompt: "Use $kanban-complete-tasks'));
+    });
+
+    test('removes multiline Use when guidance from short_description', () {
+      final document = SkillMdDocument.parse('''
+---
+name: report-builder
+description: |
+  Builds reports.
+  Use when a user requests daily or weekly reports.
+  The skill also collects commits from Git.
+---
+
+# Report Builder
+''');
+
+      final yaml = CursorToCodexSkillConverter.buildOpenAiYaml(
+        packageName: 'report-builder',
+        document: document,
+      );
+      final short = _shortDescriptionOf(yaml);
+
+      expect(short, startsWith('Builds reports'));
+      expect(short, isNot(contains('Use when')));
+      expect(
+        short.length,
+        inInclusiveRange(
+          CursorToCodexSkillConverter.shortDescriptionMin,
+          CursorToCodexSkillConverter.shortDescriptionMax,
+        ),
+      );
     });
   });
 
@@ -290,23 +322,23 @@ disable-model-invocation: true
       }
     });
 
-    test('批量把 mdc 写入 AGENTS.md', () async {
+    test('writes mdc files into AGENTS.md', () async {
       final rules = Directory(p.join(temp.path, 'rules'));
       await Directory(p.join(rules.path, 'common')).create(recursive: true);
       await File(p.join(rules.path, 'common', 'language.mdc')).writeAsString('''
 ---
 alwaysApply: true
 ---
-# 语言规则
-- MUST 使用简体中文回复。
+# Language
+- MUST reply in English.
 ''');
       await File(p.join(rules.path, 'common', 'paths.mdc')).writeAsString('''
 ---
-description: 路径规则
+description: Path rules
 alwaysApply: true
 ---
-# 本地路径规则
-- 使用环境变量。
+# Local path rules
+- Use environment variables.
 ''');
 
       final out = p.join(temp.path, 'AGENTS.md');
@@ -317,17 +349,20 @@ alwaysApply: true
 
       expect(items, hasLength(2));
       final text = await File(out).readAsString();
-      expect(text, startsWith('# 全局工作规则'));
-      expect(text, contains('## 语言规则'));
-      expect(text, contains('## 本地路径规则'));
-      expect(text, contains('MUST 使用简体中文回复'));
+      expect(text, startsWith(CursorToCodexAgentsConverter.managedHeader));
+      expect(text, contains(CursorToCodexAgentsConverter.managedPreamble));
+      expect(text, contains('## Language'));
+      expect(text, contains('## Local path rules'));
+      expect(text, contains('MUST reply in English.'));
       expect(text, isNot(contains('alwaysApply')));
     });
   });
 }
 
 String _shortDescriptionOf(String yaml) {
-  final match = RegExp(r'short_description:\s*"((?:\\.|[^"\\])*)"').firstMatch(yaml);
-  expect(match, isNotNull, reason: 'openai.yaml 缺少 short_description');
+  final match = RegExp(
+    r'short_description:\s*"((?:\\.|[^"\\])*)"',
+  ).firstMatch(yaml);
+  expect(match, isNotNull, reason: 'openai.yaml is missing short_description');
   return match!.group(1)!.replaceAll(r'\"', '"').replaceAll(r'\\', r'\');
 }
