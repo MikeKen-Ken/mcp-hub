@@ -2,4 +2,5 @@
 library;
 
 export 'download_confirm.dart';
+export 'merge_confirm.dart';
 export 'remote_overwrite_confirm.dart';

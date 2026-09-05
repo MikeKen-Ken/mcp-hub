@@ -763,7 +763,7 @@ class SkillSyncService extends ChangeNotifier {
     lastResource = resource;
     lastError = null;
     progress = SyncProgress(
-      label: '$activity ${resource?.label ?? 'all resources'}',
+      label: '$activity ${resource?.label ?? 'Folder resources'}',
     );
     notifyListeners();
     try {

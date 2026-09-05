@@ -42,13 +42,31 @@ Future<bool> confirmCatalogReplace(
 }) {
   return confirmRemoteDownload(
     context,
-    title: 'Replace the local MCP catalog?',
+    title: 'Replace the local Catalog?',
     body:
-        'This will download the remote catalog.zip and replace the local MCP list.\n\n'
+        'This will download the remote Catalog and replace the Hub list now.\n\n'
         'Extra local entries will be removed; paths, secrets, and enabled states remain local.\n\n'
-        'Use “Merge” if you want to keep entries from both sides.',
+        'Use Merge if you want to keep entries from both sides. Client MCP config does not change.',
     packages: [
-      RemotePackageDateQuery(label: 'MCP catalog', load: loadRemoteUploadedAt),
+      RemotePackageDateQuery(label: 'Catalog', load: loadRemoteUploadedAt),
+    ],
+  );
+}
+
+Future<bool> confirmHubConfigurationDownload(
+  BuildContext context, {
+  required Future<DateTime?> Function() loadCatalogUploadedAt,
+  required List<RemotePackageDateQuery> folderPackages,
+}) {
+  return confirmRemoteDownload(
+    context,
+    title: 'Download Hub configuration?',
+    body:
+        'Catalog download replaces the Hub list now. Folder resource download replaces the Hub cache.\n\n'
+        'Cursor folders and Client MCP config do not change.',
+    packages: [
+      RemotePackageDateQuery(label: 'Catalog', load: loadCatalogUploadedAt),
+      ...folderPackages,
     ],
   );
 }

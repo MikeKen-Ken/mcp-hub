@@ -1,9 +1,9 @@
 import 'skill_target.dart';
 
-/// 可通过 WebDAV 在设备间下载/上传的 Agent 配置资源。
+/// Folder resources that WebDAV can move between machines.
 ///
-/// 远端权威源**仅 Cursor**，以固定名 `{skills|commands|rules|hooks}.zip` 覆盖传输。
-/// Codex 由本机从 Cursor 转换生成，不作为 WebDAV 上下行目标。
+/// Remote source of truth is Cursor only, as `{skills|commands|rules|hooks}` packs.
+/// Codex is produced on this machine from Cursor; it is not a WebDAV target.
 enum AgentResourceKind {
   skill,
   command,

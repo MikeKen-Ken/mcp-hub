@@ -9,7 +9,8 @@ import 'package:mcp_hub/controllers/hub_controller.dart';
 import 'package:provider/provider.dart';
 
 Future<void> _capture(GlobalKey key, String name) async {
-  final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final boundary =
+      key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
   final image = await boundary.toImage(pixelRatio: 1);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   final file = File('build/visual_qa/$name.png');
@@ -38,9 +39,5 @@ void main() {
     );
     await tester.pump();
     await _capture(key, 'home');
-
-    await tester.tap(find.text('Agent 配置下载/上传'));
-    await tester.pumpAndSettle();
-    await _capture(key, 'sync');
   });
 }

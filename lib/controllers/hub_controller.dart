@@ -8,6 +8,7 @@ import '../common/agent_platforms.dart';
 import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../features/config_backup/config_backup.dart';
+import '../features/hub_configuration/hub_configuration.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../features/sync_status/sync_status.dart';
 import '../models/mcp_server_entry.dart';
@@ -64,6 +65,14 @@ class HubController extends ChangeNotifier {
       attemptStore: syncAttempts,
     );
     skillSync.addListener(_onSkillSyncChanged);
+    hubConfiguration = HubConfigurationSession(
+      webDav: webDavSync,
+      skillSync: skillSync,
+      ensureReady: _ensureWebDavReadyForManualSync,
+      currentMessage: () => _lastMessage,
+      setMessage: (message) => _lastMessage = message,
+    );
+    hubConfiguration.addListener(_onHubConfigurationChanged);
     configBackup = ConfigBackupService();
     autoConfigBackup = AutoConfigBackupService(
       backupService: configBackup,
@@ -83,6 +92,7 @@ class HubController extends ChangeNotifier {
   late final LastSyncAttemptStore syncAttempts;
   late final WebDavSyncService webDavSync;
   late final SkillSyncService skillSync;
+  late final HubConfigurationSession hubConfiguration;
   late final ConfigBackupService configBackup;
   late final AutoConfigBackupService autoConfigBackup;
   CursorItemCounts cursorItemCounts = CursorItemCounts.empty;
@@ -156,6 +166,8 @@ class HubController extends ChangeNotifier {
   }
 
   void _onWebDavChanged() => notifyListeners();
+
+  void _onHubConfigurationChanged() => notifyListeners();
 
   void _onSkillSyncChanged() {
     final status = skillSync.status;
@@ -718,6 +730,11 @@ class HubController extends ChangeNotifier {
 
   bool get isWebDavSyncing => webDavSync.status == CatalogSyncStatus.syncing;
 
+  bool get isSyncBusy =>
+      hubConfiguration.busy ||
+      isWebDavSyncing ||
+      skillSync.status == SkillSyncStatus.syncing;
+
   Future<DateTime?> peekRemoteCatalogUploadedAt() {
     return webDavSync.peekCatalogUploadedAt();
   }
@@ -773,7 +790,7 @@ class HubController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    if (isWebDavSyncing) {
+    if (isSyncBusy) {
       _lastMessage = 'Download/upload in progress; please wait';
       notifyListeners();
       return false;
@@ -1002,10 +1019,12 @@ class HubController extends ChangeNotifier {
     hubMcpHost.removeListener(_onHostChanged);
     webDavSync.removeListener(_onWebDavChanged);
     skillSync.removeListener(_onSkillSyncChanged);
+    hubConfiguration.removeListener(_onHubConfigurationChanged);
     autoConfigBackup.removeListener(_onAutoConfigBackupChanged);
     hubMcpHost.dispose();
     webDavSync.dispose();
     skillSync.dispose();
+    hubConfiguration.dispose();
     autoConfigBackup.dispose();
     _processManager.stopAll();
     super.dispose();
