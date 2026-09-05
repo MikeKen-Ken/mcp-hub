@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../services/mcp_paths.dart';
-import '../skill_sync/skill_folder_copy.dart';
 import 'cursor_item_counts.dart';
 
 /// Counts items in Cursor's official directories (not Hub cache).
+///
+/// Uses synchronous directory reads so counts match files that were just
+/// written by Apply / Write to Clients.
 class CursorItemCounter {
   const CursorItemCounter({
     this.mcpJsonPath,
@@ -16,7 +18,6 @@ class CursorItemCounter {
     this.rulesDir,
     this.hooksJsonPath,
     this.hooksDir,
-    this.folderCopy = const SkillFolderCopy(),
   });
 
   final String? mcpJsonPath;
@@ -25,40 +26,28 @@ class CursorItemCounter {
   final String? rulesDir;
   final String? hooksJsonPath;
   final String? hooksDir;
-  final SkillFolderCopy folderCopy;
 
-  Future<CursorItemCounts> load() async {
+  Future<CursorItemCounts> load() async => loadSync();
+
+  CursorItemCounts loadSync() {
     return CursorItemCounts(
-      mcp: await countMcpServers(mcpJsonPath ?? McpPaths.cursorMcpJsonPath),
-      skills: await _countIfPresent(
-        skillsDir ?? McpPaths.cursorSkillsPath,
-        folderCopy.countSkillPackages,
-      ),
-      commands: await countNonDotFiles(
-        commandsDir ?? McpPaths.cursorCommandsPath,
-      ),
-      rules: await countNonDotFiles(rulesDir ?? McpPaths.cursorRulesPath),
-      hooks: await countHookFiles(
+      mcp: countMcpServers(mcpJsonPath ?? McpPaths.cursorMcpJsonPath),
+      skills: countSkillPackages(skillsDir ?? McpPaths.cursorSkillsPath),
+      commands: countNonDotFiles(commandsDir ?? McpPaths.cursorCommandsPath),
+      rules: countNonDotFiles(rulesDir ?? McpPaths.cursorRulesPath),
+      hooks: countHookFiles(
         jsonPath: hooksJsonPath ?? McpPaths.cursorHooksJsonPath,
         scriptsDir: hooksDir ?? McpPaths.cursorHooksPath,
       ),
     );
   }
 
-  static Future<int> _countIfPresent(
-    String? path,
-    Future<int> Function(String path) count,
-  ) async {
-    if (path == null || path.isEmpty) return 0;
-    return count(path);
-  }
-
-  static Future<int> countMcpServers(String? jsonPath) async {
+  static int countMcpServers(String? jsonPath) {
     if (jsonPath == null || jsonPath.isEmpty) return 0;
     try {
       final file = File(jsonPath);
-      if (!await file.exists()) return 0;
-      final decoded = jsonDecode(await file.readAsString());
+      if (!file.existsSync()) return 0;
+      final decoded = jsonDecode(file.readAsStringSync());
       if (decoded is! Map) return 0;
       final servers = decoded['mcpServers'];
       if (servers is! Map) return 0;
@@ -73,12 +62,26 @@ class CursorItemCounter {
     }
   }
 
-  static Future<int> countNonDotFiles(String? dirPath) async {
+  static int countSkillPackages(String? dirPath) {
     if (dirPath == null || dirPath.isEmpty) return 0;
     final dir = Directory(dirPath);
-    if (!await dir.exists()) return 0;
+    if (!dir.existsSync()) return 0;
     var count = 0;
-    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+    for (final entity in dir.listSync(followLinks: false)) {
+      if (entity is! Directory) continue;
+      final name = p.basename(entity.path);
+      if (name.startsWith('.')) continue;
+      if (File(p.join(entity.path, 'SKILL.md')).existsSync()) count += 1;
+    }
+    return count;
+  }
+
+  static int countNonDotFiles(String? dirPath) {
+    if (dirPath == null || dirPath.isEmpty) return 0;
+    final dir = Directory(dirPath);
+    if (!dir.existsSync()) return 0;
+    var count = 0;
+    for (final entity in dir.listSync(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
       final relative = p.relative(entity.path, from: dir.path);
       if (p.split(relative).any((part) => part.startsWith('.'))) continue;
@@ -87,18 +90,18 @@ class CursorItemCounter {
     return count;
   }
 
-  static Future<int> countHookFiles({
+  static int countHookFiles({
     required String? jsonPath,
     required String? scriptsDir,
-  }) async {
+  }) {
     var count = 0;
     if (jsonPath != null && jsonPath.isNotEmpty) {
       final file = File(jsonPath);
-      if (await file.exists() && !p.basename(file.path).startsWith('.')) {
+      if (file.existsSync() && !p.basename(file.path).startsWith('.')) {
         count += 1;
       }
     }
-    count += await countNonDotFiles(scriptsDir);
+    count += countNonDotFiles(scriptsDir);
     return count;
   }
 }

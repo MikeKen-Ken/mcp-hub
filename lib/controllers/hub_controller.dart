@@ -87,6 +87,7 @@ class HubController extends ChangeNotifier {
   late final AutoConfigBackupService autoConfigBackup;
   CursorItemCounts cursorItemCounts = CursorItemCounts.empty;
   final _cursorItemCounter = const CursorItemCounter();
+  SkillSyncStatus _skillSyncStatus = SkillSyncStatus.idle;
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
@@ -156,7 +157,15 @@ class HubController extends ChangeNotifier {
 
   void _onWebDavChanged() => notifyListeners();
 
-  void _onSkillSyncChanged() => notifyListeners();
+  void _onSkillSyncChanged() {
+    final status = skillSync.status;
+    final finished =
+        _skillSyncStatus == SkillSyncStatus.syncing &&
+        status != SkillSyncStatus.syncing;
+    _skillSyncStatus = status;
+    notifyListeners();
+    if (finished) unawaited(refreshCursorItemCounts());
+  }
 
   void _onAutoConfigBackupChanged() => notifyListeners();
 
@@ -176,7 +185,7 @@ class HubController extends ChangeNotifier {
     await _repairInvalidWorkingDirectories();
     await _migrateAutoStartForEnabledServers();
     await _refreshGitManagedFlags();
-    await _refreshCursorItemCounts();
+    await refreshCursorItemCounts(notify: false);
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
@@ -322,12 +331,15 @@ class HubController extends ChangeNotifier {
             servers: _servers,
           );
     }
-    await _refreshCursorItemCounts();
-    notifyListeners();
+    await refreshCursorItemCounts();
   }
 
-  Future<void> _refreshCursorItemCounts() async {
-    cursorItemCounts = await _cursorItemCounter.load();
+  /// Re-read Cursor's installed MCP / Skill / Command / Rule / Hook counts.
+  Future<void> refreshCursorItemCounts({bool notify = true}) async {
+    try {
+      cursorItemCounts = _cursorItemCounter.loadSync();
+    } catch (_) {}
+    if (notify) notifyListeners();
   }
 
   /// 已启用且有启动命令的 MCP 在 Hub 启动时自动拉起。
@@ -893,16 +905,14 @@ class HubController extends ChangeNotifier {
   ) async {
     final result = await skillSync.applyResourceFromCache(resource);
     _lastMessage = result.message;
-    await _refreshCursorItemCounts();
-    notifyListeners();
+    await refreshCursorItemCounts();
     return result;
   }
 
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
     final result = await skillSync.applyAllResourcesFromCache();
     _lastMessage = result.message;
-    await _refreshCursorItemCounts();
-    notifyListeners();
+    await refreshCursorItemCounts();
     return result;
   }
 

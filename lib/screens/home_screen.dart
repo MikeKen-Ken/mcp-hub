@@ -86,7 +86,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const _SectionHeader('Quick Access'),
                   const SizedBox(height: 8),
                   Consumer<HubController>(
-                    builder: (_, hub, _) => _AgentConfigHomeSection(hub: hub),
+                    builder: (_, hub, _) => CursorCountRefreshScope(
+                      refresh: hub.refreshCursorItemCounts,
+                      child: _AgentConfigHomeSection(hub: hub),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -254,67 +257,70 @@ class AgentConfigSyncScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Agent Configuration Download/Upload')),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final contentWidth = constraints.maxWidth.clamp(0, 1120).toDouble();
-          final twoColumns = contentWidth >= 820;
-          final cardWidth = twoColumns
-              ? (contentWidth - 44) / 2
-              : contentWidth - 32;
+      body: CursorCountRefreshScope(
+        refresh: hub.refreshCursorItemCounts,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final contentWidth = constraints.maxWidth.clamp(0, 1120).toDouble();
+            final twoColumns = contentWidth >= 820;
+            final cardWidth = twoColumns
+                ? (contentWidth - 44) / 2
+                : contentWidth - 32;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1120),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _AgentSyncOverview(
-                        hub: hub,
-                        supported: supported,
-                        webDavReady: webDavReady,
-                      ),
-                      const SizedBox(height: 24),
-                      const _SectionHeader('All Resources'),
-                      const SizedBox(height: 8),
-                      _BulkResourceSyncCard(
-                        hub: hub,
-                        supported: supported,
-                        webDavReady: webDavReady,
-                        busy: busy,
-                        run: (action) => _run(context, action),
-                      ),
-                      const SizedBox(height: 24),
-                      const _SectionHeader('Manage by Resource'),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          SizedBox(
-                            width: cardWidth,
-                            child: _McpResourceSyncCard(hub: hub),
-                          ),
-                          for (final resource in AgentResourceKind.values)
+            return SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1120),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _AgentSyncOverview(
+                          hub: hub,
+                          supported: supported,
+                          webDavReady: webDavReady,
+                        ),
+                        const SizedBox(height: 24),
+                        const _SectionHeader('All Resources'),
+                        const SizedBox(height: 8),
+                        _BulkResourceSyncCard(
+                          hub: hub,
+                          supported: supported,
+                          webDavReady: webDavReady,
+                          busy: busy,
+                          run: (action) => _run(context, action),
+                        ),
+                        const SizedBox(height: 24),
+                        const _SectionHeader('Manage by Resource'),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
                             SizedBox(
                               width: cardWidth,
-                              child: _ResourceSyncCard(
-                                hub: hub,
-                                resource: resource,
-                              ),
+                              child: _McpResourceSyncCard(hub: hub),
                             ),
-                        ],
-                      ),
-                    ],
+                            for (final resource in AgentResourceKind.values)
+                              SizedBox(
+                                width: cardWidth,
+                                child: _ResourceSyncCard(
+                                  hub: hub,
+                                  resource: resource,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -645,6 +651,8 @@ class _McpResourceSyncCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<HubController>();
+    final counts = hub.cursorItemCounts;
     final supported = hub.isDesktopSupported;
     final webDavReady = hub.isWebDavReady;
     final busy = hub.isWebDavSyncing;
@@ -674,9 +682,8 @@ class _McpResourceSyncCard extends StatelessWidget {
                             ),
                           ),
                           CursorCountChip(
-                            count: hub.cursorItemCounts.mcp,
-                            tooltip:
-                                '${hub.cursorItemCounts.mcp} MCPs in Cursor',
+                            count: counts.mcp,
+                            tooltip: '${counts.mcp} MCPs in Cursor',
                           ),
                         ],
                       ),
@@ -837,6 +844,8 @@ class _ResourceSyncCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<HubController>();
+    final counts = hub.cursorItemCounts;
     final supported = hub.isDesktopSupported;
     final webDavReady =
         hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
@@ -878,9 +887,9 @@ class _ResourceSyncCard extends StatelessWidget {
                             ),
                           ),
                           CursorCountChip(
-                            count: hub.cursorItemCounts.forResource(resource),
+                            count: counts.forResource(resource),
                             tooltip:
-                                '${hub.cursorItemCounts.forResource(resource)} ${resource.wireName} in Cursor',
+                                '${counts.forResource(resource)} ${resource.wireName} in Cursor',
                           ),
                         ],
                       ),

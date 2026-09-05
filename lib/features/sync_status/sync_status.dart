@@ -8,4 +8,5 @@ export 'last_sync_attempt_label.dart';
 export 'last_sync_attempt_policy.dart';
 export 'last_sync_attempt_store.dart';
 export 'widgets/cursor_count_chip.dart';
+export 'widgets/cursor_count_refresh_scope.dart';
 export 'widgets/sync_attempt_status.dart';
