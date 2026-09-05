@@ -9,6 +9,7 @@ import '../../common/writable_temp.dart';
 import '../../services/mcp_paths.dart';
 import '../../webdav/package_version_store.dart';
 import '../../webdav/webdav_config.dart';
+import '../sync_status/sync_status.dart';
 import 'agent_resource_kind.dart';
 import 'convert/cursor_to_codex_agents_converter.dart';
 import 'convert/cursor_to_codex_hooks_converter.dart';
@@ -40,6 +41,7 @@ class SkillSyncService extends ChangeNotifier {
     CursorToCodexHooksConverter? hooksConverter,
     CursorHooksBundle? hooksBundle,
     PackageVersionStore? versionStore,
+    LastSyncAttemptStore? this._attemptStore,
   }) : _loadConfig = loadConfig,
        _folderSync = folderSync ?? SkillWebDavFolderSync(),
        _folderCopy = folderCopy ?? const SkillFolderCopy(),
@@ -59,6 +61,7 @@ class SkillSyncService extends ChangeNotifier {
   final CursorHooksBundle _hooksBundle;
   final ResourceConversion _conversion;
   final PackageVersionStore _versionStore;
+  final LastSyncAttemptStore? _attemptStore;
 
   SkillSyncStatus status = SkillSyncStatus.idle;
   String? lastError;
@@ -474,11 +477,13 @@ class SkillSyncService extends ChangeNotifier {
     final versionHint = pulled.uploadedAt == null
         ? ''
         : ' (remote version ${formatPackageTime(pulled.uploadedAt)})';
+    final noOp = pulled.fileCount == 0 && pulled.uploadedAt == null;
     return SkillSyncResult(
       ok: true,
       target: target,
       pulledFiles: pulled.fileCount,
       packageCount: packages,
+      recordAttempt: !noOp,
       message:
           'Downloaded the Cursor ${resource.label} archive to the cache: '
           '${pulled.fileCount} files'
@@ -680,44 +685,64 @@ class SkillSyncService extends ChangeNotifier {
     )
     each,
   }) async {
-    return _run(resource, null, () async {
-      final kinds = resource == null ? AgentResourceKind.values : [resource];
-      var pulledFiles = 0;
-      var pushedFiles = 0;
-      var deployedFiles = 0;
-      var packageCount = 0;
-      final parts = <String>[];
-      var allOk = true;
-      var any = false;
-      for (final kind in kinds) {
-        for (final target in kind.webDavTargets) {
-          any = true;
-          try {
-            final one = await each(kind, target);
-            pulledFiles += one.pulledFiles;
-            pushedFiles += one.pushedFiles;
-            deployedFiles += one.deployedFiles;
-            packageCount += one.packageCount;
-            parts.add(one.message);
-            if (!one.ok) allOk = false;
-            _rememberResourceOutcome(kind, one.ok, one.message);
-          } catch (error) {
-            allOk = false;
-            parts.add('${kind.label}/${target.label}: failed ($error)');
-            debugPrint('$activity ${kind.label} ${target.label} 失败: $error');
-            _rememberResourceOutcome(kind, false, '$error');
+    return _run(
+      resource,
+      null,
+      () async {
+        final kinds = resource == null ? AgentResourceKind.values : [resource];
+        var pulledFiles = 0;
+        var pushedFiles = 0;
+        var deployedFiles = 0;
+        var packageCount = 0;
+        final parts = <String>[];
+        var allOk = true;
+        var any = false;
+        for (final kind in kinds) {
+          for (final target in kind.webDavTargets) {
+            any = true;
+            try {
+              final one = await each(kind, target);
+              pulledFiles += one.pulledFiles;
+              pushedFiles += one.pushedFiles;
+              deployedFiles += one.deployedFiles;
+              packageCount += one.packageCount;
+              parts.add(one.message);
+              if (!one.ok) allOk = false;
+              _rememberResourceOutcome(kind, one.ok, one.message);
+              await recordResourceWebDavAttempt(
+                store: _attemptStore,
+                activity: activity,
+                packageKey: kind.wireName,
+                ok: one.ok,
+                recordAttempt: one.recordAttempt,
+              );
+            } catch (error) {
+              allOk = false;
+              parts.add('${kind.label}/${target.label}: failed ($error)');
+              debugPrint('$activity ${kind.label} ${target.label} 失败: $error');
+              _rememberResourceOutcome(kind, false, '$error');
+              await recordResourceWebDavAttempt(
+                store: _attemptStore,
+                activity: activity,
+                packageKey: kind.wireName,
+                ok: false,
+                recordAttempt: true,
+              );
+            }
           }
         }
-      }
-      return SkillSyncResult(
-        ok: allOk,
-        pulledFiles: pulledFiles,
-        pushedFiles: pushedFiles,
-        deployedFiles: deployedFiles,
-        packageCount: packageCount,
-        message: !any || parts.isEmpty ? emptyMessage : parts.join('；'),
-      );
-    }, activity: activity);
+        return SkillSyncResult(
+          ok: allOk,
+          pulledFiles: pulledFiles,
+          pushedFiles: pushedFiles,
+          deployedFiles: deployedFiles,
+          packageCount: packageCount,
+          message: !any || parts.isEmpty ? emptyMessage : parts.join('；'),
+        );
+      },
+      activity: activity,
+      persistAttempt: false,
+    );
   }
 
   Future<SkillSyncResult> _run(
@@ -725,6 +750,7 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget? target,
     Future<SkillSyncResult> Function() action, {
     String activity = 'Sync',
+    bool persistAttempt = true,
   }) async {
     if (status == SkillSyncStatus.syncing) {
       return const SkillSyncResult(
@@ -747,6 +773,15 @@ class SkillSyncService extends ChangeNotifier {
       lastError = result.ok ? null : result.message;
       status = result.ok ? SkillSyncStatus.success : SkillSyncStatus.error;
       _rememberOutcome(resource, result.ok, result.message);
+      if (persistAttempt && resource != null) {
+        await recordResourceWebDavAttempt(
+          store: _attemptStore,
+          activity: activity,
+          packageKey: resource.wireName,
+          ok: result.ok,
+          recordAttempt: result.recordAttempt,
+        );
+      }
       progress = null;
       notifyListeners();
       return result;
@@ -755,6 +790,15 @@ class SkillSyncService extends ChangeNotifier {
       lastMessage = lastError;
       status = SkillSyncStatus.error;
       _rememberOutcome(resource, false, lastError!);
+      if (persistAttempt && resource != null) {
+        await recordResourceWebDavAttempt(
+          store: _attemptStore,
+          activity: activity,
+          packageKey: resource.wireName,
+          ok: false,
+          recordAttempt: true,
+        );
+      }
       progress = null;
       debugPrint('Skill 下载/上传失败: $error');
       notifyListeners();

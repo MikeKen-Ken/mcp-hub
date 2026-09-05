@@ -11,6 +11,7 @@ import '../controllers/hub_controller.dart';
 import '../features/app_update/app_update_screen.dart';
 import '../features/local_mcp/local_mcp_screen.dart';
 import '../features/skill_sync/skill_sync.dart';
+import '../features/sync_status/sync_status.dart';
 import '../services/directory_opener.dart';
 import '../services/mcp_client_configurator.dart';
 import '../services/mcp_paths.dart';
@@ -333,12 +334,13 @@ class _AgentSyncOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final status = switch (hub.skillSync.status) {
-      SkillSyncStatus.idle => 'Not synced yet',
-      SkillSyncStatus.syncing => 'Syncing…',
-      SkillSyncStatus.success => 'Last sync succeeded',
-      SkillSyncStatus.error => 'Last sync failed',
-    };
+    final latest = hub.syncAttempts.latest();
+    final syncing =
+        hub.isWebDavSyncing || hub.skillSync.status == SkillSyncStatus.syncing;
+    final status = lastSyncAttemptOverviewLabel(
+      latest: latest,
+      syncing: syncing,
+    );
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -383,12 +385,12 @@ class _AgentSyncOverview extends StatelessWidget {
                 const _FlowLabel(index: 3, label: 'Upload from Cursor'),
                 const SizedBox(width: 4),
                 _SyncStatusPill(
-                  icon: hub.skillSync.status == SkillSyncStatus.error
+                  icon: !syncing && latest?.ok == false
                       ? Icons.error_outline
                       : Icons.history_outlined,
                   label: status,
-                  active: hub.skillSync.status == SkillSyncStatus.success,
-                  error: hub.skillSync.status == SkillSyncStatus.error,
+                  active: latest?.ok == true,
+                  error: !syncing && latest?.ok == false,
                 ),
               ],
             ),
@@ -663,18 +665,37 @@ class _McpResourceSyncCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'MCP',
-                        style: Theme.of(context).textTheme.titleMedium,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'MCP',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          CursorCountChip(
+                            count: hub.cursorItemCounts.mcp,
+                            tooltip:
+                                '${hub.cursorItemCounts.mcp} MCPs in Cursor',
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        supported
-                            ? (webDavReady
-                                  ? '${currentPackageVersionLabel(hub.webDavSync.catalogUploadedAt)} · ${hub.servers.length} MCPs total'
-                                  : 'WebDAV is not ready; client configuration can still be updated')
-                            : 'Writing MCP configuration is not supported on this platform',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      SyncAttemptStatus(
+                        attempt: hub.syncAttempts.get(
+                          LastSyncAttemptKeys.catalog,
+                        ),
+                        versionLabel: supported && webDavReady
+                            ? currentPackageVersionLabel(
+                                hub.webDavSync.catalogUploadedAt,
+                              )
+                            : null,
+                        syncing: busy,
+                        unavailableLabel: !supported
+                            ? 'Writing MCP configuration is not supported on this platform'
+                            : (webDavReady
+                                  ? null
+                                  : 'WebDAV is not ready; client configuration can still be updated'),
                       ),
                     ],
                   ),
@@ -820,21 +841,10 @@ class _ResourceSyncCard extends StatelessWidget {
     final webDavReady =
         hub.webDavConfig.enabled && hub.webDavConfig.isConfigured;
     final busy = hub.skillSync.status == SkillSyncStatus.syncing;
-    final ownError = hub.skillSync.failureFor(resource);
-    final thisBusy = busy && hub.skillSync.lastResource == resource;
-    final statusText = thisBusy
-        ? 'In progress'
-        : ownError != null
-        ? 'Last failed'
-        : switch (hub.skillSync.status) {
-            SkillSyncStatus.idle => 'Idle',
-            SkillSyncStatus.syncing => 'Idle',
-            SkillSyncStatus.success => 'Success',
-            SkillSyncStatus.error => 'Idle',
-          };
-    final when = currentPackageVersionLabel(
-      hub.skillSync.uploadedAtFor(resource),
-    );
+    final thisBusy =
+        busy &&
+        (hub.skillSync.lastResource == resource ||
+            hub.skillSync.lastResource == null);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -859,18 +869,35 @@ class _ResourceSyncCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        resource.label,
-                        style: Theme.of(context).textTheme.titleMedium,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              resource.label,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          CursorCountChip(
+                            count: hub.cursorItemCounts.forResource(resource),
+                            tooltip:
+                                '${hub.cursorItemCounts.forResource(resource)} ${resource.wireName} in Cursor',
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        supported
-                            ? (webDavReady
-                                  ? '$statusText · $when'
-                                  : 'WebDAV is not ready; local conversion is still available')
-                            : 'Directory download/upload is not supported on this platform',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      SyncAttemptStatus(
+                        attempt: hub.syncAttempts.get(resource.wireName),
+                        versionLabel: supported && webDavReady
+                            ? currentPackageVersionLabel(
+                                hub.skillSync.uploadedAtFor(resource),
+                              )
+                            : null,
+                        syncing: thisBusy,
+                        unavailableLabel: !supported
+                            ? 'Directory download/upload is not supported on this platform'
+                            : (webDavReady
+                                  ? null
+                                  : 'WebDAV is not ready; local conversion is still available'),
                       ),
                     ],
                   ),

@@ -13,8 +13,10 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'list_servers',
     description: '列出 Hub 管理的全部 MCP（含内置 hubMCP）',
     inputSchema: JsonSchema.object(properties: const {}),
-    annotations:
-        const ToolAnnotations(readOnlyHint: true, openWorldHint: false),
+    annotations: const ToolAnnotations(
+      readOnlyHint: true,
+      openWorldHint: false,
+    ),
     callback: (args, extra) async {
       return mcpJsonResult({
         'hubEndpoint': hub.hubEndpointUrl,
@@ -63,8 +65,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'enabled': JsonSchema.boolean(description: '默认 true'),
         'cloneRepo': JsonSchema.boolean(description: '是否 git clone，默认 true'),
         'autoStart': JsonSchema.boolean(
-          description:
-              '仅 HTTP：Hub 启动时是否拉起进程；省略时对可拉起的 HTTP 默认 true',
+          description: '仅 HTTP：Hub 启动时是否拉起进程；省略时对可拉起的 HTTP 默认 true',
         ),
       },
     ),
@@ -107,12 +108,10 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'set_enabled',
-    description: '启用或禁用某个 MCP：同步 Hub 进程，并立即写入 Cursor（禁用则从 mcp.json 移除）、Codex / OpenCode（enabled）',
+    description:
+        '启用或禁用某个 MCP：同步 Hub 进程，并立即写入 Cursor（禁用则从 mcp.json 移除）、Codex / OpenCode（enabled）',
     inputSchema: JsonSchema.object(
-      properties: {
-        'id': JsonSchema.string(),
-        'enabled': JsonSchema.boolean(),
-      },
+      properties: {'id': JsonSchema.string(), 'enabled': JsonSchema.boolean()},
       required: ['id', 'enabled'],
     ),
     annotations: const ToolAnnotations(
@@ -124,7 +123,11 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       final id = mcpTrimmedString(args['id']);
       if (id == null) return mcpErrorResult('id 不能为空');
       await hub.setEnabled(id, mcpBool(args['enabled']));
-      return mcpJsonResult({'ok': true, 'id': id, 'enabled': mcpBool(args['enabled'])});
+      return mcpJsonResult({
+        'ok': true,
+        'id': id,
+        'enabled': mcpBool(args['enabled']),
+      });
     },
   );
 
@@ -132,9 +135,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'update_server',
     description: '对指定 MCP 本地仓库执行 git pull，并按项目类型自动 npm 构建 / uv sync',
     inputSchema: JsonSchema.object(
-      properties: {
-        'id': JsonSchema.string(),
-      },
+      properties: {'id': JsonSchema.string()},
       required: ['id'],
     ),
     annotations: const ToolAnnotations(
@@ -173,9 +174,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'remove_server',
     description: '从 Hub 移除 MCP 条目并删除本地 clone（不能移除内置 hubMCP）',
     inputSchema: JsonSchema.object(
-      properties: {
-        'id': JsonSchema.string(),
-      },
+      properties: {'id': JsonSchema.string()},
       required: ['id'],
     ),
     annotations: const ToolAnnotations(
@@ -206,8 +205,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
-          description:
-              'all | cursor | codex | openCode | opencode，默认 all',
+          description: 'all | cursor | codex | openCode | opencode，默认 all',
         ),
       },
     ),
@@ -217,8 +215,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       openWorldHint: false,
     ),
     callback: (args, extra) async {
-      final target =
-          mcpTrimmedString(args['target'])?.toLowerCase() ?? 'all';
+      final target = mcpTrimmedString(args['target'])?.toLowerCase() ?? 'all';
       try {
         if (target == 'all') {
           final r = await hub.configureAllClients();
@@ -233,7 +230,11 @@ void registerHubMcpTools(McpServer server, HubController hub) {
           return mcpErrorResult('${definition.label} 暂不支持 MCP 配置写入');
         }
         final r = await hub.configureClient(platform);
-        return mcpJsonResult({'ok': r.ok, 'message': r.message, 'path': r.path});
+        return mcpJsonResult({
+          'ok': r.ok,
+          'message': r.message,
+          'path': r.path,
+        });
       } catch (error) {
         return mcpErrorResult('$error');
       }
@@ -242,8 +243,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'import_from_clients',
-    description:
-        '从 Cursor / Codex / Open Code 配置文件导入 Hub 未登记的 MCP（不覆盖已有条目）',
+    description: '从 Cursor / Codex / Open Code 配置文件导入 Hub 未登记的 MCP（不覆盖已有条目）',
     inputSchema: JsonSchema.object(properties: const {}),
     annotations: const ToolAnnotations(
       readOnlyHint: false,
@@ -269,8 +269,10 @@ void registerHubMcpTools(McpServer server, HubController hub) {
     'get_hub_status',
     description: '查看内置 hubMCP 服务状态与端点',
     inputSchema: JsonSchema.object(properties: const {}),
-    annotations:
-        const ToolAnnotations(readOnlyHint: true, openWorldHint: false),
+    annotations: const ToolAnnotations(
+      readOnlyHint: true,
+      openWorldHint: false,
+    ),
     callback: (args, extra) async {
       final host = hub.hubMcpHost;
       return mcpJsonResult({
@@ -280,13 +282,14 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'endpoint': hub.hubEndpointUrl,
         'port': host.boundPort,
         'lastError': host.lastError,
+        'lastAttempts': hub.syncAttempts.toStatusJson(),
         'webdav': {
           'enabled': hub.webDavConfig.enabled,
           'status': hub.webDavSync.status.name,
           'lastError': hub.webDavSync.lastError,
           'lastSyncedAt': hub.webDavSync.lastSyncedAt?.toIso8601String(),
-          'catalogUploadedAt':
-              hub.webDavSync.catalogUploadedAt?.toIso8601String(),
+          'catalogUploadedAt': hub.webDavSync.catalogUploadedAt
+              ?.toIso8601String(),
         },
       });
     },
@@ -327,9 +330,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'target=codex 且 direction=pull/apply/merge 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
     inputSchema: JsonSchema.object(
       properties: {
-        'target': JsonSchema.string(
-          description: 'all | cursor | codex，默认 all',
-        ),
+        'target': JsonSchema.string(description: 'all | cursor | codex，默认 all'),
         'direction': JsonSchema.string(
           description: 'pull（默认）| merge | apply | push',
         ),
@@ -350,24 +351,25 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       final isMerge = direction == 'merge';
 
       Map<String, Object?> pack(SkillSyncResult r) => {
-            'ok': r.ok,
-            'message': r.message,
-            'pulledFiles': r.pulledFiles,
-            'pushedFiles': r.pushedFiles,
-            'deployedFiles': r.deployedFiles,
-            'packageCount': r.packageCount,
-          };
+        'ok': r.ok,
+        'message': r.message,
+        'pulledFiles': r.pulledFiles,
+        'pushedFiles': r.pushedFiles,
+        'deployedFiles': r.deployedFiles,
+        'packageCount': r.packageCount,
+      };
 
       try {
         if (targetRaw == 'codex') {
           if (isPush) {
             return mcpJsonResult({
               'ok': false,
-              'message':
-                  '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
+              'message': '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
             });
           }
-          final r = await hub.convertResourceFromCursor(AgentResourceKind.skill);
+          final r = await hub.convertResourceFromCursor(
+            AgentResourceKind.skill,
+          );
           return mcpJsonResult(pack(r));
         }
         if (targetRaw == 'cursor') {
@@ -411,9 +413,7 @@ void registerHubMcpTools(McpServer server, HubController hub) {
         'target=codex 且 direction=pull/apply/merge 时仅执行本机 Cursor→Codex 转换（不访问 WebDAV）。',
     inputSchema: JsonSchema.object(
       properties: {
-        'target': JsonSchema.string(
-          description: 'all | cursor | codex，默认 all',
-        ),
+        'target': JsonSchema.string(description: 'all | cursor | codex，默认 all'),
         'direction': JsonSchema.string(
           description: 'pull（默认）| merge | apply | push',
         ),
@@ -434,21 +434,20 @@ void registerHubMcpTools(McpServer server, HubController hub) {
       final isMerge = direction == 'merge';
 
       Map<String, Object?> pack(SkillSyncResult r) => {
-            'ok': r.ok,
-            'message': r.message,
-            'pulledFiles': r.pulledFiles,
-            'pushedFiles': r.pushedFiles,
-            'deployedFiles': r.deployedFiles,
-            'packageCount': r.packageCount,
-          };
+        'ok': r.ok,
+        'message': r.message,
+        'pulledFiles': r.pulledFiles,
+        'pushedFiles': r.pushedFiles,
+        'deployedFiles': r.deployedFiles,
+        'packageCount': r.packageCount,
+      };
 
       try {
         if (targetRaw == 'codex') {
           if (isPush) {
             return mcpJsonResult({
               'ok': false,
-              'message':
-                  '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
+              'message': '远端仅保留 Cursor；Codex 不上传 WebDAV，请用本机 Cursor→Codex 转换',
             });
           }
           final r = await hub.convertResourceFromCursor(AgentResourceKind.hook);

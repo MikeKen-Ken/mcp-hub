@@ -12,6 +12,7 @@ class SkillSyncResult {
     this.pushedFiles = 0,
     this.deployedFiles = 0,
     this.packageCount = 0,
+    this.recordAttempt = true,
   });
   final bool ok;
   final String message;
@@ -20,4 +21,5 @@ class SkillSyncResult {
   final int pushedFiles;
   final int deployedFiles;
   final int packageCount;
+  final bool recordAttempt;
 }

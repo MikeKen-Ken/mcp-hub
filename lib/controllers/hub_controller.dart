@@ -9,6 +9,7 @@ import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../features/config_backup/config_backup.dart';
 import '../features/skill_sync/skill_sync.dart';
+import '../features/sync_status/sync_status.dart';
 import '../models/mcp_server_entry.dart';
 import '../models/mcp_transport.dart';
 import '../services/hub_mcp_constants.dart';
@@ -48,16 +49,19 @@ class HubController extends ChangeNotifier {
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
     _packageVersions = PackageVersionStore();
+    syncAttempts = LastSyncAttemptStore();
     webDavSync = WebDavSyncService(
       loadConfig: () async => webDavConfig,
       loadLocalDocument: () async => CatalogSyncMapper.toDocument(_servers),
       applyDocument: _applySyncDocument,
       versionStore: _packageVersions,
+      attemptStore: syncAttempts,
     );
     webDavSync.addListener(_onWebDavChanged);
     skillSync = SkillSyncService(
       loadConfig: () async => webDavConfig,
       versionStore: _packageVersions,
+      attemptStore: syncAttempts,
     );
     skillSync.addListener(_onSkillSyncChanged);
     configBackup = ConfigBackupService();
@@ -76,10 +80,13 @@ class HubController extends ChangeNotifier {
 
   late final HubMcpHost hubMcpHost;
   late final PackageVersionStore _packageVersions;
+  late final LastSyncAttemptStore syncAttempts;
   late final WebDavSyncService webDavSync;
   late final SkillSyncService skillSync;
   late final ConfigBackupService configBackup;
   late final AutoConfigBackupService autoConfigBackup;
+  CursorItemCounts cursorItemCounts = CursorItemCounts.empty;
+  final _cursorItemCounter = const CursorItemCounter();
 
   List<McpServerEntry> _servers = [];
   WebDavConfig webDavConfig = WebDavConfig.empty;
@@ -159,6 +166,7 @@ class HubController extends ChangeNotifier {
     webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
     await _packageVersions.load();
+    await syncAttempts.load();
     webDavSync.hydrateCatalogUploadedAt(
       _packageVersions.get(PackageVersionStore.catalogKey),
     );
@@ -168,6 +176,7 @@ class HubController extends ChangeNotifier {
     await _repairInvalidWorkingDirectories();
     await _migrateAutoStartForEnabledServers();
     await _refreshGitManagedFlags();
+    await _refreshCursorItemCounts();
     _loading = false;
     notifyListeners();
     await refreshClientStatus();
@@ -177,7 +186,7 @@ class HubController extends ChangeNotifier {
     if (webDavConfig.enabled &&
         webDavConfig.autoPull &&
         webDavConfig.isConfigured) {
-      unawaited(webDavSync.mergeNow());
+      unawaited(webDavSync.mergeNow(automatic: true));
     }
     await webDavSync.startPolling();
   }
@@ -313,7 +322,12 @@ class HubController extends ChangeNotifier {
             servers: _servers,
           );
     }
+    await _refreshCursorItemCounts();
     notifyListeners();
+  }
+
+  Future<void> _refreshCursorItemCounts() async {
+    cursorItemCounts = await _cursorItemCounter.load();
   }
 
   /// 已启用且有启动命令的 MCP 在 Hub 启动时自动拉起。
@@ -675,7 +689,7 @@ class HubController extends ChangeNotifier {
     webDavSync.stopPolling();
     if (config.enabled && config.isConfigured) {
       if (config.autoPull) {
-        unawaited(webDavSync.mergeNow());
+        unawaited(webDavSync.mergeNow(automatic: true));
       }
       await webDavSync.startPolling();
       if (config.autoSync) {
@@ -879,6 +893,7 @@ class HubController extends ChangeNotifier {
   ) async {
     final result = await skillSync.applyResourceFromCache(resource);
     _lastMessage = result.message;
+    await _refreshCursorItemCounts();
     notifyListeners();
     return result;
   }
@@ -886,6 +901,7 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
     final result = await skillSync.applyAllResourcesFromCache();
     _lastMessage = result.message;
+    await _refreshCursorItemCounts();
     notifyListeners();
     return result;
   }

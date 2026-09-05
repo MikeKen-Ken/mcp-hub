@@ -6,6 +6,7 @@ import 'package:webdav_client/webdav_client.dart';
 
 import '../common/package_time.dart';
 import '../common/sync_progress.dart';
+import '../features/sync_status/sync_status.dart';
 import 'catalog_merge.dart';
 import 'catalog_sync_base_store.dart';
 import 'catalog_sync_document.dart';
@@ -27,6 +28,7 @@ class WebDavSyncService extends ChangeNotifier {
     CatalogZipCodec? catalogZip,
     WebDavZipTransfer? zipTransfer,
     PackageVersionStore? versionStore,
+    LastSyncAttemptStore? this._attemptStore,
   }) : _baseStore = baseStore ?? CatalogSyncBaseStore(),
        _catalogZip = catalogZip ?? CatalogZipCodec(),
        _zipTransfer = zipTransfer ?? WebDavZipTransfer(),
@@ -39,6 +41,7 @@ class WebDavSyncService extends ChangeNotifier {
   final CatalogZipCodec _catalogZip;
   final WebDavZipTransfer _zipTransfer;
   final PackageVersionStore _versionStore;
+  final LastSyncAttemptStore? _attemptStore;
 
   CatalogSyncStatus status = CatalogSyncStatus.idle;
   String? lastError;
@@ -106,7 +109,7 @@ class WebDavSyncService extends ChangeNotifier {
       _debounceTimer?.cancel();
       _debounceTimer = Timer(
         Duration(seconds: config.pushDebounceSeconds),
-        () => unawaited(pushNow()),
+        () => unawaited(pushNow(automatic: true)),
       );
     }());
   }
@@ -117,7 +120,7 @@ class WebDavSyncService extends ChangeNotifier {
     if (!config.enabled || !config.autoPull || !config.isConfigured) return;
     _pollTimer = Timer.periodic(
       Duration(seconds: config.pollIntervalSeconds),
-      (_) => unawaited(mergeNow()),
+      (_) => unawaited(mergeNow(automatic: true)),
     );
   }
 
@@ -132,7 +135,7 @@ class WebDavSyncService extends ChangeNotifier {
     await pushNow();
   }
 
-  Future<void> pushNow() async {
+  Future<void> pushNow({bool automatic = false}) async {
     if (_inFlight) return;
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) return;
@@ -163,9 +166,8 @@ class WebDavSyncService extends ChangeNotifier {
       await _writeCatalogZip(client, config, doc);
       await _baseStore.save(doc);
       _tombstones = Map<String, int>.from(doc.tombstones);
-      lastSyncedAt = DateTime.now();
       await _rememberCatalogUploadedAt(
-        dateTimeFromEpochMs(doc.updatedAt) ?? lastSyncedAt,
+        dateTimeFromEpochMs(doc.updatedAt) ?? DateTime.now(),
       );
       lastError = null;
       progress = const SyncProgress(
@@ -173,9 +175,20 @@ class WebDavSyncService extends ChangeNotifier {
         current: 2,
         total: 2,
       );
+      await _rememberAttempt(
+        ok: true,
+        shouldRecord: shouldRecordWebDavAttempt(
+          ok: true,
+          isWebDavActivity: true,
+          automatic: automatic,
+          noOpSuccess: false,
+          dataChanged: true,
+        ),
+      );
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
+      await _rememberAttempt(ok: false, shouldRecord: true);
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV push failed: $error');
     } finally {
@@ -191,11 +204,14 @@ class WebDavSyncService extends ChangeNotifier {
   }
 
   /// 下载压缩包后与本机做三路合并。
-  Future<void> mergeNow() async {
-    await _pullRemote(merge: true);
+  Future<void> mergeNow({bool automatic = false}) async {
+    await _pullRemote(merge: true, automatic: automatic);
   }
 
-  Future<void> _pullRemote({required bool merge}) async {
+  Future<void> _pullRemote({
+    required bool merge,
+    bool automatic = false,
+  }) async {
     if (_inFlight) return;
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) return;
@@ -215,7 +231,6 @@ class WebDavSyncService extends ChangeNotifier {
     try {
       final remote = await _readRemoteCatalog(client, config);
       if (!merge && remote == null) {
-        lastSyncedAt = DateTime.now();
         lastError = null;
         progress = const SyncProgress(
           label: 'No remote catalog',
@@ -255,7 +270,6 @@ class WebDavSyncService extends ChangeNotifier {
         await _writeCatalogZip(client, config, next);
       }
       await _baseStore.save(next);
-      lastSyncedAt = DateTime.now();
       await _rememberCatalogUploadedAt(
         dateTimeFromEpochMs(remoteDoc.updatedAt) ??
             await _zipTransfer.readRemoteModifiedAt(
@@ -269,9 +283,22 @@ class WebDavSyncService extends ChangeNotifier {
         current: 3,
         total: 3,
       );
+      final dataChanged =
+          !_sameDoc(next, local) || (merge && !_sameDoc(next, remoteDoc));
+      await _rememberAttempt(
+        ok: true,
+        shouldRecord: shouldRecordWebDavAttempt(
+          ok: true,
+          isWebDavActivity: true,
+          automatic: automatic,
+          noOpSuccess: false,
+          dataChanged: dataChanged,
+        ),
+      );
       _setStatus(CatalogSyncStatus.success);
     } catch (error) {
       lastError = '$error';
+      await _rememberAttempt(ok: false, shouldRecord: true);
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV pull failed: $error');
     } finally {
@@ -279,6 +306,16 @@ class WebDavSyncService extends ChangeNotifier {
       _inFlight = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _rememberAttempt({
+    required bool ok,
+    required bool shouldRecord,
+  }) async {
+    if (!shouldRecord) return;
+    final now = DateTime.now();
+    if (ok) lastSyncedAt = now;
+    await _attemptStore?.record(LastSyncAttemptKeys.catalog, ok: ok, at: now);
   }
 
   Future<void> _rememberCatalogUploadedAt(DateTime? time) async {
