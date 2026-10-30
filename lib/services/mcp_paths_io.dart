@@ -108,6 +108,20 @@ abstract final class McpPaths {
   static String get workBuddyAiMcpConfigPath =>
       p.join(workBuddyAiConfigDirectory, 'mcp.json');
 
+  /// WorkBuddy 用户级 Skill 目录（`~/.workbuddy/skills`）。
+  static String get workBuddySkillsPath =>
+      p.join(workBuddyConfigDirectory, 'skills');
+
+  /// WorkBuddy 用户级 Rule 目录（`~/.workbuddy/rules`，递归加载 `.md` / `.mdc`）。
+  static String get workBuddyRulesPath =>
+      p.join(workBuddyConfigDirectory, 'rules');
+
+  static String get workBuddyAiSkillsPath =>
+      p.join(workBuddyAiConfigDirectory, 'skills');
+
+  static String get workBuddyAiRulesPath =>
+      p.join(workBuddyAiConfigDirectory, 'rules');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

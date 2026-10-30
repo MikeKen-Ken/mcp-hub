@@ -38,7 +38,8 @@ enum AgentResourceKind {
 
   /// 本机是否展示该客户端路径（含 Codex / OpenCode 转换产物）。
   bool supportsLocalPath(SkillTarget target) => switch ((this, target)) {
-    (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) => false,
+    (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) =>
+      canConvertToWorkBuddy,
     (_, SkillTarget.cursor) => true,
     (_, SkillTarget.codex) => this != AgentResourceKind.command,
     (_, SkillTarget.openCode) => this != AgentResourceKind.hook,
@@ -56,8 +57,11 @@ enum AgentResourceKind {
   bool canConvertTo(SkillTarget target) => switch (target) {
     SkillTarget.codex => canConvertToCodex,
     SkillTarget.openCode => this != AgentResourceKind.hook,
-    SkillTarget.cursor ||
-    SkillTarget.workBuddy ||
-    SkillTarget.workBuddyAi => false,
+    SkillTarget.workBuddy || SkillTarget.workBuddyAi => canConvertToWorkBuddy,
+    SkillTarget.cursor => false,
   };
+
+  /// WorkBuddy 仅确认了 Skill（`skills/`）与 Rule（`rules/`）目录。
+  bool get canConvertToWorkBuddy =>
+      this == AgentResourceKind.skill || this == AgentResourceKind.rule;
 }

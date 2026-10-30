@@ -16,7 +16,6 @@ class AgentPlatformDefinition {
     this.mcpConfig,
     this.skillConversionFromCursor = false,
     this.webDavAuthoritative = false,
-    this.hasFolderResources = true,
   });
 
   final AgentPlatformId id;
@@ -29,11 +28,6 @@ class AgentPlatformDefinition {
 
   /// 是否作为 WebDAV 上下行的权威源（目前仅 Cursor）。
   final bool webDavAuthoritative;
-
-  /// 是否在 Hub 中管理 Skill / Command / Rule / Hook 目录。
-  ///
-  /// WorkBuddy 的目录布局尚未确认（可能沿用 `~/.codebuddy`），因此仅支持 MCP。
-  final bool hasFolderResources;
 
   bool get supportsMcpConfigure => mcpConfig != null;
 
@@ -124,7 +118,7 @@ abstract final class AgentPlatforms {
       configFilePath: _workBuddyMcpConfigPath,
       configDirectoryPath: _workBuddyConfigDirectory,
     ),
-    hasFolderResources: false,
+    skillConversionFromCursor: true,
   );
 
   static const workBuddyAi = AgentPlatformDefinition(
@@ -136,7 +130,7 @@ abstract final class AgentPlatforms {
       configFilePath: _workBuddyAiMcpConfigPath,
       configDirectoryPath: _workBuddyAiConfigDirectory,
     ),
-    hasFolderResources: false,
+    skillConversionFromCursor: true,
   );
 
   static const all = <AgentPlatformDefinition>[
@@ -146,11 +140,6 @@ abstract final class AgentPlatforms {
     workBuddy,
     workBuddyAi,
   ];
-
-  /// 管理 Skill / Command / Rule / Hook 目录的客户端。
-  static List<AgentPlatformDefinition> get folderResourcePlatforms =>
-      all.where((p) => p.hasFolderResources).toList();
-
   /// 支持一键写入 MCP 配置的客户端。
   static List<AgentPlatformDefinition> get mcpConfigurable =>
       all.where((p) => p.supportsMcpConfigure).toList();
@@ -181,14 +170,29 @@ abstract final class AgentPlatforms {
     AgentPlatformId.cursor => McpPaths.cursorSkillsPath,
     AgentPlatformId.codex => McpPaths.codexSkillsPath,
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
-    AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi => null,
+    AgentPlatformId.workBuddy => McpPaths.workBuddySkillsPath,
+    AgentPlatformId.workBuddyAi => McpPaths.workBuddyAiSkillsPath,
   };
 
   static String? localResourcePath(
     AgentResourceKind resource,
     AgentPlatformId id,
   ) => switch ((resource, id)) {
-    (_, AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi) => null,
+    (AgentResourceKind.skill, AgentPlatformId.workBuddy) =>
+      McpPaths.workBuddySkillsPath,
+    (AgentResourceKind.skill, AgentPlatformId.workBuddyAi) =>
+      McpPaths.workBuddyAiSkillsPath,
+    (AgentResourceKind.rule, AgentPlatformId.workBuddy) =>
+      McpPaths.workBuddyRulesPath,
+    (AgentResourceKind.rule, AgentPlatformId.workBuddyAi) =>
+      McpPaths.workBuddyAiRulesPath,
+    // WorkBuddy 桌面版的 Command / Hook 位置尚未确认（CodeBuddy CLI 用
+    // ~/.codebuddy/commands 与 settings.json），暂不写入。
+    (
+      AgentResourceKind.command || AgentResourceKind.hook,
+      AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi,
+    ) =>
+      null,
     (AgentResourceKind.skill, AgentPlatformId.cursor) =>
       McpPaths.cursorSkillsPath,
     (AgentResourceKind.skill, AgentPlatformId.codex) =>

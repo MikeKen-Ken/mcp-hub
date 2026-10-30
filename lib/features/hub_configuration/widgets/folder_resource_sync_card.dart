@@ -219,9 +219,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                for (final target in SkillTarget.values.where(
-                  (t) => AgentPlatforms.of(t).hasFolderResources,
-                ))
+                for (final target in SkillTarget.values)
                   DirectoryPathRow(
                     label: target == SkillTarget.cursor
                         ? '${target.label} (official directory)'
@@ -252,9 +250,9 @@ class FolderResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter)',
+      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter; WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept)',
     AgentResourceKind.rule =>
-      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules',
+      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/',
     AgentResourceKind.command =>
       'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
     AgentResourceKind.hook =>
@@ -263,7 +261,8 @@ class FolderResourceSyncCard extends StatelessWidget {
 
   bool get _canConvert =>
       resource.canConvertTo(SkillTarget.codex) ||
-      resource.canConvertTo(SkillTarget.openCode);
+      resource.canConvertTo(SkillTarget.openCode) ||
+      resource.canConvertToWorkBuddy;
 
   String? _pathLabelFor(HubController hub, SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
