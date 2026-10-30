@@ -92,6 +92,22 @@ abstract final class McpPaths {
   static String get openCodeCommandsPath =>
       p.join(openCodeConfigDirectory, 'commands');
 
+  /// WorkBuddy 国内版配置目录（`~/.workbuddy`）。
+  static String get workBuddyConfigDirectory =>
+      p.join(_userProfile, '.workbuddy');
+
+  /// WorkBuddy 国内版用户级 MCP 配置（`~/.workbuddy/mcp.json`）。
+  static String get workBuddyMcpConfigPath =>
+      p.join(workBuddyConfigDirectory, 'mcp.json');
+
+  /// WorkBuddy AI 国际版配置目录（`~/.workbuddy-ai`，路径待本机核实）。
+  static String get workBuddyAiConfigDirectory =>
+      p.join(_userProfile, '.workbuddy-ai');
+
+  /// WorkBuddy AI 国际版用户级 MCP 配置（`~/.workbuddy-ai/mcp.json`）。
+  static String get workBuddyAiMcpConfigPath =>
+      p.join(workBuddyAiConfigDirectory, 'mcp.json');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

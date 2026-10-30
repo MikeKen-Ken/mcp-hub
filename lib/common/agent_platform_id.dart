@@ -5,4 +5,10 @@ enum AgentPlatformId {
   cursor,
   codex,
   openCode,
+
+  /// WorkBuddy 国内版（`~/.workbuddy`）。
+  workBuddy,
+
+  /// WorkBuddy AI 国际版（`~/.workbuddy-ai`）。
+  workBuddyAi,
 }

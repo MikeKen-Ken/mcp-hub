@@ -81,11 +81,13 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
     SkillTarget.codex => McpPaths.codexSkillsCachePath,
     SkillTarget.openCode => McpPaths.openCodeSkillsPath,
+    SkillTarget.workBuddy || SkillTarget.workBuddyAi => null,
   };
   String? deployPathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsPath,
     SkillTarget.codex => McpPaths.codexSkillsPath,
     SkillTarget.openCode => McpPaths.openCodeSkillsPath,
+    SkillTarget.workBuddy || SkillTarget.workBuddyAi => null,
   };
   String? resourceCachePathFor(
     AgentResourceKind resource,
@@ -95,6 +97,7 @@ class SkillSyncService extends ChangeNotifier {
     AgentResourceKind resource,
     SkillTarget target,
   ) => switch ((resource, target)) {
+    (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) => null,
     (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
     (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
     (AgentResourceKind.command, SkillTarget.cursor) =>

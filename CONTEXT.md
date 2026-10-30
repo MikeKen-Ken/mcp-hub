@@ -1,6 +1,6 @@
 # Agent Hub
 
-Agent Hub keeps two kinds of configuration for Cursor, Codex, and Open Code. They belong to one product. They do not use the same steps.
+Agent Hub keeps two kinds of configuration for Cursor, Codex, and Open Code. They belong to one product. They do not use the same steps. WorkBuddy and WorkBuddy AI (international) receive the Catalog only; they have no Folder resources yet.
 
 ## Language
 
@@ -37,5 +37,5 @@ The Hub local copy of Folder resources. It is not the official Cursor folders.
 _Avoid_: official directory, client folder (for this copy)
 
 **Client MCP config**:
-The MCP server entries stored by Cursor, Codex, or Open Code. This is not the Catalog.
+The MCP server entries stored by Cursor, Codex, Open Code, WorkBuddy, or WorkBuddy AI. This is not the Catalog.
 _Avoid_: Catalog, mcp.json (as the name of the concept)

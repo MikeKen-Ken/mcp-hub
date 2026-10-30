@@ -16,6 +16,7 @@ class AgentPlatformDefinition {
     this.mcpConfig,
     this.skillConversionFromCursor = false,
     this.webDavAuthoritative = false,
+    this.hasFolderResources = true,
   });
 
   final AgentPlatformId id;
@@ -28,6 +29,11 @@ class AgentPlatformDefinition {
 
   /// 是否作为 WebDAV 上下行的权威源（目前仅 Cursor）。
   final bool webDavAuthoritative;
+
+  /// 是否在 Hub 中管理 Skill / Command / Rule / Hook 目录。
+  ///
+  /// WorkBuddy 的目录布局尚未确认（可能沿用 `~/.codebuddy`），因此仅支持 MCP。
+  final bool hasFolderResources;
 
   bool get supportsMcpConfigure => mcpConfig != null;
 
@@ -53,6 +59,7 @@ class AgentPlatformDefinition {
     }
     return switch (value) {
       'open_code' || 'open code' => AgentPlatformId.openCode,
+      'workbuddy_ai' || 'workbuddy ai' => AgentPlatformId.workBuddyAi,
       _ => null,
     };
   }
@@ -108,7 +115,41 @@ abstract final class AgentPlatforms {
     skillConversionFromCursor: true,
   );
 
-  static const all = <AgentPlatformDefinition>[cursor, codex, openCode];
+  static const workBuddy = AgentPlatformDefinition(
+    id: AgentPlatformId.workBuddy,
+    label: 'WorkBuddy',
+    wireName: 'workBuddy',
+    mcpConfig: AgentMcpConfigDefinition(
+      format: AgentMcpConfigFormat.cursorJson,
+      configFilePath: _workBuddyMcpConfigPath,
+      configDirectoryPath: _workBuddyConfigDirectory,
+    ),
+    hasFolderResources: false,
+  );
+
+  static const workBuddyAi = AgentPlatformDefinition(
+    id: AgentPlatformId.workBuddyAi,
+    label: 'WorkBuddy AI',
+    wireName: 'workBuddyAi',
+    mcpConfig: AgentMcpConfigDefinition(
+      format: AgentMcpConfigFormat.cursorJson,
+      configFilePath: _workBuddyAiMcpConfigPath,
+      configDirectoryPath: _workBuddyAiConfigDirectory,
+    ),
+    hasFolderResources: false,
+  );
+
+  static const all = <AgentPlatformDefinition>[
+    cursor,
+    codex,
+    openCode,
+    workBuddy,
+    workBuddyAi,
+  ];
+
+  /// 管理 Skill / Command / Rule / Hook 目录的客户端。
+  static List<AgentPlatformDefinition> get folderResourcePlatforms =>
+      all.where((p) => p.hasFolderResources).toList();
 
   /// 支持一键写入 MCP 配置的客户端。
   static List<AgentPlatformDefinition> get mcpConfigurable =>
@@ -122,6 +163,8 @@ abstract final class AgentPlatforms {
     AgentPlatformId.cursor => cursor,
     AgentPlatformId.codex => codex,
     AgentPlatformId.openCode => openCode,
+    AgentPlatformId.workBuddy => workBuddy,
+    AgentPlatformId.workBuddyAi => workBuddyAi,
   };
 
   static String labelOf(AgentPlatformId id) => of(id).label;
@@ -131,18 +174,21 @@ abstract final class AgentPlatforms {
     AgentPlatformId.cursor => McpPaths.cursorSkillsCachePath,
     AgentPlatformId.codex => McpPaths.codexSkillsCachePath,
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
+    AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi => null,
   };
 
   static String? localSkillPath(AgentPlatformId id) => switch (id) {
     AgentPlatformId.cursor => McpPaths.cursorSkillsPath,
     AgentPlatformId.codex => McpPaths.codexSkillsPath,
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
+    AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi => null,
   };
 
   static String? localResourcePath(
     AgentResourceKind resource,
     AgentPlatformId id,
   ) => switch ((resource, id)) {
+    (_, AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi) => null,
     (AgentResourceKind.skill, AgentPlatformId.cursor) =>
       McpPaths.cursorSkillsPath,
     (AgentResourceKind.skill, AgentPlatformId.codex) =>
@@ -177,6 +223,17 @@ abstract final class AgentPlatforms {
   static String? _openCodeMcpConfigPath() => McpPaths.openCodeMcpConfigPath;
 
   static String? _openCodeConfigDirectory() => McpPaths.openCodeConfigDirectory;
+
+  static String? _workBuddyMcpConfigPath() => McpPaths.workBuddyMcpConfigPath;
+
+  static String? _workBuddyConfigDirectory() =>
+      McpPaths.workBuddyConfigDirectory;
+
+  static String? _workBuddyAiMcpConfigPath() =>
+      McpPaths.workBuddyAiMcpConfigPath;
+
+  static String? _workBuddyAiConfigDirectory() =>
+      McpPaths.workBuddyAiConfigDirectory;
 }
 
 extension AgentPlatformIdCompat on AgentPlatformId {

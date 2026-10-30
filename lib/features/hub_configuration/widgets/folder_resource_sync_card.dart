@@ -219,7 +219,9 @@ class FolderResourceSyncCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                for (final target in SkillTarget.values)
+                for (final target in SkillTarget.values.where(
+                  (t) => AgentPlatforms.of(t).hasFolderResources,
+                ))
                   DirectoryPathRow(
                     label: target == SkillTarget.cursor
                         ? '${target.label} (official directory)'

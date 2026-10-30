@@ -29,5 +29,9 @@ abstract final class McpPaths {
   static String? get openCodeSkillsPath => null;
   static String? get openCodeRulesPath => null;
   static String? get openCodeCommandsPath => null;
+  static String? get workBuddyConfigDirectory => null;
+  static String? get workBuddyMcpConfigPath => null;
+  static String? get workBuddyAiConfigDirectory => null;
+  static String? get workBuddyAiMcpConfigPath => null;
   static bool get isDesktopSupported => false;
 }
