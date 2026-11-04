@@ -21,6 +21,7 @@ import 'skill_folder_copy.dart';
 import 'skill_sync_result.dart';
 import 'skill_target.dart';
 import 'skill_webdav_folder_sync.dart';
+import 'deepseek_conversion.dart';
 import 'workbuddy_conversion.dart';
 
 export 'skill_sync_result.dart';
@@ -62,6 +63,7 @@ class SkillSyncService extends ChangeNotifier {
   final CursorHooksBundle _hooksBundle;
   final ResourceConversion _conversion;
   final WorkBuddyConversion _workBuddyConversion = const WorkBuddyConversion();
+  final DeepSeekConversion _deepSeekConversion = const DeepSeekConversion();
   final PackageVersionStore _versionStore;
   final LastSyncAttemptStore? _attemptStore;
 
@@ -83,7 +85,9 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
     SkillTarget.codex => McpPaths.codexSkillsCachePath,
     SkillTarget.openCode => McpPaths.openCodeSkillsPath,
-    SkillTarget.workBuddy || SkillTarget.workBuddyAi => null,
+    SkillTarget.workBuddy ||
+    SkillTarget.workBuddyAi ||
+    SkillTarget.deepSeekHarness => null,
   };
   String? deployPathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsPath,
@@ -91,6 +95,7 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget.openCode => McpPaths.openCodeSkillsPath,
     SkillTarget.workBuddy => McpPaths.workBuddySkillsPath,
     SkillTarget.workBuddyAi => McpPaths.workBuddyAiSkillsPath,
+    SkillTarget.deepSeekHarness => McpPaths.deepSeekSkillsPath,
   };
   String? resourceCachePathFor(
     AgentResourceKind resource,
@@ -102,6 +107,10 @@ class SkillSyncService extends ChangeNotifier {
   ) => switch ((resource, target)) {
     (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) =>
       AgentPlatforms.localResourcePath(resource, target),
+    (_, SkillTarget.deepSeekHarness) => AgentPlatforms.localResourcePath(
+      resource,
+      target,
+    ),
     (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
     (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
     (AgentResourceKind.command, SkillTarget.cursor) =>
@@ -333,6 +342,9 @@ class SkillSyncService extends ChangeNotifier {
       if (WorkBuddyConversion.targets.contains(target)) {
         return _workBuddyConversion.convert(resource, target);
       }
+      if (target == SkillTarget.deepSeekHarness) {
+        return _deepSeekConversion.convert(resource);
+      }
       if (!target.hasConfirmedConversionFormat) {
         return _unsupportedTarget(target);
       }
@@ -390,6 +402,20 @@ class SkillSyncService extends ChangeNotifier {
       }
     }
 
+    if (resource.canConvertToDeepSeek) {
+      try {
+        final result = await _deepSeekConversion.convert(resource);
+        deployedFiles += result.deployedFiles;
+        packageCount += result.packageCount;
+        parts.add(result.message);
+        if (!result.ok) allOk = false;
+      } catch (error) {
+        allOk = false;
+        parts.add('DeepSeek Harness: failed ($error)');
+        debugPrint('${resource.label} 转换 DeepSeek Harness 失败: $error');
+      }
+    }
+
     if (resource.canConvertToWorkBuddy) {
       for (final target in WorkBuddyConversion.targets) {
         try {
@@ -437,7 +463,8 @@ class SkillSyncService extends ChangeNotifier {
       for (final resource in AgentResourceKind.values) {
         if (!resource.canConvertToCodex &&
             !resource.canConvertTo(SkillTarget.openCode) &&
-            !resource.canConvertToWorkBuddy) {
+            !resource.canConvertToWorkBuddy &&
+            !resource.canConvertToDeepSeek) {
           continue;
         }
         try {

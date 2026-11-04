@@ -11,4 +11,7 @@ enum AgentPlatformId {
 
   /// WorkBuddy AI 国际版（`~/.workbuddy-ai`）。
   workBuddyAi,
+
+  /// DeepSeek Harness（`$DSH_HOME`，默认 `~/.dsh`）。
+  deepSeekHarness,
 }

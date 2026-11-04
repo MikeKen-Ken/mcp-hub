@@ -250,9 +250,9 @@ class FolderResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter; WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept)',
+      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter; WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept; DeepSeek Harness: copy into ~/.dsh/skills and fill kebab-case name plus description when missing)',
     AgentResourceKind.rule =>
-      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/',
+      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/; DeepSeek Harness updates the managed section of ~/.dsh/AGENTS.md',
     AgentResourceKind.command =>
       'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
     AgentResourceKind.hook =>
@@ -262,11 +262,16 @@ class FolderResourceSyncCard extends StatelessWidget {
   bool get _canConvert =>
       resource.canConvertTo(SkillTarget.codex) ||
       resource.canConvertTo(SkillTarget.openCode) ||
-      resource.canConvertToWorkBuddy;
+      resource.canConvertToWorkBuddy ||
+      resource.canConvertToDeepSeek;
 
   String? _pathLabelFor(HubController hub, SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
       return McpPaths.codexAgentsMdPath;
+    }
+    if (resource == AgentResourceKind.rule &&
+        target == SkillTarget.deepSeekHarness) {
+      return McpPaths.deepSeekAgentsMdPath;
     }
     if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
       return '${McpPaths.cursorHooksJsonPath}  +  ${McpPaths.cursorHooksPath}';
@@ -280,6 +285,10 @@ class FolderResourceSyncCard extends StatelessWidget {
   String? _directoryFor(HubController hub, SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
       return McpPaths.codexConfigDirectory;
+    }
+    if (resource == AgentResourceKind.rule &&
+        target == SkillTarget.deepSeekHarness) {
+      return McpPaths.deepSeekConfigDirectory;
     }
     if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
       return McpPaths.cursorConfigDirectory;

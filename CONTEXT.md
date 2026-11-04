@@ -1,6 +1,6 @@
 # Agent Hub
 
-Agent Hub keeps two kinds of configuration for Cursor, Codex, and Open Code. They belong to one product. They do not use the same steps. WorkBuddy and WorkBuddy AI (international) receive the Catalog only; they have no Folder resources yet.
+Agent Hub keeps two kinds of configuration for Cursor, Codex, Open Code, WorkBuddy, WorkBuddy AI, and DeepSeek Harness. They belong to one product. They do not use the same steps. WorkBuddy and WorkBuddy AI receive Skill and Rule copies. DeepSeek Harness receives Skill copies, a managed section of `~/.dsh/AGENTS.md`, and MCP rows in `~/.dsh/cordis.patch.yml`. Command and Hook are not written for those clients.
 
 ## Language
 
@@ -37,5 +37,5 @@ The Hub local copy of Folder resources. It is not the official Cursor folders.
 _Avoid_: official directory, client folder (for this copy)
 
 **Client MCP config**:
-The MCP server entries stored by Cursor, Codex, Open Code, WorkBuddy, or WorkBuddy AI. This is not the Catalog.
+The MCP server entries stored by Cursor, Codex, Open Code, WorkBuddy, WorkBuddy AI, or DeepSeek Harness. This is not the Catalog.
 _Avoid_: Catalog, mcp.json (as the name of the concept)

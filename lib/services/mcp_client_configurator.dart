@@ -4,6 +4,7 @@ import 'dart:io';
 import '../common/agent_platforms.dart';
 import '../models/mcp_server_entry.dart';
 import '../services/hub_mcp_constants.dart';
+import 'dsh_cordis_patch.dart';
 import 'mcp_client_config.dart';
 import 'mcp_client_config_reader.dart';
 import 'mcp_paths.dart';
@@ -452,6 +453,7 @@ abstract final class McpClientConfigurator {
     ),
     AgentMcpConfigFormat.openCodeJson =>
       McpClientConfigReader.parseOpenCodeServers(text),
+    AgentMcpConfigFormat.cordisPatchYaml => DshCordisPatch.parseServers(text),
   };
 
   /// 兼容旧 API；现在检查全部 MCP，而不是仅检查启用项。
@@ -552,6 +554,10 @@ abstract final class McpClientConfigurator {
       server: server,
       environment: Platform.environment,
     ),
+    AgentMcpConfigFormat.cordisPatchYaml => DshCordisPatch.diagnose(
+      text,
+      server: server,
+    ),
   };
 
   static String _upsertConfig(
@@ -579,6 +585,12 @@ abstract final class McpClientConfigurator {
       managedIds: managedIds,
       removeIds: removeIds,
       environment: Platform.environment,
+    ),
+    AgentMcpConfigFormat.cordisPatchYaml => DshCordisPatch.upsert(
+      existing,
+      servers: servers,
+      managedIds: managedIds,
+      removeIds: removeIds,
     ),
   };
 }

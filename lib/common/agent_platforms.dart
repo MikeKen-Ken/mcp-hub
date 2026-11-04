@@ -5,7 +5,12 @@ import 'agent_platform_id.dart';
 export 'agent_platform_id.dart';
 
 /// 客户端 MCP 配置文件格式。
-enum AgentMcpConfigFormat { cursorJson, codexToml, openCodeJson }
+enum AgentMcpConfigFormat {
+  cursorJson,
+  codexToml,
+  openCodeJson,
+  cordisPatchYaml,
+}
 
 /// 单个平台的元数据与能力标记。
 class AgentPlatformDefinition {
@@ -54,6 +59,11 @@ class AgentPlatformDefinition {
     return switch (value) {
       'open_code' || 'open code' => AgentPlatformId.openCode,
       'workbuddy_ai' || 'workbuddy ai' => AgentPlatformId.workBuddyAi,
+      'deepseek' ||
+      'deepseek harness' ||
+      'deepseek-harness' ||
+      'deepseek_harness' ||
+      'dsh' => AgentPlatformId.deepSeekHarness,
       _ => null,
     };
   }
@@ -133,13 +143,27 @@ abstract final class AgentPlatforms {
     skillConversionFromCursor: true,
   );
 
+  static const deepSeekHarness = AgentPlatformDefinition(
+    id: AgentPlatformId.deepSeekHarness,
+    label: 'DeepSeek Harness',
+    wireName: 'deepSeekHarness',
+    mcpConfig: AgentMcpConfigDefinition(
+      format: AgentMcpConfigFormat.cordisPatchYaml,
+      configFilePath: _deepSeekMcpConfigPath,
+      configDirectoryPath: _deepSeekConfigDirectory,
+    ),
+    skillConversionFromCursor: true,
+  );
+
   static const all = <AgentPlatformDefinition>[
     cursor,
     codex,
     openCode,
     workBuddy,
     workBuddyAi,
+    deepSeekHarness,
   ];
+
   /// 支持一键写入 MCP 配置的客户端。
   static List<AgentPlatformDefinition> get mcpConfigurable =>
       all.where((p) => p.supportsMcpConfigure).toList();
@@ -154,6 +178,7 @@ abstract final class AgentPlatforms {
     AgentPlatformId.openCode => openCode,
     AgentPlatformId.workBuddy => workBuddy,
     AgentPlatformId.workBuddyAi => workBuddyAi,
+    AgentPlatformId.deepSeekHarness => deepSeekHarness,
   };
 
   static String labelOf(AgentPlatformId id) => of(id).label;
@@ -163,7 +188,9 @@ abstract final class AgentPlatforms {
     AgentPlatformId.cursor => McpPaths.cursorSkillsCachePath,
     AgentPlatformId.codex => McpPaths.codexSkillsCachePath,
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
-    AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi => null,
+    AgentPlatformId.workBuddy ||
+    AgentPlatformId.workBuddyAi ||
+    AgentPlatformId.deepSeekHarness => null,
   };
 
   static String? localSkillPath(AgentPlatformId id) => switch (id) {
@@ -172,6 +199,7 @@ abstract final class AgentPlatforms {
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
     AgentPlatformId.workBuddy => McpPaths.workBuddySkillsPath,
     AgentPlatformId.workBuddyAi => McpPaths.workBuddyAiSkillsPath,
+    AgentPlatformId.deepSeekHarness => McpPaths.deepSeekSkillsPath,
   };
 
   static String? localResourcePath(
@@ -191,6 +219,17 @@ abstract final class AgentPlatforms {
     (
       AgentResourceKind.command || AgentResourceKind.hook,
       AgentPlatformId.workBuddy || AgentPlatformId.workBuddyAi,
+    ) =>
+      null,
+    (AgentResourceKind.skill, AgentPlatformId.deepSeekHarness) =>
+      McpPaths.deepSeekSkillsPath,
+    (AgentResourceKind.rule, AgentPlatformId.deepSeekHarness) =>
+      McpPaths.deepSeekAgentsMdPath,
+    // DeepSeek Harness 没有已确认的用户级 Command 目录。Hook 要在
+    // cordis 里显式挂 dsh-hooks 并指定 configPath，不会自动读取 hooks.json。
+    (
+      AgentResourceKind.command || AgentResourceKind.hook,
+      AgentPlatformId.deepSeekHarness,
     ) =>
       null,
     (AgentResourceKind.skill, AgentPlatformId.cursor) =>
@@ -238,6 +277,10 @@ abstract final class AgentPlatforms {
 
   static String? _workBuddyAiConfigDirectory() =>
       McpPaths.workBuddyAiConfigDirectory;
+
+  static String? _deepSeekMcpConfigPath() => McpPaths.deepSeekMcpConfigPath;
+
+  static String? _deepSeekConfigDirectory() => McpPaths.deepSeekConfigDirectory;
 }
 
 extension AgentPlatformIdCompat on AgentPlatformId {

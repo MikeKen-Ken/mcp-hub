@@ -40,6 +40,7 @@ enum AgentResourceKind {
   bool supportsLocalPath(SkillTarget target) => switch ((this, target)) {
     (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) =>
       canConvertToWorkBuddy,
+    (_, SkillTarget.deepSeekHarness) => canConvertToDeepSeek,
     (_, SkillTarget.cursor) => true,
     (_, SkillTarget.codex) => this != AgentResourceKind.command,
     (_, SkillTarget.openCode) => this != AgentResourceKind.hook,
@@ -58,10 +59,15 @@ enum AgentResourceKind {
     SkillTarget.codex => canConvertToCodex,
     SkillTarget.openCode => this != AgentResourceKind.hook,
     SkillTarget.workBuddy || SkillTarget.workBuddyAi => canConvertToWorkBuddy,
+    SkillTarget.deepSeekHarness => canConvertToDeepSeek,
     SkillTarget.cursor => false,
   };
 
   /// WorkBuddy 仅确认了 Skill（`skills/`）与 Rule（`rules/`）目录。
   bool get canConvertToWorkBuddy =>
+      this == AgentResourceKind.skill || this == AgentResourceKind.rule;
+
+  /// DeepSeek Harness 仅确认了 Skill（`~/.dsh/skills`）与 Rule（`~/.dsh/AGENTS.md`）。
+  bool get canConvertToDeepSeek =>
       this == AgentResourceKind.skill || this == AgentResourceKind.rule;
 }

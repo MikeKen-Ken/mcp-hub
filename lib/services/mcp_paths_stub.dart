@@ -37,5 +37,9 @@ abstract final class McpPaths {
   static String? get workBuddyRulesPath => null;
   static String? get workBuddyAiSkillsPath => null;
   static String? get workBuddyAiRulesPath => null;
+  static String? get deepSeekConfigDirectory => null;
+  static String? get deepSeekMcpConfigPath => null;
+  static String? get deepSeekSkillsPath => null;
+  static String? get deepSeekAgentsMdPath => null;
   static bool get isDesktopSupported => false;
 }

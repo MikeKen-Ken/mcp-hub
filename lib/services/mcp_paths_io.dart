@@ -122,6 +122,21 @@ abstract final class McpPaths {
   static String get workBuddyAiRulesPath =>
       p.join(workBuddyAiConfigDirectory, 'rules');
 
+  /// DeepSeek Harness 配置根（`$DSH_HOME`，默认 `~/.dsh`）。
+  static String get deepSeekConfigDirectory => p.join(_userProfile, '.dsh');
+
+  /// 用户级 Cordis patch。Hub 只改写其中的 `mcp-hub` 标记段。
+  static String get deepSeekMcpConfigPath =>
+      p.join(deepSeekConfigDirectory, 'cordis.patch.yml');
+
+  /// 用户级 Skill 根（rank 400，`~/.dsh/skills`）。
+  static String get deepSeekSkillsPath =>
+      p.join(deepSeekConfigDirectory, 'skills');
+
+  /// 用户级全局说明。Harness 把它放进每个 Session 的基线。
+  static String get deepSeekAgentsMdPath =>
+      p.join(deepSeekConfigDirectory, 'AGENTS.md');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

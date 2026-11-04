@@ -200,12 +200,13 @@ void registerHubMcpTools(McpServer server, HubController hub) {
   server.registerTool(
     'configure_clients',
     description:
-        '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code）。'
+        '一键把全部 MCP 写入已登记的客户端（Cursor / Codex / Open Code / WorkBuddy / DeepSeek Harness）。'
         '会从各客户端移除 Hub 已删除的 MCP；导入未登记 MCP 请使用 import_from_clients。',
     inputSchema: JsonSchema.object(
       properties: {
         'target': JsonSchema.string(
-          description: 'all | cursor | codex | openCode | opencode，默认 all',
+          description:
+              'all | cursor | codex | openCode | opencode | workBuddy | workBuddyAi | deepSeekHarness | dsh，默认 all',
         ),
       },
     ),
@@ -243,7 +244,8 @@ void registerHubMcpTools(McpServer server, HubController hub) {
 
   server.registerTool(
     'import_from_clients',
-    description: '从 Cursor / Codex / Open Code 配置文件导入 Hub 未登记的 MCP（不覆盖已有条目）',
+    description:
+        '从 Cursor / Codex / Open Code / WorkBuddy / DeepSeek Harness 配置文件导入 Hub 未登记的 MCP（不覆盖已有条目）',
     inputSchema: JsonSchema.object(properties: const {}),
     annotations: const ToolAnnotations(
       readOnlyHint: false,
