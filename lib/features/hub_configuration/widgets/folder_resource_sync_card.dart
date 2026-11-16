@@ -250,9 +250,17 @@ class FolderResourceSyncCard extends StatelessWidget {
 
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill =>
-      'One-click conversion: mirror the package, then convert it to the target format (Codex: openai.yaml; OpenCode: SKILL.md frontmatter; WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept; DeepSeek Harness: copy into ~/.dsh/skills and fill kebab-case name plus description when missing)',
+      'One-click conversion: mirror the package, then convert it to the target format '
+          '(Codex: openai.yaml; OpenCode: SKILL.md frontmatter; '
+          'WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept; '
+          'DeepSeek Harness: copy into ~/.dsh/skills and fill kebab-case name plus description when missing; '
+          'Doubao: copy into the workspace .user_skills and add name / description; '
+          'Antigravity: copy into ~/.gemini/config/skills and normalize the kebab-case name plus description)',
     AgentResourceKind.rule =>
-      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/; DeepSeek Harness updates the managed section of ~/.dsh/AGENTS.md',
+      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; '
+          'WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/; '
+          'DeepSeek Harness updates the managed section of ~/.dsh/AGENTS.md; '
+          'Antigravity updates the managed section of ~/.gemini/GEMINI.md',
     AgentResourceKind.command =>
       'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
     AgentResourceKind.hook =>
@@ -263,7 +271,9 @@ class FolderResourceSyncCard extends StatelessWidget {
       resource.canConvertTo(SkillTarget.codex) ||
       resource.canConvertTo(SkillTarget.openCode) ||
       resource.canConvertToWorkBuddy ||
-      resource.canConvertToDeepSeek;
+      resource.canConvertToDeepSeek ||
+      resource.canConvertToDoubao ||
+      resource.canConvertToAntigravity;
 
   String? _pathLabelFor(HubController hub, SkillTarget target) {
     if (resource == AgentResourceKind.rule && target == SkillTarget.codex) {
@@ -272,6 +282,10 @@ class FolderResourceSyncCard extends StatelessWidget {
     if (resource == AgentResourceKind.rule &&
         target == SkillTarget.deepSeekHarness) {
       return McpPaths.deepSeekAgentsMdPath;
+    }
+    if (resource == AgentResourceKind.rule &&
+        target == SkillTarget.antigravity) {
+      return McpPaths.antigravityGeminiMdPath;
     }
     if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
       return '${McpPaths.cursorHooksJsonPath}  +  ${McpPaths.cursorHooksPath}';
@@ -289,6 +303,10 @@ class FolderResourceSyncCard extends StatelessWidget {
     if (resource == AgentResourceKind.rule &&
         target == SkillTarget.deepSeekHarness) {
       return McpPaths.deepSeekConfigDirectory;
+    }
+    if (resource == AgentResourceKind.rule &&
+        target == SkillTarget.antigravity) {
+      return McpPaths.antigravityHomeDirectory;
     }
     if (resource == AgentResourceKind.hook && target == SkillTarget.cursor) {
       return McpPaths.cursorConfigDirectory;

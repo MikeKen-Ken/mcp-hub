@@ -732,6 +732,210 @@ abstract final class McpClientConfig {
     }
   }
 
+  /// 合并 [servers] 到 Antigravity `mcp_config.json` 的 `mcpServers`。
+  ///
+  /// 与 Cursor 的差异：
+  /// - 远程服务器必须写 `serverUrl`；Antigravity 明确不支持 `url` / `httpUrl`
+  /// - 没有 `type` 字段，靠 `command` / `serverUrl` 区分传输方式
+  /// - 停用的服务器保留条目并写 `disabled: true`，便于在 Customizations
+  ///   面板里直接重新启用
+  ///
+  /// 未登记 / 已删除的条目只按 [managedIds] 与 [removeIds] 清理，其余原样保留。
+  static String upsertAntigravityJson(
+    String? existing, {
+    required List<McpServerEntry> servers,
+    Set<String> managedIds = const {},
+    Set<String> removeIds = const {},
+  }) {
+    Map<String, dynamic> root;
+    if (existing == null || existing.trim().isEmpty) {
+      root = {};
+    } else {
+      final decoded = jsonDecode(existing);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Antigravity mcp_config.json 根节点必须是对象');
+      }
+      root = Map<String, dynamic>.from(decoded);
+    }
+
+    final serversNode = root['mcpServers'];
+    final map = serversNode is Map
+        ? Map<String, dynamic>.from(
+            serversNode.map((k, v) => MapEntry(k.toString(), v)),
+          )
+        : <String, dynamic>{};
+
+    for (final id in {...managedIds, ...removeIds}) {
+      map.remove(id);
+    }
+
+    for (final server in servers) {
+      final entry = _antigravityEntry(server);
+      // 旧版误写 `url` 时，写入新条目会整体替换为 `serverUrl`。
+      entry.remove('url');
+      map[server.id] = entry;
+    }
+
+    root['mcpServers'] = map;
+    return const JsonEncoder.withIndent('  ').convert(root);
+  }
+
+  static Map<String, dynamic> _antigravityEntry(McpServerEntry server) {
+    return switch (server.transport) {
+      McpTransport.http => {
+          'serverUrl': server.url ?? '',
+          if (!server.enabled) 'disabled': true,
+        },
+      McpTransport.stdio => {
+          'command': server.command ?? '',
+          if (server.args.isNotEmpty) 'args': server.args,
+          if (server.env.isNotEmpty) 'env': server.env,
+          if (server.cwd != null && server.cwd!.isNotEmpty) 'cwd': server.cwd,
+          if (!server.enabled) 'disabled': true,
+        },
+    };
+  }
+
+  /// 诊断 Antigravity 配置中单个服务器是否与 Hub 期望一致。
+  static McpServerConfigDiagnosis diagnoseAntigravityServer(
+    String? existing, {
+    required McpServerEntry server,
+  }) {
+    if (existing == null || existing.trim().isEmpty) {
+      return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+    }
+    try {
+      final decoded = jsonDecode(existing);
+      if (decoded is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final servers = decoded['mcpServers'];
+      if (servers is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final entry = servers[server.id];
+      if (entry is! Map) {
+        return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+      }
+      final map = entry.map((k, v) => MapEntry(k.toString(), v));
+      return McpServerConfigDiagnosis(
+        serverId: server.id,
+        missing: false,
+        diffs: _antigravityFieldDiffs(server, map),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      return McpServerConfigDiagnosis(serverId: server.id, missing: true);
+    }
+  }
+
+  static List<McpClientFieldDiff> _antigravityFieldDiffs(
+    McpServerEntry server,
+    Map<String, dynamic> entry,
+  ) {
+    final diffs = <McpClientFieldDiff>[];
+    final actualEnabled = entry['disabled'] != true;
+    if (actualEnabled != server.enabled) {
+      diffs.add(
+        McpClientFieldDiff(
+          serverId: server.id,
+          field: 'enabled',
+          expected: '${server.enabled}',
+          actual: '$actualEnabled',
+        ),
+      );
+    }
+    switch (server.transport) {
+      case McpTransport.http:
+        final expectedUrl = server.url ?? '';
+        final actualUrl = entry['serverUrl']?.toString();
+        if (actualUrl != expectedUrl) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'serverUrl',
+              expected: expectedUrl,
+              actual: actualUrl,
+            ),
+          );
+        }
+        if (entry.containsKey('url') || entry.containsKey('httpUrl')) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'serverUrl',
+              expected: expectedUrl,
+              actual: 'legacy url / httpUrl (not supported by Antigravity)',
+            ),
+          );
+        }
+      case McpTransport.stdio:
+        final expectedCommand = server.command ?? '';
+        final actualCommand = entry['command']?.toString();
+        if (actualCommand != expectedCommand) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'command',
+              expected: expectedCommand,
+              actual: actualCommand,
+            ),
+          );
+        }
+        final actualArgs = _asStringList(entry['args']);
+        if (!_listEquals(actualArgs, server.args)) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'args',
+              expected: _formatList(server.args),
+              actual: actualArgs == null ? null : _formatList(actualArgs),
+            ),
+          );
+        }
+        final actualEnv = _asStringMap(entry['env']);
+        if (!_mapEquals(actualEnv, server.env)) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'env',
+              expected: _formatMap(server.env),
+              actual: actualEnv == null ? null : _formatMap(actualEnv),
+            ),
+          );
+        }
+        final expectedCwd = (server.cwd != null && server.cwd!.isNotEmpty)
+            ? server.cwd
+            : null;
+        final actualCwdRaw = entry['cwd']?.toString();
+        final actualCwd =
+            (actualCwdRaw != null && actualCwdRaw.isNotEmpty) ? actualCwdRaw : null;
+        if (actualCwd != expectedCwd) {
+          diffs.add(
+            McpClientFieldDiff(
+              serverId: server.id,
+              field: 'cwd',
+              expected: expectedCwd,
+              actual: actualCwd,
+            ),
+          );
+        }
+    }
+    return diffs;
+  }
+
+  static bool isAntigravityServerConfigured(
+    String? existing, {
+    required McpServerEntry server,
+  }) {
+    try {
+      return diagnoseAntigravityServer(existing, server: server).isAligned;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 读取 Codex 配置中单个 MCP 表（供反向导入）。
   static CodexServerTable? readCodexServerTable(String source, String id) =>
       _extractCodexServerTable(source, id);

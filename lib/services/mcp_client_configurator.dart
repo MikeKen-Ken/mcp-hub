@@ -454,6 +454,8 @@ abstract final class McpClientConfigurator {
     AgentMcpConfigFormat.openCodeJson =>
       McpClientConfigReader.parseOpenCodeServers(text),
     AgentMcpConfigFormat.cordisPatchYaml => DshCordisPatch.parseServers(text),
+    AgentMcpConfigFormat.antigravityJson =>
+      McpClientConfigReader.parseAntigravityServers(text),
   };
 
   /// 兼容旧 API；现在检查全部 MCP，而不是仅检查启用项。
@@ -534,7 +536,8 @@ abstract final class McpClientConfigurator {
 
   static bool _usesJsonRootValidation(AgentMcpConfigFormat format) =>
       format == AgentMcpConfigFormat.cursorJson ||
-      format == AgentMcpConfigFormat.openCodeJson;
+      format == AgentMcpConfigFormat.openCodeJson ||
+      format == AgentMcpConfigFormat.antigravityJson;
 
   static McpServerConfigDiagnosis _diagnoseServer(
     AgentMcpConfigFormat format,
@@ -558,6 +561,8 @@ abstract final class McpClientConfigurator {
       text,
       server: server,
     ),
+    AgentMcpConfigFormat.antigravityJson =>
+      McpClientConfig.diagnoseAntigravityServer(text, server: server),
   };
 
   static String _upsertConfig(
@@ -592,5 +597,12 @@ abstract final class McpClientConfigurator {
       managedIds: managedIds,
       removeIds: removeIds,
     ),
+    AgentMcpConfigFormat.antigravityJson =>
+      McpClientConfig.upsertAntigravityJson(
+        existing,
+        servers: servers,
+        managedIds: managedIds,
+        removeIds: removeIds,
+      ),
   };
 }

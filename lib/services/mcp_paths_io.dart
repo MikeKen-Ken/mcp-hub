@@ -137,6 +137,42 @@ abstract final class McpPaths {
   static String get deepSeekAgentsMdPath =>
       p.join(deepSeekConfigDirectory, 'AGENTS.md');
 
+  /// Google Antigravity 用户目录（`~/.gemini`，IDE / CLI 共用）。
+  static String get antigravityHomeDirectory => p.join(_userProfile, '.gemini');
+
+  /// Google Antigravity 全局配置目录（`~/.gemini/config`）。
+  static String get antigravityConfigDirectory =>
+      p.join(antigravityHomeDirectory, 'config');
+
+  /// Antigravity MCP 配置（`~/.gemini/config/mcp_config.json`）。
+  static String get antigravityMcpConfigPath =>
+      p.join(antigravityConfigDirectory, 'mcp_config.json');
+
+  /// Antigravity 全局 Skill 目录（`~/.gemini/config/skills`，IDE / CLI / App 共用）。
+  static String get antigravitySkillsPath =>
+      p.join(antigravityConfigDirectory, 'skills');
+
+  /// Antigravity 全局 Rule 文件（`~/.gemini/GEMINI.md`，单个文件）。
+  static String get antigravityGeminiMdPath =>
+      p.join(_userProfile, '.gemini', 'GEMINI.md');
+
+  /// 豆包电脑版数据目录（Windows：`%LOCALAPPDATA%\Doubao\User Data\Default`）。
+  static String get _doubaoUserDataDirectory {
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    final base = (localAppData != null && localAppData.isNotEmpty)
+        ? localAppData
+        : p.join(_userProfile, 'AppData', 'Local');
+    return p.join(base, 'Doubao', 'User Data', 'Default');
+  }
+
+  /// 豆包工作任务的本地工作区（`.doubao/agent_mode/workspace`）。
+  static String get doubaoWorkspacePath =>
+      p.join(_doubaoUserDataDirectory, '.doubao', 'agent_mode', 'workspace');
+
+  /// 豆包本地技能目录（`.user_skills`）。豆包没有用户可写的本地 MCP 文件。
+  static String get doubaoSkillsPath =>
+      p.join(doubaoWorkspacePath, '.user_skills');
+
   static bool get isDesktopSupported =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 }

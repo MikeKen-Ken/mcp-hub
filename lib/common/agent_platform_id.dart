@@ -14,4 +14,10 @@ enum AgentPlatformId {
 
   /// DeepSeek Harness（`$DSH_HOME`，默认 `~/.dsh`）。
   deepSeekHarness,
+
+  /// 豆包电脑版（工作任务的本地技能目录，无本地 MCP 配置文件）。
+  doubao,
+
+  /// Google Antigravity（`~/.gemini/config`）。
+  antigravity,
 }

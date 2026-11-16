@@ -10,6 +10,10 @@ enum AgentMcpConfigFormat {
   codexToml,
   openCodeJson,
   cordisPatchYaml,
+
+  /// Antigravity `mcp_config.json`：`mcpServers`，远程用 `serverUrl`，
+  /// 禁用用 `disabled`（与 Cursor 的 `url` + 移除条目不同）。
+  antigravityJson,
 }
 
 /// 单个平台的元数据与能力标记。
@@ -64,6 +68,15 @@ class AgentPlatformDefinition {
       'deepseek-harness' ||
       'deepseek_harness' ||
       'dsh' => AgentPlatformId.deepSeekHarness,
+      'antigravity' ||
+      'antigravity ide' ||
+      'antigravity cli' ||
+      'agy' ||
+      'google antigravity' => AgentPlatformId.antigravity,
+      'doubao' ||
+      'doubao work' ||
+      'doubao-work' ||
+      '豆包' => AgentPlatformId.doubao,
       _ => null,
     };
   }
@@ -155,6 +168,28 @@ abstract final class AgentPlatforms {
     skillConversionFromCursor: true,
   );
 
+  /// 豆包电脑版：连接器（MCP）只在客户端界面里配置，没有用户可写的本地
+  /// MCP 文件，因此只支持 Skill 转换。
+  static const doubao = AgentPlatformDefinition(
+    id: AgentPlatformId.doubao,
+    label: 'Doubao',
+    wireName: 'doubao',
+    skillConversionFromCursor: true,
+  );
+
+  /// Google Antigravity：MCP、Skill、Rule 都有确认的本地位置。
+  static const antigravity = AgentPlatformDefinition(
+    id: AgentPlatformId.antigravity,
+    label: 'Antigravity',
+    wireName: 'antigravity',
+    mcpConfig: AgentMcpConfigDefinition(
+      format: AgentMcpConfigFormat.antigravityJson,
+      configFilePath: _antigravityMcpConfigPath,
+      configDirectoryPath: _antigravityConfigDirectory,
+    ),
+    skillConversionFromCursor: true,
+  );
+
   static const all = <AgentPlatformDefinition>[
     cursor,
     codex,
@@ -162,6 +197,8 @@ abstract final class AgentPlatforms {
     workBuddy,
     workBuddyAi,
     deepSeekHarness,
+    antigravity,
+    doubao,
   ];
 
   /// 支持一键写入 MCP 配置的客户端。
@@ -179,6 +216,8 @@ abstract final class AgentPlatforms {
     AgentPlatformId.workBuddy => workBuddy,
     AgentPlatformId.workBuddyAi => workBuddyAi,
     AgentPlatformId.deepSeekHarness => deepSeekHarness,
+    AgentPlatformId.antigravity => antigravity,
+    AgentPlatformId.doubao => doubao,
   };
 
   static String labelOf(AgentPlatformId id) => of(id).label;
@@ -190,7 +229,9 @@ abstract final class AgentPlatforms {
     AgentPlatformId.openCode => McpPaths.openCodeSkillsPath,
     AgentPlatformId.workBuddy ||
     AgentPlatformId.workBuddyAi ||
-    AgentPlatformId.deepSeekHarness => null,
+    AgentPlatformId.deepSeekHarness ||
+    AgentPlatformId.antigravity ||
+    AgentPlatformId.doubao => null,
   };
 
   static String? localSkillPath(AgentPlatformId id) => switch (id) {
@@ -200,6 +241,8 @@ abstract final class AgentPlatforms {
     AgentPlatformId.workBuddy => McpPaths.workBuddySkillsPath,
     AgentPlatformId.workBuddyAi => McpPaths.workBuddyAiSkillsPath,
     AgentPlatformId.deepSeekHarness => McpPaths.deepSeekSkillsPath,
+    AgentPlatformId.antigravity => McpPaths.antigravitySkillsPath,
+    AgentPlatformId.doubao => McpPaths.doubaoSkillsPath,
   };
 
   static String? localResourcePath(
@@ -230,6 +273,27 @@ abstract final class AgentPlatforms {
     (
       AgentResourceKind.command || AgentResourceKind.hook,
       AgentPlatformId.deepSeekHarness,
+    ) =>
+      null,
+    (AgentResourceKind.skill, AgentPlatformId.antigravity) =>
+      McpPaths.antigravitySkillsPath,
+    // Antigravity 的全局 Rule 是单个 ~/.gemini/GEMINI.md。
+    (AgentResourceKind.rule, AgentPlatformId.antigravity) =>
+      McpPaths.antigravityGeminiMdPath,
+    // Antigravity 没有已确认的全局 Command / Hook 文件位置。
+    (
+      AgentResourceKind.command || AgentResourceKind.hook,
+      AgentPlatformId.antigravity,
+    ) =>
+      null,
+    (AgentResourceKind.skill, AgentPlatformId.doubao) =>
+      McpPaths.doubaoSkillsPath,
+    // 豆包工作任务只读取本地技能；Rule / Command / Hook 无对等目录。
+    (
+      AgentResourceKind.rule ||
+      AgentResourceKind.command ||
+      AgentResourceKind.hook,
+      AgentPlatformId.doubao,
     ) =>
       null,
     (AgentResourceKind.skill, AgentPlatformId.cursor) =>
@@ -281,6 +345,12 @@ abstract final class AgentPlatforms {
   static String? _deepSeekMcpConfigPath() => McpPaths.deepSeekMcpConfigPath;
 
   static String? _deepSeekConfigDirectory() => McpPaths.deepSeekConfigDirectory;
+
+  static String? _antigravityMcpConfigPath() =>
+      McpPaths.antigravityMcpConfigPath;
+
+  static String? _antigravityConfigDirectory() =>
+      McpPaths.antigravityConfigDirectory;
 }
 
 extension AgentPlatformIdCompat on AgentPlatformId {

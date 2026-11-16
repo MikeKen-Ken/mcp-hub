@@ -51,8 +51,7 @@ abstract final class McpClientConfigReader {
     return result;
   }
 
-  static List<McpServerEntry> parseOpenCodeServers(String? text) {
-    if (text == null || text.trim().isEmpty) return const [];
+  static List<McpServerEntry> parseOpenCodeServers(String? text) {    if (text == null || text.trim().isEmpty) return const [];
     try {
       final decoded = jsonDecode(text);
       if (decoded is! Map) return const [];
@@ -78,6 +77,62 @@ abstract final class McpClientConfigReader {
     } on FormatException {
       return const [];
     }
+  }
+
+  /// 解析 Antigravity `mcp_config.json`（`mcpServers`，远程用 `serverUrl`）。
+  static List<McpServerEntry> parseAntigravityServers(String? text) {
+    if (text == null || text.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return const [];
+      final servers = decoded['mcpServers'];
+      if (servers is! Map) return const [];
+      final result = <McpServerEntry>[];
+      for (final entry in servers.entries) {
+        final id = entry.key.toString().trim();
+        if (id.isEmpty || id == HubMcpConstants.serverKey) continue;
+        if (entry.value is! Map) continue;
+        final map = Map<String, dynamic>.from(
+          (entry.value as Map).map((k, v) => MapEntry(k.toString(), v)),
+        );
+        final parsed = _fromAntigravityMap(id, map);
+        if (parsed != null) result.add(parsed);
+      }
+      return result;
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  static McpServerEntry? _fromAntigravityMap(
+    String id,
+    Map<String, dynamic> map,
+  ) {
+    final command = _nonEmpty(map['command']);
+    final serverUrl =
+        _nonEmpty(map['serverUrl']) ??
+        // 兼容手工写入的旧字段，便于导入时纠正。
+        _nonEmpty(map['url']) ??
+        _nonEmpty(map['httpUrl']);
+    final enabled = map['disabled'] != true;
+    if (command == null) {
+      if (serverUrl == null) return null;
+      return _entry(
+        id: id,
+        transport: McpTransport.http,
+        url: serverUrl,
+        enabled: enabled,
+      );
+    }
+    return _entry(
+      id: id,
+      transport: McpTransport.stdio,
+      command: command,
+      args: _stringList(map['args']),
+      env: _stringMap(map['env']),
+      cwd: _nonEmpty(map['cwd']),
+      enabled: enabled,
+    );
   }
 
   static McpServerEntry? _fromCursorMap(String id, Map<String, dynamic> map) {

@@ -41,6 +41,8 @@ enum AgentResourceKind {
     (_, SkillTarget.workBuddy || SkillTarget.workBuddyAi) =>
       canConvertToWorkBuddy,
     (_, SkillTarget.deepSeekHarness) => canConvertToDeepSeek,
+    (_, SkillTarget.doubao) => canConvertToDoubao,
+    (_, SkillTarget.antigravity) => canConvertToAntigravity,
     (_, SkillTarget.cursor) => true,
     (_, SkillTarget.codex) => this != AgentResourceKind.command,
     (_, SkillTarget.openCode) => this != AgentResourceKind.hook,
@@ -60,6 +62,8 @@ enum AgentResourceKind {
     SkillTarget.openCode => this != AgentResourceKind.hook,
     SkillTarget.workBuddy || SkillTarget.workBuddyAi => canConvertToWorkBuddy,
     SkillTarget.deepSeekHarness => canConvertToDeepSeek,
+    SkillTarget.doubao => canConvertToDoubao,
+    SkillTarget.antigravity => canConvertToAntigravity,
     SkillTarget.cursor => false,
   };
 
@@ -69,5 +73,14 @@ enum AgentResourceKind {
 
   /// DeepSeek Harness 仅确认了 Skill（`~/.dsh/skills`）与 Rule（`~/.dsh/AGENTS.md`）。
   bool get canConvertToDeepSeek =>
+      this == AgentResourceKind.skill || this == AgentResourceKind.rule;
+
+  /// 豆包只确认了 Skill（工作区 `.user_skills`）；连接器在客户端内配置，
+  /// Rule / Command / Hook 都没有对等目录。
+  bool get canConvertToDoubao => this == AgentResourceKind.skill;
+
+  /// Antigravity 确认了 Skill（`~/.gemini/config/skills`）与
+  /// Rule（`~/.gemini/GEMINI.md`）；Command / Hook 无全局位置。
+  bool get canConvertToAntigravity =>
       this == AgentResourceKind.skill || this == AgentResourceKind.rule;
 }

@@ -1,6 +1,6 @@
 # Agent Hub
 
-轻量桌面应用：集中管理 Cursor / Codex 的 Agent 相关配置（当前以 **MCP** 为主，后续可扩展 Skill 等），用开关启用，并一键写入客户端。
+轻量桌面应用：集中管理 Cursor / Codex / Open Code / WorkBuddy / DeepSeek Harness / Antigravity 的 Agent 相关配置（当前以 **MCP** 为主，并支持 Skill 等资源的跨客户端转换），用开关启用，并一键写入客户端。豆包（Doubao）支持 Skill 转换，但连接器只在客户端界面内配置，没有可写的本地 MCP 文件。
 
 技术栈与配置写法参考 [kanban](https://github.com/MikeKen-Ken) 项目里的 Windows MCP 一键配置实现，但职责独立——看板继续只做看板。
 
@@ -14,6 +14,7 @@
   - Cursor: `%USERPROFILE%\.cursor\mcp.json`
   - Codex: `%USERPROFILE%\.codex\config.toml`（并确保 `features.rmcp_client = true`）
   - OpenCode: `%USERPROFILE%\.config\opencode\opencode.json`（`mcp.<name>`；整值密钥用 `{env:NAME}`，路径内占位符写入时展开）
+  - Antigravity: `%USERPROFILE%\.gemini\config\mcp_config.json`（远程必须写 `serverUrl`，停用写 `disabled: true`）
 - 不覆盖你已有的其他 MCP 条目
 - 一键 `git pull` 更新本地仓库
 - **WebDAV 下载/上传/合并**：跨电脑用固定名压缩包传输 MCP 清单与 Agent 配置（坚果云等）；账号密码仅存本机
@@ -26,7 +27,7 @@
 1. 旧电脑启用 WebDAV，远端目录例如 `/AgentHub`，上传生成固定名压缩包
 2. 新电脑安装 Agent Hub，填同一 WebDAV → 下载（覆盖）或合并清单
 3. 清单恢复后，按需对仓库执行 clone/更新，再一键写入 Cursor/Codex
-4. 在「Agent 配置下载/上传」中下载或合并 Cursor 资源（Skill / Command / Rule / Hook），应用到 Cursor 后再按需「一键转换」到 Codex / Open Code
+4. 在「Agent 配置下载/上传」中下载或合并 Cursor 资源（Skill / Command / Rule / Hook），应用到 Cursor 后再按需「一键转换」到 Codex / Open Code / WorkBuddy / DeepSeek Harness / 豆包 / Antigravity
 
 下载/上传：仓库 URL、command/args 等。  
 
@@ -72,17 +73,20 @@ Cursor Command 使用 Markdown 文件。Codex 暂无与 Cursor 全局 Command �
 
 Hook 压缩包内是 `hooks.json` 与 `hooks/` 脚本目录；应用到 Cursor 时只覆盖这两处，不会删除 `mcp.json` 等其它配置。Open Code 使用 TypeScript 插件而非 `hooks.json`，因此 Hook 不一键转换到 Open Code。
 
-### 一键转换（Cursor → Codex / OpenCode）
+### 一键转换（Cursor → 其他客户端）
 
-以本机 Cursor 目录为唯一编辑源，批量转换到 Codex / OpenCode（不依赖 WebDAV）。
+以本机 Cursor 目录为唯一编辑源，批量转换到 Codex / OpenCode / WorkBuddy / DeepSeek Harness / 豆包 / Antigravity（不依赖 WebDAV）。
 「更新/覆盖」只负责缓存 → Cursor；转换请使用各资源卡片或顶部的「一键转换」：
 
 | 资源 | 源 | 目标 | 转换内容 |
 |------|----|------|----------|
 | Skill | `~/.cursor/skills/` | `~/.codex/skills/` 与 `%USERPROFILE%\\.config\\opencode\\skills/` | 整包镜像后按目标格式转换：Codex 生成 `agents/openai.yaml`；OpenCode 改写 `SKILL.md` frontmatter（`disable-model-invocation` → `metadata.opencode/autoinvoke`） |
+| Skill | `~/.cursor/skills/` | 豆包 `%LOCALAPPDATA%\\Doubao\\User Data\\Default\\.doubao\\agent_mode\\workspace\\.user_skills/` | 整包镜像后校正 `SKILL.md`：补 YAML `name`（kebab-case）与 `description`；豆包自带/用户已装的 Skill 不删除 |
+| Skill | `~/.cursor/skills/` | Antigravity `~/.gemini/config/skills/` | 整包镜像后校正 `SKILL.md`：`name` 为 kebab-case 且与目录同名，`description` 必填；已有 Skill 不删除 |
 | Rule | `~/.cursor/rules/**/*.mdc` | `~/.codex/AGENTS.md` 与 `%USERPROFILE%\\.config\\opencode\\AGENTS.md` | 去掉 frontmatter，整文件覆盖对应全局 `AGENTS.md` |
-| Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 按 Cursor 镜像写入并删除多余命令文件 |
-| Hook | `~/.cursor/hooks.json` 与 `~/.cursor/hooks/` | `~/.codex/hooks.json` 与 `~/.codex/hooks/` | 脚本目录镜像；事件改成 Codex 三层结构（如 `beforeShellExecution` → `PreToolUse` + matcher `Bash`）；相对路径改写为 `~/.codex/hooks/`；必要时写入 `features.hooks = true`，并迁移旧的 `codex_hooks` 配置。Open Code 无对等 `hooks.json` |
+| Rule | `~/.cursor/rules/**/*.mdc` | Antigravity `~/.gemini/GEMINI.md` | 去掉 Cursor frontmatter，写入 `mcp-hub:cursor-rules` 标记段；标记以外的内容保持不变 |
+| Command | `~/.cursor/commands/` | OpenCode `%USERPROFILE%\\.config\\opencode\\commands/<name>.md` | Codex 无对等目录；OpenCode 按 Cursor 镜像写入并删除多余命令文件。豆包 / Antigravity 无全局 Command 目录 |
+| Hook | `~/.cursor/hooks.json` 与 `~/.cursor/hooks/` | `~/.codex/hooks.json` 与 `~/.codex/hooks/` | 脚本目录镜像；事件改成 Codex 三层结构（如 `beforeShellExecution` → `PreToolUse` + matcher `Bash`）；相对路径改写为 `~/.codex/hooks/`；必要时写入 `features.hooks = true`，并迁移旧的 `codex_hooks` 配置。Open Code / 豆包 / Antigravity 无对等 `hooks.json` |
 
 界面在推荐流程提供「一键转换全部目标」，并在 Skill / Command / Rule / Hook 卡片各提供「一键转换」。转换产物以本机 Cursor 为准全量对齐附件后，再写成各客户端格式：Skill 整包镜像（多余文件与多余包会删除），Codex 写入 `agents/openai.yaml`，OpenCode 改写 `SKILL.md` 为其所识别的 frontmatter；Rule 整文件覆盖 `AGENTS.md`；OpenCode Command 删除 Cursor 中已不存在的命令文件；Hook 写入 Codex `hooks.json` 并镜像脚本。OpenCode **不读取、合并或覆盖** 其余 JSON/JSONC 配置。Skill 的正文与 `scripts/`、`references/` 两边共用。Codex `allow_implicit_invocation` **每次以 Cursor 的 `disable-model-invocation` 为准覆盖**（`true` → 禁止隐式调用；缺省则允许），不保留 Codex 旧值。`short_description` 从 description 生成，长度 25–64。OpenCode 将同一字段映射为 `metadata.opencode/autoinvoke`。
 

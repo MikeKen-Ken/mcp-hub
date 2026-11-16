@@ -21,7 +21,9 @@ import 'skill_folder_copy.dart';
 import 'skill_sync_result.dart';
 import 'skill_target.dart';
 import 'skill_webdav_folder_sync.dart';
+import 'antigravity_conversion.dart';
 import 'deepseek_conversion.dart';
+import 'doubao_conversion.dart';
 import 'workbuddy_conversion.dart';
 
 export 'skill_sync_result.dart';
@@ -64,6 +66,9 @@ class SkillSyncService extends ChangeNotifier {
   final ResourceConversion _conversion;
   final WorkBuddyConversion _workBuddyConversion = const WorkBuddyConversion();
   final DeepSeekConversion _deepSeekConversion = const DeepSeekConversion();
+  final DoubaoConversion _doubaoConversion = const DoubaoConversion();
+  final AntigravityConversion _antigravityConversion =
+      const AntigravityConversion();
   final PackageVersionStore _versionStore;
   final LastSyncAttemptStore? _attemptStore;
 
@@ -87,7 +92,9 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget.openCode => McpPaths.openCodeSkillsPath,
     SkillTarget.workBuddy ||
     SkillTarget.workBuddyAi ||
-    SkillTarget.deepSeekHarness => null,
+    SkillTarget.deepSeekHarness ||
+    SkillTarget.antigravity ||
+    SkillTarget.doubao => null,
   };
   String? deployPathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsPath,
@@ -96,6 +103,8 @@ class SkillSyncService extends ChangeNotifier {
     SkillTarget.workBuddy => McpPaths.workBuddySkillsPath,
     SkillTarget.workBuddyAi => McpPaths.workBuddyAiSkillsPath,
     SkillTarget.deepSeekHarness => McpPaths.deepSeekSkillsPath,
+    SkillTarget.doubao => McpPaths.doubaoSkillsPath,
+    SkillTarget.antigravity => McpPaths.antigravitySkillsPath,
   };
   String? resourceCachePathFor(
     AgentResourceKind resource,
@@ -111,6 +120,8 @@ class SkillSyncService extends ChangeNotifier {
       resource,
       target,
     ),
+    (_, SkillTarget.doubao || SkillTarget.antigravity) =>
+      AgentPlatforms.localResourcePath(resource, target),
     (AgentResourceKind.skill, SkillTarget.cursor) => McpPaths.cursorSkillsPath,
     (AgentResourceKind.skill, SkillTarget.codex) => McpPaths.codexSkillsPath,
     (AgentResourceKind.command, SkillTarget.cursor) =>
@@ -345,6 +356,12 @@ class SkillSyncService extends ChangeNotifier {
       if (target == SkillTarget.deepSeekHarness) {
         return _deepSeekConversion.convert(resource);
       }
+      if (target == SkillTarget.doubao) {
+        return _doubaoConversion.convert(resource);
+      }
+      if (target == SkillTarget.antigravity) {
+        return _antigravityConversion.convert(resource);
+      }
       if (!target.hasConfirmedConversionFormat) {
         return _unsupportedTarget(target);
       }
@@ -432,6 +449,34 @@ class SkillSyncService extends ChangeNotifier {
       }
     }
 
+    if (resource.canConvertToDoubao) {
+      try {
+        final result = await _doubaoConversion.convert(resource);
+        deployedFiles += result.deployedFiles;
+        packageCount += result.packageCount;
+        parts.add(result.message);
+        if (!result.ok) allOk = false;
+      } catch (error) {
+        allOk = false;
+        parts.add('Doubao: failed ($error)');
+        debugPrint('${resource.label} 转换 Doubao 失败: $error');
+      }
+    }
+
+    if (resource.canConvertToAntigravity) {
+      try {
+        final result = await _antigravityConversion.convert(resource);
+        deployedFiles += result.deployedFiles;
+        packageCount += result.packageCount;
+        parts.add(result.message);
+        if (!result.ok) allOk = false;
+      } catch (error) {
+        allOk = false;
+        parts.add('Antigravity: failed ($error)');
+        debugPrint('${resource.label} 转换 Antigravity 失败: $error');
+      }
+    }
+
     if (parts.isEmpty) {
       return SkillSyncResult(
         ok: false,
@@ -464,7 +509,9 @@ class SkillSyncService extends ChangeNotifier {
         if (!resource.canConvertToCodex &&
             !resource.canConvertTo(SkillTarget.openCode) &&
             !resource.canConvertToWorkBuddy &&
-            !resource.canConvertToDeepSeek) {
+            !resource.canConvertToDeepSeek &&
+            !resource.canConvertToDoubao &&
+            !resource.canConvertToAntigravity) {
           continue;
         }
         try {

@@ -41,5 +41,12 @@ abstract final class McpPaths {
   static String? get deepSeekMcpConfigPath => null;
   static String? get deepSeekSkillsPath => null;
   static String? get deepSeekAgentsMdPath => null;
+  static String? get antigravityHomeDirectory => null;
+  static String? get antigravityConfigDirectory => null;
+  static String? get antigravityMcpConfigPath => null;
+  static String? get antigravitySkillsPath => null;
+  static String? get antigravityGeminiMdPath => null;
+  static String? get doubaoWorkspacePath => null;
+  static String? get doubaoSkillsPath => null;
   static bool get isDesktopSupported => false;
 }
