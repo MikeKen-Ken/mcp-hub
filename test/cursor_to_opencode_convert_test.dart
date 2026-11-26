@@ -32,6 +32,13 @@ disable-model-invocation: true
     await File(
       p.join(rules.path, 'team.mdc'),
     ).writeAsString('---\nfoo: bar\n---\n# Team\n\nUse it.\n');
+    await File(
+      p.join(rules.path, 'style.md'),
+    ).writeAsString('# Style\n\nKeep clean.\n');
+    await Directory(p.join(rules.path, '.hidden')).create();
+    await File(
+      p.join(rules.path, '.hidden', 'ignored.md'),
+    ).writeAsString('Ignore hidden.\n');
     final commands = Directory(p.join(cursor.path, 'commands'))..createSync();
     await File(p.join(commands.path, 'ship.md')).writeAsString('# Ship\n');
     final target = Directory(p.join(root.path, 'opencode'))..createSync();
@@ -54,7 +61,7 @@ disable-model-invocation: true
       openCodeCommandsDir: p.join(target.path, 'commands'),
     );
 
-    expect(result.total, 3);
+    expect(result.total, 4);
     expect(
       await File(p.join(target.path, 'skills', 'demo', 'SKILL.md')).exists(),
       isTrue,
@@ -81,10 +88,12 @@ disable-model-invocation: true
       await Directory(p.join(target.path, 'skills', 'stale')).exists(),
       isFalse,
     );
-    expect(
-      await File(p.join(target.path, 'AGENTS.md')).readAsString(),
-      contains('Use it.'),
-    );
+    final agentsText = await File(
+      p.join(target.path, 'AGENTS.md'),
+    ).readAsString();
+    expect(agentsText, contains('Use it.'));
+    expect(agentsText, contains('Keep clean.'));
+    expect(agentsText, isNot(contains('Ignore hidden.')));
     expect(
       await File(p.join(target.path, 'commands', 'ship.md')).exists(),
       isTrue,

@@ -203,7 +203,7 @@ void main() {
     test('copies Skills and normalizes kebab-case frontmatter', () async {
       file(
         'cursor/skills/alpha/SKILL.md',
-        '---\ndescription: Alpha\n---\n\n# Alpha\n',
+        '---\ndescription: Alpha\ndisable-model-invocation: true\n---\n\n# Alpha\n',
       );
       file('cursor/skills/Code Review/SKILL.md', '# Review\n\nCheck diffs.\n');
       file('antigravity/skills/from-market/SKILL.md', 'keep');
@@ -215,11 +215,14 @@ void main() {
       );
 
       expect(result.packages, 2);
+      expect(result.errors, isEmpty);
       final alpha = File(
         p.join(temp.path, 'antigravity/skills/alpha/SKILL.md'),
       ).readAsStringSync();
       expect(alpha, contains('name: alpha'));
       expect(alpha, contains('description: "Alpha"'));
+      expect(alpha, contains('disable-model-invocation: true'));
+      expect(alpha, isNot(contains('"true"')));
       final review = File(
         p.join(temp.path, 'antigravity/skills/code-review/SKILL.md'),
       ).readAsStringSync();
@@ -236,6 +239,44 @@ void main() {
           p.join(temp.path, 'antigravity/skills/alpha/old.txt'),
         ).existsSync(),
         isFalse,
+      );
+    });
+
+    test('isolates single-package error without aborting other Skills', () async {
+      file(
+        'cursor/skills/alpha/SKILL.md',
+        '---\nname: alpha\ndescription: Alpha\n---\n\n# Alpha\n',
+      );
+      file(
+        'cursor/skills/blocked/SKILL.md',
+        '---\nname: blocked\ndescription: Blocked\n---\n\n# Blocked\n',
+      );
+      file(
+        'cursor/skills/zeta/SKILL.md',
+        '---\nname: zeta\ndescription: Zeta\n---\n\n# Zeta\n',
+      );
+      // Pre-create a regular file where directory `blocked` should be created to trigger a per-package failure.
+      file('antigravity/skills/blocked', 'file-blocks-dir');
+
+      final result = await converter.convertSkills(
+        sourceDir: p.join(temp.path, 'cursor', 'skills'),
+        targetDir: p.join(temp.path, 'antigravity', 'skills'),
+      );
+
+      expect(result.packages, 2);
+      expect(result.errors, hasLength(1));
+      expect(result.errors.single, contains('blocked'));
+      expect(
+        File(
+          p.join(temp.path, 'antigravity/skills/alpha/SKILL.md'),
+        ).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(
+          p.join(temp.path, 'antigravity/skills/zeta/SKILL.md'),
+        ).existsSync(),
+        isTrue,
       );
     });
 

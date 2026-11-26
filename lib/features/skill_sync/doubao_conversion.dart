@@ -58,15 +58,18 @@ class DoubaoConversion {
     final rewriteHint = result.rewrittenSkills == 0
         ? ''
         : ', normalized ${result.rewrittenSkills} SKILL.md frontmatter';
+    final errorHint = result.errors.isEmpty
+        ? ''
+        : '; failed ${result.errors.length} packages (${result.errors.join(', ')})';
     return SkillSyncResult(
-      ok: true,
+      ok: result.errors.isEmpty,
       target: target,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
-      message: result.packages == 0
+      message: result.packages == 0 && result.errors.isEmpty
           ? 'Cursor Skill directory is empty, nothing converted → $destination'
           : 'Converted ${result.packages} Skills from Cursor to Doubao '
-                '(${result.copiedFiles} files$rewriteHint; existing Doubao Skills not in Cursor are kept) → $destination',
+                '(${result.copiedFiles} files$rewriteHint; existing Doubao Skills not in Cursor are kept$errorHint) → $destination',
     );
   }
 }

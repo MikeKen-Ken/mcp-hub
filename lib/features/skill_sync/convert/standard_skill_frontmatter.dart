@@ -56,7 +56,9 @@ class StandardSkillFrontmatter {
       ..writeln('name: $name')
       ..writeln('description: ${quoteYaml(description)}');
     for (final entry in others.entries) {
-      buffer.writeln('${entry.key}: ${quoteYaml(entry.value)}');
+      buffer.writeln(
+        '${entry.key}: ${_formatFrontmatterValue(entry.value)}',
+      );
     }
     buffer.writeln('---');
     final body = doc.body.trim();
@@ -81,6 +83,13 @@ class StandardSkillFrontmatter {
     if (safe.length <= maxLength) return safe;
     final cut = safe.substring(0, maxLength).trimRight();
     return cut.isEmpty ? fallback : cut;
+  }
+
+  static String _formatFrontmatterValue(String value) {
+    final trimmed = value.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == 'true' || lower == 'false') return lower;
+    return quoteYaml(value);
   }
 
   /// 与 `DshCordisPatch.quote` 相同的双引号标量，避免冒号、换行破坏 YAML。

@@ -133,15 +133,18 @@ class ResourceConversion {
     final extraHint = skills.deletedEntries == 0
         ? ''
         : '，包内删除 ${skills.deletedEntries} 项';
+    final errorHint = skills.errors.isEmpty
+        ? ''
+        : '；失败 ${skills.errors.length} 个包（${skills.errors.join('，')}）';
     return SkillSyncResult(
-      ok: true,
+      ok: skills.errors.isEmpty,
       target: SkillTarget.openCode,
       deployedFiles: skills.copiedFiles,
       packageCount: skills.packages,
-      message: skills.packages == 0
+      message: skills.packages == 0 && skills.errors.isEmpty
           ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
           : '已从 Cursor 批量转换 ${skills.packages} 个 Skill 到 Open Code'
-                '（复制 ${skills.copiedFiles} 个文件$extraHint$removeHint）→ $target',
+                '（复制 ${skills.copiedFiles} 个文件$extraHint$removeHint$errorHint）→ $target',
     );
   }
 
@@ -231,16 +234,19 @@ class ResourceConversion {
     final removed = converted.removedPackages;
     final removeHint = removed == 0 ? '' : '，并删除多余 $removed 个包';
     final extraHint = deletedInPacks == 0 ? '' : '，包内删除 $deletedInPacks 项';
+    final errorHint = converted.errors.isEmpty
+        ? ''
+        : '；失败 ${converted.errors.length} 个包（${converted.errors.join('，')}）';
     return SkillSyncResult(
-      ok: true,
+      ok: converted.errors.isEmpty,
       target: SkillTarget.codex,
       deployedFiles: copied,
       packageCount: converted.items.length,
-      message: converted.items.isEmpty
+      message: converted.items.isEmpty && converted.errors.isEmpty
           ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
           : '已从 Cursor 批量转换 ${converted.items.length} 个 Skill 到 Codex'
                 '（复制 $copied 个文件，并写入 agents/openai.yaml'
-                '$extraHint$removeHint）→ $target',
+                '$extraHint$removeHint$errorHint）→ $target',
     );
   }
 

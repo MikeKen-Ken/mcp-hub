@@ -28,12 +28,14 @@ class OpenCodeSkillsConvertResult {
     required this.copiedFiles,
     required this.deletedEntries,
     this.removedPackages = 0,
+    this.errors = const [],
   });
 
   final int packages;
   final int copiedFiles;
   final int deletedEntries;
   final int removedPackages;
+  final List<String> errors;
 }
 
 /// Command 文件转换结果。
@@ -106,6 +108,7 @@ class CursorToOpenCodeConverter {
     var packages = 0;
     var copiedFiles = 0;
     var deletedEntries = 0;
+    final errors = <String>[];
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
@@ -114,14 +117,18 @@ class CursorToOpenCodeConverter {
       if (!await skillMd.exists()) continue;
       final name = p.basename(entity.path);
       final packageDir = p.join(targetDir, name);
-      final mirrored = await folderCopy.mirrorContents(
-        sourceDir: entity.path,
-        targetDir: packageDir,
-      );
-      await _rewriteOpenCodeSkillMd(packageDir);
-      packages += 1;
-      copiedFiles += mirrored.copiedFiles;
-      deletedEntries += mirrored.deletedEntries;
+      try {
+        final mirrored = await folderCopy.mirrorContents(
+          sourceDir: entity.path,
+          targetDir: packageDir,
+        );
+        await _rewriteOpenCodeSkillMd(packageDir);
+        packages += 1;
+        copiedFiles += mirrored.copiedFiles;
+        deletedEntries += mirrored.deletedEntries;
+      } catch (error) {
+        errors.add('$name: $error');
+      }
     }
 
     final removedPackages = await folderCopy.removeStaleSkillPackages(
@@ -133,6 +140,7 @@ class CursorToOpenCodeConverter {
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
       removedPackages: removedPackages,
+      errors: errors,
     );
   }
 
@@ -158,9 +166,10 @@ class CursorToOpenCodeConverter {
       recursive: true,
       followLinks: false,
     )) {
-      if (entity is File && p.extension(entity.path).toLowerCase() == '.mdc') {
-        files.add(entity);
-      }
+      if (entity is! File || !_isRuleFile(entity.path)) continue;
+      final relative = p.relative(entity.path, from: source.path);
+      if (p.split(relative).any((part) => part.startsWith('.'))) continue;
+      files.add(entity);
     }
     files.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
     final sections = <String>[];
@@ -210,6 +219,11 @@ class CursorToOpenCodeConverter {
       keepNames: written,
     );
     return OpenCodeCommandsConvertResult(written: count, deleted: deleted);
+  }
+
+  bool _isRuleFile(String path) {
+    final extension = p.extension(path).toLowerCase();
+    return extension == '.mdc' || extension == '.md';
   }
 
   Future<int> _deleteExtraCommandFiles({

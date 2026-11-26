@@ -13,12 +13,14 @@ class AntigravitySkillsConvertResult {
     required this.copiedFiles,
     required this.deletedEntries,
     required this.rewrittenSkills,
+    this.errors = const [],
   });
 
   final int packages;
   final int copiedFiles;
   final int deletedEntries;
   final int rewrittenSkills;
+  final List<String> errors;
 }
 
 /// 将 Cursor 的 Skill、Rule 写入 Antigravity 的全局目录。
@@ -59,33 +61,42 @@ class CursorToAntigravityConverter {
     var copiedFiles = 0;
     var deletedEntries = 0;
     var rewrittenSkills = 0;
+    final errors = <String>[];
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
       }
       if (!await File(p.join(entity.path, 'SKILL.md')).exists()) continue;
       final sourceName = p.basename(entity.path);
-      final doc = await SkillMdDocument.parseFile(
-        p.join(entity.path, 'SKILL.md'),
-      );
-      final name = StandardSkillFrontmatter.skillNameFor(sourceName, doc.name);
-      final packageDir = p.join(targetDir, name);
-      final mirrored = await folderCopy.mirrorContents(
-        sourceDir: entity.path,
-        targetDir: packageDir,
-      );
-      if (await frontmatter.ensure(packageDir: packageDir, name: name)) {
-        rewrittenSkills += 1;
+      try {
+        final doc = await SkillMdDocument.parseFile(
+          p.join(entity.path, 'SKILL.md'),
+        );
+        final name = StandardSkillFrontmatter.skillNameFor(
+          sourceName,
+          doc.name,
+        );
+        final packageDir = p.join(targetDir, name);
+        final mirrored = await folderCopy.mirrorContents(
+          sourceDir: entity.path,
+          targetDir: packageDir,
+        );
+        if (await frontmatter.ensure(packageDir: packageDir, name: name)) {
+          rewrittenSkills += 1;
+        }
+        packages += 1;
+        copiedFiles += mirrored.copiedFiles;
+        deletedEntries += mirrored.deletedEntries;
+      } catch (error) {
+        errors.add('$sourceName: $error');
       }
-      packages += 1;
-      copiedFiles += mirrored.copiedFiles;
-      deletedEntries += mirrored.deletedEntries;
     }
     return AntigravitySkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
       rewrittenSkills: rewrittenSkills,
+      errors: errors,
     );
   }
 

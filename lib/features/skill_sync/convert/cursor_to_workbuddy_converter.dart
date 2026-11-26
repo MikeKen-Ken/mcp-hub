@@ -10,11 +10,13 @@ class WorkBuddySkillsConvertResult {
     required this.packages,
     required this.copiedFiles,
     required this.deletedEntries,
+    this.errors = const [],
   });
 
   final int packages;
   final int copiedFiles;
   final int deletedEntries;
+  final List<String> errors;
 }
 
 /// 将 Cursor 的 Skill、Rule 写入 WorkBuddy / WorkBuddy AI 的用户级目录。
@@ -50,23 +52,30 @@ class CursorToWorkBuddyConverter {
     var packages = 0;
     var copiedFiles = 0;
     var deletedEntries = 0;
+    final errors = <String>[];
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
       }
       if (!await File(p.join(entity.path, 'SKILL.md')).exists()) continue;
-      final mirrored = await folderCopy.mirrorContents(
-        sourceDir: entity.path,
-        targetDir: p.join(targetDir, p.basename(entity.path)),
-      );
-      packages += 1;
-      copiedFiles += mirrored.copiedFiles;
-      deletedEntries += mirrored.deletedEntries;
+      final name = p.basename(entity.path);
+      try {
+        final mirrored = await folderCopy.mirrorContents(
+          sourceDir: entity.path,
+          targetDir: p.join(targetDir, name),
+        );
+        packages += 1;
+        copiedFiles += mirrored.copiedFiles;
+        deletedEntries += mirrored.deletedEntries;
+      } catch (error) {
+        errors.add('$name: $error');
+      }
     }
     return WorkBuddySkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
+      errors: errors,
     );
   }
 

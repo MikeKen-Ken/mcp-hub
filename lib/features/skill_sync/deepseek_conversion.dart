@@ -69,15 +69,18 @@ class DeepSeekConversion {
     final rewriteHint = result.rewrittenSkills == 0
         ? ''
         : '; rewrote frontmatter on ${result.rewrittenSkills} Skills so DeepSeek Harness will load them';
+    final errorHint = result.errors.isEmpty
+        ? ''
+        : '; failed ${result.errors.length} packages (${result.errors.join(', ')})';
     return SkillSyncResult(
-      ok: true,
+      ok: result.errors.isEmpty,
       target: SkillTarget.deepSeekHarness,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
-      message: result.packages == 0
+      message: result.packages == 0 && result.errors.isEmpty
           ? 'Cursor Skill directory is empty, nothing converted → $destination'
           : 'Copied ${result.packages} Skills from Cursor to DeepSeek Harness '
-                '(${result.copiedFiles} files; existing DeepSeek Harness Skills not in Cursor are kept$rewriteHint) → $destination',
+                '(${result.copiedFiles} files; existing DeepSeek Harness Skills not in Cursor are kept$rewriteHint$errorHint) → $destination',
     );
   }
 

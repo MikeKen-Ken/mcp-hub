@@ -27,10 +27,12 @@ class CodexSkillConvertAllResult {
   const CodexSkillConvertAllResult({
     required this.items,
     this.removedPackages = 0,
+    this.errors = const [],
   });
 
   final List<CodexSkillConvertItem> items;
   final int removedPackages;
+  final List<String> errors;
 }
 
 /// 批量把 Cursor Skill 目录转换成 Codex 可接受的包格式并复制过去。
@@ -62,6 +64,7 @@ class CursorToCodexSkillConverter {
     await Directory(codexSkillsDir).create(recursive: true);
 
     final items = <CodexSkillConvertItem>[];
+    final errors = <String>[];
     await for (final entity in sourceRoot.list(followLinks: false)) {
       if (entity is! Directory) continue;
       final name = p.basename(entity.path);
@@ -70,12 +73,16 @@ class CursorToCodexSkillConverter {
       final skillMd = File(p.join(entity.path, 'SKILL.md'));
       if (!await skillMd.exists()) continue;
 
-      items.add(
-        await convertOne(
-          cursorSkillDir: entity.path,
-          codexSkillsDir: codexSkillsDir,
-        ),
-      );
+      try {
+        items.add(
+          await convertOne(
+            cursorSkillDir: entity.path,
+            codexSkillsDir: codexSkillsDir,
+          ),
+        );
+      } catch (error) {
+        errors.add('$name: $error');
+      }
     }
 
     items.sort((a, b) => a.packageName.compareTo(b.packageName));
@@ -86,6 +93,7 @@ class CursorToCodexSkillConverter {
     return CodexSkillConvertAllResult(
       items: items,
       removedPackages: removedPackages,
+      errors: errors,
     );
   }
 

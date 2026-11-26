@@ -12,12 +12,14 @@ class DeepSeekSkillsConvertResult {
     required this.copiedFiles,
     required this.deletedEntries,
     required this.rewrittenSkills,
+    this.errors = const [],
   });
 
   final int packages;
   final int copiedFiles;
   final int deletedEntries;
   final int rewrittenSkills;
+  final List<String> errors;
 }
 
 /// 将 Cursor 的 Skill、Rule 写入 DeepSeek Harness 的用户目录。
@@ -61,28 +63,34 @@ class CursorToDeepSeekConverter {
     var copiedFiles = 0;
     var deletedEntries = 0;
     var rewrittenSkills = 0;
+    final errors = <String>[];
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
       }
       if (!await File(p.join(entity.path, 'SKILL.md')).exists()) continue;
       final name = p.basename(entity.path);
-      final mirrored = await folderCopy.mirrorContents(
-        sourceDir: entity.path,
-        targetDir: p.join(targetDir, name),
-      );
-      if (await _ensureSkillFrontmatter(p.join(targetDir, name))) {
-        rewrittenSkills += 1;
+      try {
+        final mirrored = await folderCopy.mirrorContents(
+          sourceDir: entity.path,
+          targetDir: p.join(targetDir, name),
+        );
+        if (await _ensureSkillFrontmatter(p.join(targetDir, name))) {
+          rewrittenSkills += 1;
+        }
+        packages += 1;
+        copiedFiles += mirrored.copiedFiles;
+        deletedEntries += mirrored.deletedEntries;
+      } catch (error) {
+        errors.add('$name: $error');
       }
-      packages += 1;
-      copiedFiles += mirrored.copiedFiles;
-      deletedEntries += mirrored.deletedEntries;
     }
     return DeepSeekSkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
       rewrittenSkills: rewrittenSkills,
+      errors: errors,
     );
   }
 
