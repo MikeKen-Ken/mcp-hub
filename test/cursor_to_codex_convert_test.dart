@@ -70,6 +70,25 @@ disable-model-invocation: false
       expect(enabled.disableModelInvocation, isFalse);
       expect(enabled.allowImplicitInvocationFromFrontmatter, isTrue);
     });
+
+    test('处理 UTF-8 BOM、反转义双引号及嵌套 metadata rawEntries', () {
+      final doc = SkillMdDocument.parse(
+        '\uFEFF---\n'
+        'name: quoted-skill\n'
+        'description: "包含 \\"引号\\" 的描述"\n'
+        'alwaysApply: false\n'
+        'metadata:\n'
+        '  author: ken\n'
+        '  version: "1.0"\n'
+        '---\n\n'
+        '# Quoted\n',
+      );
+      expect(doc.name, 'quoted-skill');
+      expect(doc.description, '包含 "引号" 的描述');
+      expect(doc.alwaysApply, isFalse);
+      expect(doc.rawEntries['metadata'], contains('author: ken'));
+      expect(doc.rawEntries['metadata'], contains('version: "1.0"'));
+    });
   });
 
   group('CursorToCodexSkillConverter', () {
@@ -307,6 +326,31 @@ description: |
         ),
       );
     });
+
+    test('中文短描述用中文补全且不二次转义', () {
+      final doc = SkillMdDocument.parse('''
+---
+name: pr-helper
+description: "编写 PR 正文"
+---
+
+# 编写 PR
+''');
+      final yaml = CursorToCodexSkillConverter.buildOpenAiYaml(
+        packageName: 'pr-helper',
+        document: doc,
+      );
+      final short = _shortDescriptionOf(yaml);
+      expect(short, startsWith('编写 PR 正文'));
+      expect(short, isNot(contains('For related tasks')));
+      expect(
+        short.length,
+        inInclusiveRange(
+          CursorToCodexSkillConverter.shortDescriptionMin,
+          CursorToCodexSkillConverter.shortDescriptionMax,
+        ),
+      );
+    });
   });
 
   group('CursorToCodexAgentsConverter', () {
@@ -355,6 +399,41 @@ alwaysApply: true
       expect(text, contains('## Local path rules'));
       expect(text, contains('MUST reply in English.'));
       expect(text, isNot(contains('alwaysApply')));
+    });
+
+    test('支持 .md、跳过 alwaysApply: false 并去重一级标题', () async {
+      final rules = Directory(p.join(temp.path, 'rules'));
+      await rules.create(recursive: true);
+      await File(p.join(rules.path, 'global.md')).writeAsString('''
+---
+alwaysApply: true
+---
+# 全局规则
+
+不要硬编码路径。
+''');
+      await File(p.join(rules.path, 'conditional.mdc')).writeAsString('''
+---
+description: Conditional only
+alwaysApply: false
+---
+# Conditional
+
+Should not be injected globally.
+''');
+
+      final out = p.join(temp.path, 'AGENTS.md');
+      final items = await const CursorToCodexAgentsConverter().convertAll(
+        cursorRulesDir: rules.path,
+        agentsMdPath: out,
+      );
+
+      expect(items, hasLength(1));
+      final text = await File(out).readAsString();
+      expect(text, contains('## 全局规则'));
+      expect(text, isNot(contains('## 全局规则\n\n# 全局规则')));
+      expect(text, isNot(contains('\n# 全局规则\n')));
+      expect(text, isNot(contains('Should not be injected globally.')));
     });
   });
 }

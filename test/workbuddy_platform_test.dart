@@ -142,6 +142,7 @@ void main() {
       file('cursor/rules/notes.txt', 'ignored');
       file('wb/rules/mine.md', 'user rule');
       file('wb/rules/cursor-sync/old.mdc', 'stale');
+      file('wb/rules/cursor-sync/old-dir/dead.md', 'stale-nested');
 
       final count = await converter.convertRules(
         sourceDir: p.join(temp.path, 'cursor', 'rules'),
@@ -154,6 +155,7 @@ void main() {
       expect(File(p.join(managed, 'nested', 'b.md')).readAsStringSync(), 'B');
       expect(File(p.join(managed, 'notes.txt')).existsSync(), isFalse);
       expect(File(p.join(managed, 'old.mdc')).existsSync(), isFalse);
+      expect(Directory(p.join(managed, 'old-dir')).existsSync(), isFalse);
       expect(
         File(p.join(temp.path, 'wb', 'rules', 'mine.md')).readAsStringSync(),
         'user rule',

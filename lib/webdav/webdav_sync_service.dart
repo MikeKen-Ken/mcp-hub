@@ -29,7 +29,7 @@ class WebDavSyncService extends ChangeNotifier {
     CatalogZipCodec? catalogZip,
     WebDavZipTransfer? zipTransfer,
     PackageVersionStore? versionStore,
-    LastSyncAttemptStore? this._attemptStore,
+    this._attemptStore,
     this.onAutoSyncLogged,
   }) : _baseStore = baseStore ?? CatalogSyncBaseStore(),
        _catalogZip = catalogZip ?? CatalogZipCodec(),

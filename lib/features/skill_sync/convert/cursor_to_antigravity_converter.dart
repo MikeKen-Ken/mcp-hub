@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
+import 'cursor_rule_markdown.dart';
 import 'skill_md_document.dart';
 import 'standard_skill_frontmatter.dart';
 
@@ -100,39 +101,15 @@ class CursorToAntigravityConverter {
     );
   }
 
-  /// 把 Cursor `.mdc` / `.md` 规则写入 [geminiMdPath] 的标记段，返回写入条数。
+  /// 把全局 Cursor `.mdc` / `.md` 规则写入 [geminiMdPath] 的标记段，返回写入条数。
   Future<int> convertRules({
     required String sourceDir,
     required String geminiMdPath,
   }) async {
-    final source = Directory(sourceDir);
-    final sections = <String>[];
-    if (await source.exists()) {
-      final files = <File>[];
-      await for (final entity in source.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File || !_isRuleFile(entity.path)) continue;
-        final relative = p.relative(entity.path, from: source.path);
-        if (p.split(relative).any((part) => part.startsWith('.'))) continue;
-        files.add(entity);
-      }
-      files.sort(
-        (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
-      );
-      for (final file in files) {
-        final relative = p.normalize(p.relative(file.path, from: source.path));
-        final doc = await SkillMdDocument.parseFile(file.path);
-        final body = doc.body.trim();
-        if (body.isEmpty) continue;
-        final heading =
-            doc.title ??
-            _nonEmpty(doc.frontmatter['description']) ??
-            p.basenameWithoutExtension(relative);
-        sections.add('## $heading\n\n$body');
-      }
-    }
+    final rules = await CursorRuleMarkdown.loadGlobalRules(sourceDir);
+    final sections = [
+      for (final r in rules) '## ${r.heading}\n\n${r.body}',
+    ];
 
     final managed = StringBuffer()
       ..writeln(rulesBegin)
@@ -156,35 +133,14 @@ class CursorToAntigravityConverter {
     final existing = await file.exists() ? await file.readAsString() : '';
     await file.parent.create(recursive: true);
     await file.writeAsString(
-      _mergeMarked(existing, managed.toString().trimRight()),
+      CursorRuleMarkdown.mergeMarked(
+        existing,
+        managed.toString().trimRight(),
+        beginMarker: rulesBegin,
+        endMarker: rulesEnd,
+        targetName: 'GEMINI.md',
+      ),
     );
     return sections.length;
-  }
-
-  bool _isRuleFile(String path) {
-    final extension = p.extension(path).toLowerCase();
-    return extension == '.mdc' || extension == '.md';
-  }
-
-  static String? _nonEmpty(String? value) {
-    final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return null;
-    return trimmed;
-  }
-
-  static String _mergeMarked(String existing, String managed) {
-    final begin = existing.indexOf(rulesBegin);
-    final end = existing.indexOf(rulesEnd);
-    if (begin >= 0 && end > begin) {
-      final after = end + rulesEnd.length;
-      return existing.replaceRange(begin, after, managed);
-    }
-    if (begin >= 0 || end >= 0) {
-      throw const FormatException(
-        'GEMINI.md cursor-rules markers are incomplete; nothing was written',
-      );
-    }
-    if (existing.trim().isEmpty) return '$managed\n';
-    return '${existing.trimRight()}\n\n$managed\n';
   }
 }

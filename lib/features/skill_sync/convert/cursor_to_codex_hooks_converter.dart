@@ -108,9 +108,17 @@ class CursorToCodexHooksConverter {
           if (items is! List) continue;
           for (final item in items) {
             if (item is! Map) continue;
+            final itemMap = Map<String, dynamic>.from(item);
+            if (_isCursorOnlyGlobHook(
+              cursorEvent,
+              itemMap['matcher']?.toString(),
+            )) {
+              skipped.add('$cursorEvent(Glob)');
+              continue;
+            }
             final group = _toCodexGroup(
               cursorEvent: cursorEvent,
-              item: Map<String, dynamic>.from(item),
+              item: itemMap,
             );
             grouped.putIfAbsent(codexEvent, () => []).add(group);
             converted += 1;
@@ -187,6 +195,25 @@ class CursorToCodexHooksConverter {
     return raw;
   }
 
+  static bool _isCursorOnlyGlobHook(String cursorEvent, String? matcher) {
+    if (cursorEvent != 'preToolUse' && cursorEvent != 'postToolUse') {
+      return false;
+    }
+    var raw = (matcher ?? '').trim();
+    if (raw.isEmpty) return false;
+    raw = raw.replaceAll(RegExp(r'^\^|\$$'), '');
+    if (raw.startsWith('(') && raw.endsWith(')')) {
+      raw = raw.substring(1, raw.length - 1);
+    }
+    final tokens = raw
+        .split('|')
+        .map((t) => t.trim().toLowerCase())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return false;
+    return tokens.every((t) => t == 'glob' || t == 'glob_file_search');
+  }
+
   /// 把指向 Cursor `hooks/` 的相对路径改写成 Codex 用户目录。
   static ({String unix, String windows}) relocateHookCommand(String command) {
     var unix = command.replaceAll(r'\', '/');
@@ -196,9 +223,9 @@ class CursorToCodexHooksConverter {
       RegExp(r'''(^|[\s"'])hooks/'''),
       (m) => '${m[1]}~/.codex/hooks/',
     );
-    final windows = unix.replaceAll(
-      '~/.codex/hooks/',
-      r'%USERPROFILE%\.codex\hooks\',
+    final windows = unix.replaceAllMapped(
+      RegExp(r'("?)~\/\.codex\/hooks\/([^\s"\x27]+)\1'),
+      (m) => '"%USERPROFILE%\\.codex\\hooks\\${m[2]!.replaceAll('/', r'\')}"',
     );
     return (unix: unix, windows: windows);
   }

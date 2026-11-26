@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
+import 'cursor_rule_markdown.dart';
 import 'opencode_skill_md.dart';
 import 'skill_md_document.dart';
 
@@ -53,7 +54,8 @@ class OpenCodeCommandsConvertResult {
 ///
 /// 不读取或修改 OpenCode 的 JSON/JSONC 配置。
 /// Skill 先整包镜像，再把 `SKILL.md` 转成 OpenCode frontmatter；
-/// Rule 去掉 `.mdc` frontmatter 写入 `AGENTS.md`；Command 写成 `.md`。
+/// Rule 过滤 `alwaysApply: false` 后去掉 frontmatter 写入 `AGENTS.md`；
+/// Command 保留子目录命名空间并补齐 OpenCode frontmatter 写成 `.md`。
 class CursorToOpenCodeConverter {
   const CursorToOpenCodeConverter({
     this.folderCopy = const SkillFolderCopy(),
@@ -161,24 +163,45 @@ class CursorToOpenCodeConverter {
     if (!await source.exists()) {
       return 0;
     }
-    final files = <File>[];
-    await for (final entity in source.list(
-      recursive: true,
-      followLinks: false,
-    )) {
-      if (entity is! File || !_isRuleFile(entity.path)) continue;
-      final relative = p.relative(entity.path, from: source.path);
-      if (p.split(relative).any((part) => part.startsWith('.'))) continue;
-      files.add(entity);
+
+    final rules = await CursorRuleMarkdown.loadGlobalRules(sourceDir);
+    final sections = [
+      for (final r in rules) '## ${r.heading}\n\n${r.body}',
+    ];
+
+    final existing = await output.exists() ? await output.readAsString() : '';
+    final hasMarkers =
+        existing.contains(CursorRuleMarkdown.rulesBegin) ||
+        existing.contains(CursorRuleMarkdown.rulesEnd);
+
+    if (hasMarkers) {
+      final managed = StringBuffer()
+        ..writeln(CursorRuleMarkdown.rulesBegin)
+        ..writeln('# Rules converted from Cursor')
+        ..writeln()
+        ..writeln(
+          'OpenCode loads this file as the global `AGENTS.md`. '
+          'These sections were converted from `~/.cursor/rules`.',
+        )
+        ..writeln();
+      if (sections.isEmpty) {
+        managed.writeln(
+          '(The Cursor Rule directory is empty; no sections were written.)',
+        );
+      } else {
+        managed.writeln(sections.join('\n\n'));
+      }
+      managed.writeln(CursorRuleMarkdown.rulesEnd);
+      await output.writeAsString(
+        CursorRuleMarkdown.mergeMarked(
+          existing,
+          managed.toString().trimRight(),
+          targetName: 'AGENTS.md',
+        ),
+      );
+      return sections.length;
     }
-    files.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
-    final sections = <String>[];
-    for (final file in files) {
-      final doc = await SkillMdDocument.parseFile(file.path);
-      final body = doc.body.trim();
-      if (body.isEmpty) continue;
-      sections.add(body);
-    }
+
     if (sections.isEmpty) {
       await output.writeAsString('');
       return 0;
@@ -187,7 +210,7 @@ class CursorToOpenCodeConverter {
     return sections.length;
   }
 
-  /// 写入转换后的 Command，并删除目标侧多余的 `.md` / `.mdc`。
+  /// 写入转换后的 Command（保留子目录与 OpenCode frontmatter），并清理多余项。
   Future<OpenCodeCommandsConvertResult> convertCommands({
     required String sourceDir,
     required String targetDir,
@@ -203,47 +226,117 @@ class CursorToOpenCodeConverter {
       recursive: true,
       followLinks: false,
     )) {
-      if (entity is! File || p.basename(entity.path).startsWith('.')) continue;
+      if (entity is! File) continue;
+      final rel = p.relative(entity.path, from: source.path);
+      if (p.split(rel).any((part) => part.startsWith('.'))) continue;
       final extension = p.extension(entity.path).toLowerCase();
       if (extension != '.md' && extension != '.mdc') continue;
-      final name = p.basenameWithoutExtension(entity.path);
-      final outputName = '$name.md';
-      final output = File(p.join(targetDir, outputName));
+
+      final relWithoutExt = extension == '.mdc'
+          ? '${rel.substring(0, rel.length - 4)}.md'
+          : rel;
+      final normalizedRel = p.normalize(relWithoutExt);
+      final output = File(p.join(targetDir, normalizedRel));
       await output.parent.create(recursive: true);
-      await output.writeAsString(await entity.readAsString());
-      written.add(outputName);
+
+      final doc = await SkillMdDocument.parseFile(entity.path);
+      await output.writeAsString(_formatOpenCodeCommand(doc, normalizedRel));
+      written.add(normalizedRel);
       count++;
     }
     final deleted = await _deleteExtraCommandFiles(
       targetDir: targetDir,
-      keepNames: written,
+      keepRelativePaths: written,
     );
     return OpenCodeCommandsConvertResult(written: count, deleted: deleted);
   }
 
-  bool _isRuleFile(String path) {
-    final extension = p.extension(path).toLowerCase();
-    return extension == '.mdc' || extension == '.md';
+  String _formatOpenCodeCommand(SkillMdDocument doc, String relativePath) {
+    final fallbackName = p.basenameWithoutExtension(relativePath);
+    final rawDescription =
+        doc.description ??
+        doc.title ??
+        _firstNonEmptyLine(doc.body) ??
+        fallbackName;
+    final description = rawDescription.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    final buffer = StringBuffer()
+      ..writeln('---')
+      ..writeln('description: ${_quoteYaml(description)}');
+    for (final key in const ['agent', 'model', 'subtask']) {
+      final value = doc.frontmatter[key]?.trim();
+      if (value != null && value.isNotEmpty) {
+        final rawEntry = doc.rawEntries[key];
+        if (rawEntry != null && rawEntry.isNotEmpty) {
+          buffer.writeln(rawEntry);
+        } else {
+          buffer.writeln('$key: $value');
+        }
+      }
+    }
+    buffer.writeln('---');
+    final body = doc.body.trim();
+    if (body.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(body);
+    }
+    buffer.writeln();
+    return buffer.toString();
+  }
+
+  static String? _firstNonEmptyLine(String body) {
+    for (final line in body.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      return trimmed.length > 120 ? '${trimmed.substring(0, 119)}…' : trimmed;
+    }
+    return null;
+  }
+
+  static String _quoteYaml(String value) {
+    final escaped = value
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n');
+    return '"$escaped"';
   }
 
   Future<int> _deleteExtraCommandFiles({
     required String targetDir,
-    required Set<String> keepNames,
+    required Set<String> keepRelativePaths,
   }) async {
     final target = Directory(targetDir);
     if (!await target.exists()) return 0;
     var deleted = 0;
-    await for (final entity in target.list(followLinks: false)) {
-      final name = p.basename(entity.path);
-      if (name.startsWith('.')) continue;
-      if (keepNames.contains(name)) continue;
-      if (entity is File) {
-        final ext = p.extension(name).toLowerCase();
-        if (ext != '.md' && ext != '.mdc') continue;
-      }
-      await entity.delete(recursive: true);
+    await for (final entity in target.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      final rel = p.normalize(p.relative(entity.path, from: target.path));
+      if (p.split(rel).any((part) => part.startsWith('.'))) continue;
+      final ext = p.extension(rel).toLowerCase();
+      if (ext != '.md' && ext != '.mdc') continue;
+      if (keepRelativePaths.contains(rel)) continue;
+      await entity.delete();
       deleted += 1;
     }
+    await _pruneEmptyDirectories(target);
     return deleted;
+  }
+
+  Future<void> _pruneEmptyDirectories(Directory root) async {
+    final dirs = <Directory>[];
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is Directory) dirs.add(entity);
+    }
+    dirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final dir in dirs) {
+      if (!await dir.exists()) continue;
+      if (await dir.list(followLinks: false).isEmpty) {
+        await dir.delete();
+      }
+    }
   }
 }

@@ -242,6 +242,32 @@ void main() {
       );
     });
 
+    test('preserves nested metadata and avoids double-escaping quotes', () async {
+      file(
+        'cursor/skills/quoted/SKILL.md',
+        '---\n'
+        'description: "Use \\"strict\\" mode"\n'
+        'metadata:\n'
+        '  owner: core\n'
+        '  tier: "1"\n'
+        '---\n\n'
+        '# Quoted\n',
+      );
+
+      final result = await converter.convertSkills(
+        sourceDir: p.join(temp.path, 'cursor', 'skills'),
+        targetDir: p.join(temp.path, 'antigravity', 'skills'),
+      );
+
+      expect(result.errors, isEmpty);
+      final skillMd = File(
+        p.join(temp.path, 'antigravity/skills/quoted/SKILL.md'),
+      ).readAsStringSync();
+      expect(skillMd, contains(r'description: "Use \"strict\" mode"'));
+      expect(skillMd, isNot(contains(r'\\\"')));
+      expect(skillMd, contains('metadata:\n  owner: core\n  tier: "1"'));
+    });
+
     test('isolates single-package error without aborting other Skills', () async {
       file(
         'cursor/skills/alpha/SKILL.md',
@@ -286,6 +312,10 @@ void main() {
         '---\ndescription: Always apply\n---\n\n# Always\n\nDo this.\n',
       );
       file('cursor/rules/nested/b.md', '# Sometimes\n\nMaybe.\n');
+      file(
+        'cursor/rules/opt_out.mdc',
+        '---\ndescription: Opt out\nalwaysApply: false\n---\n\n# OptOut\n\nSkip me.\n',
+      );
       file('cursor/rules/notes.txt', 'ignored');
       file('gemini/GEMINI.md', 'User preface.\n\nUser ending.\n');
 
@@ -304,6 +334,8 @@ void main() {
         lessThan(text.indexOf(CursorToAntigravityConverter.rulesBegin)),
       );
       expect(text.indexOf('## Always'), lessThan(text.indexOf('## Sometimes')));
+      expect(text, isNot(contains('## Always\n\n# Always')));
+      expect(text, isNot(contains('Skip me.')));
       expect(text, contains('Do this.'));
       expect(text, isNot(contains('ignored')));
 

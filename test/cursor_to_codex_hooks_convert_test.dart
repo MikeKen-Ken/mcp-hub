@@ -114,7 +114,7 @@ void main() {
     expect(preTool['matcher'], 'Bash');
     final handler = (preTool['hooks'] as List).first as Map<String, dynamic>;
     expect(handler['command'], '~/.codex/hooks/approve.sh');
-    expect(handler['commandWindows'], r'%USERPROFILE%\.codex\hooks\approve.sh');
+    expect(handler['commandWindows'], r'"%USERPROFILE%\.codex\hooks\approve.sh"');
     expect(handler['timeout'], 12);
 
     final submit = hooks['UserPromptSubmit'] as List;
@@ -143,11 +143,44 @@ void main() {
     expect(config, contains('rmcp_client = true'));
   });
 
+  test('跳过仅匹配 Cursor Glob 的 preToolUse Hook', () async {
+    final cursorDir = Directory(p.join(temp.path, 'cursor'))..createSync();
+    final codexDir = Directory(p.join(temp.path, 'codex'))..createSync();
+    await File(p.join(cursorDir.path, 'hooks.json')).writeAsString(
+      jsonEncode({
+        'version': 1,
+        'hooks': {
+          'preToolUse': [
+            {
+              'command': 'node ./hooks/block-unbounded-glob.mjs',
+              'matcher': '^(Glob|glob|glob_file_search)\$',
+              'timeout': 5,
+            },
+          ],
+        },
+      }),
+    );
+
+    final result = await const CursorToCodexHooksConverter().convertAll(
+      cursor: CursorHooksLayout(configDirectory: cursorDir.path),
+      codex: CursorHooksLayout(configDirectory: codexDir.path),
+    );
+
+    expect(result.convertedHooks, 0);
+    expect(result.skippedEvents, ['preToolUse(Glob)']);
+    final decoded =
+        jsonDecode(
+              await File(p.join(codexDir.path, 'hooks.json')).readAsString(),
+            )
+            as Map<String, dynamic>;
+    expect(decoded['hooks'], isEmpty);
+  });
+
   test('relocateHookCommand 识别多种相对路径', () {
     final relocated = CursorToCodexHooksConverter.relocateHookCommand(
       'python3 ./hooks/check.py',
     );
     expect(relocated.unix, 'python3 ~/.codex/hooks/check.py');
-    expect(relocated.windows, r'python3 %USERPROFILE%\.codex\hooks\check.py');
+    expect(relocated.windows, r'python3 "%USERPROFILE%\.codex\hooks\check.py"');
   });
 }

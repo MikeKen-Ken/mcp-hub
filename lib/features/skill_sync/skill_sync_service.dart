@@ -37,7 +37,7 @@ export 'skill_sync_result.dart';
 /// - 转换：正式 Cursor → Codex / OpenCode
 class SkillSyncService extends ChangeNotifier {
   SkillSyncService({
-    required Future<WebDavConfig> Function() loadConfig,
+    required this._loadConfig,
     SkillWebDavFolderSync? folderSync,
     SkillFolderCopy? folderCopy,
     CursorToCodexSkillConverter? skillConverter,
@@ -46,9 +46,8 @@ class SkillSyncService extends ChangeNotifier {
     CursorToCodexHooksConverter? hooksConverter,
     CursorHooksBundle? hooksBundle,
     PackageVersionStore? versionStore,
-    LastSyncAttemptStore? this._attemptStore,
-  }) : _loadConfig = loadConfig,
-       _folderSync = folderSync ?? SkillWebDavFolderSync(),
+    this._attemptStore,
+  }) : _folderSync = folderSync ?? SkillWebDavFolderSync(),
        _folderCopy = folderCopy ?? const SkillFolderCopy(),
        _hooksBundle = hooksBundle ?? const CursorHooksBundle(),
        _conversion = ResourceConversion(

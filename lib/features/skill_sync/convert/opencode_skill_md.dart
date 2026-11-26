@@ -43,12 +43,30 @@ class OpenCodeSkillMd {
     return document.name != null ||
         document.description != null ||
         document.disableModelInvocation != null ||
+        document.rawEntries.containsKey('metadata') ||
         (document.frontmatter['license']?.trim().isNotEmpty ?? false) ||
         (document.frontmatter['compatibility']?.trim().isNotEmpty ?? false);
   }
 
   void _writeAutoinvokeMetadata(StringBuffer buffer, SkillMdDocument document) {
     final disable = document.disableModelInvocation;
+    final rawMeta = document.rawEntries['metadata'];
+    if (rawMeta != null && rawMeta.isNotEmpty) {
+      final lines = rawMeta.split('\n');
+      final childLines = [
+        for (final line in lines.skip(1))
+          if (!line.trimLeft().startsWith('opencode/autoinvoke:')) line,
+      ];
+      if (childLines.isEmpty && disable == null) return;
+      buffer.writeln(lines.first);
+      for (final line in childLines) {
+        buffer.writeln(line);
+      }
+      if (disable != null) {
+        buffer.writeln('  opencode/autoinvoke: "${!disable}"');
+      }
+      return;
+    }
     if (disable == null) return;
     buffer
       ..writeln('metadata:')

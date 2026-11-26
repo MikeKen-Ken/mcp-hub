@@ -56,9 +56,14 @@ class StandardSkillFrontmatter {
       ..writeln('name: $name')
       ..writeln('description: ${quoteYaml(description)}');
     for (final entry in others.entries) {
-      buffer.writeln(
-        '${entry.key}: ${_formatFrontmatterValue(entry.value)}',
-      );
+      final rawEntry = doc.rawEntries[entry.key];
+      if (rawEntry != null && rawEntry.isNotEmpty) {
+        buffer.writeln(rawEntry);
+      } else {
+        buffer.writeln(
+          '${entry.key}: ${_formatFrontmatterValue(entry.value)}',
+        );
+      }
     }
     buffer.writeln('---');
     final body = doc.body.trim();

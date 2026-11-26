@@ -93,7 +93,7 @@ void main() {
         file('cursor/skills/My Skill/SKILL.md', '# Notes\n');
         file(
           'cursor/skills/legacy/SKILL.md',
-          '---\nname: legacy\ndescription: Legacy\ndisableModelInvocation: true\n---\n\nBody\n',
+          '---\nname: legacy\ndescription: Legacy\ndisableModelInvocation: true\nlicense: MIT\nmetadata:\n  tag: v1\n---\n\nBody\n',
         );
         file('cursor/skills/no-skill-md/readme.txt');
         file('cursor/skills/.hidden/SKILL.md');
@@ -133,6 +133,8 @@ void main() {
           p.join(temp.path, 'dsh/skills/legacy/SKILL.md'),
         ).readAsStringSync();
         expect(legacy, contains('disable-model-invocation: true'));
+        expect(legacy, contains('license: MIT'));
+        expect(legacy, contains('metadata:\n  tag: v1'));
         expect(legacy, isNot(contains('disableModelInvocation')));
         expect(legacy, contains('Body'));
         expect(
@@ -154,6 +156,10 @@ void main() {
         '---\nalwaysApply: true\n---\n\n# Always\n\nDo this.\n',
       );
       file('cursor/rules/nested/b.md', '# Sometimes\n\nMaybe.\n');
+      file(
+        'cursor/rules/conditional.mdc',
+        '---\nalwaysApply: false\n---\n\n# Conditional\n\nHidden.\n',
+      );
       file('cursor/rules/notes.txt', 'ignored');
       file('dsh/AGENTS.md', 'User preface.\n\nUser ending.\n');
 
@@ -172,6 +178,8 @@ void main() {
         lessThan(text.indexOf(CursorToDeepSeekConverter.rulesBegin)),
       );
       expect(text.indexOf('## Always'), lessThan(text.indexOf('## Sometimes')));
+      expect(text, isNot(contains('## Always\n\n# Always')));
+      expect(text, isNot(contains('Hidden.')));
       expect(text, contains('Do this.'));
       expect(text, isNot(contains('ignored')));
 

@@ -113,7 +113,22 @@ class CursorToWorkBuddyConverter {
         await entity.delete();
       }
     }
+    await _pruneEmptyDirectories(managed);
     return written.length;
+  }
+
+  Future<void> _pruneEmptyDirectories(Directory root) async {
+    final dirs = <Directory>[];
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is Directory) dirs.add(entity);
+    }
+    dirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final dir in dirs) {
+      if (!await dir.exists()) continue;
+      if (await dir.list(followLinks: false).isEmpty) {
+        await dir.delete();
+      }
+    }
   }
 
   bool _isRuleFile(String path) {

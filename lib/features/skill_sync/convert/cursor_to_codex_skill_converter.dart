@@ -204,7 +204,10 @@ class CursorToCodexSkillConverter {
     if (grown.isEmpty || _blockMarker.hasMatch(grown)) {
       grown = 'Skill workflow';
     }
-    const pad = '. For related tasks and workflows';
+    final hasCjk = RegExp(r'[\u4e00-\u9fff]').hasMatch(grown);
+    final pad = hasCjk
+        ? '，用于自动化执行相关开发与协作工作流任务'
+        : '. For related tasks and workflows';
     while (grown.length < shortDescriptionMin) {
       grown += pad;
     }

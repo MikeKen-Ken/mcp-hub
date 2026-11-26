@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
+import 'cursor_rule_markdown.dart';
 import 'skill_md_document.dart';
 
 /// Skill 转换结果。
@@ -94,45 +95,15 @@ class CursorToDeepSeekConverter {
     );
   }
 
-  /// 把 Cursor `.mdc` / `.md` 规则写入 [agentsMdPath] 的标记段，返回写入条数。
+  /// 把全局 Cursor `.mdc` / `.md` 规则写入 [agentsMdPath] 的标记段，返回写入条数。
   Future<int> convertRules({
     required String sourceDir,
     required String agentsMdPath,
   }) async {
-    final source = Directory(sourceDir);
-    final sections = <String>[];
-    if (await source.exists()) {
-      final files = <File>[];
-      await for (final entity in source.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File || !_isRuleFile(entity.path)) continue;
-        final relative = p.relative(entity.path, from: source.path);
-        if (p.split(relative).any((part) => part.startsWith('.'))) continue;
-        files.add(entity);
-      }
-      files.sort(
-        (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
-      );
-      final always = <String>[];
-      final rest = <String>[];
-      for (final file in files) {
-        final relative = p.normalize(p.relative(file.path, from: source.path));
-        final doc = await SkillMdDocument.parseFile(file.path);
-        final body = doc.body.trim();
-        if (body.isEmpty) continue;
-        final alwaysApply =
-            (doc.frontmatter['alwaysApply'] ?? '').toLowerCase() == 'true';
-        final heading =
-            doc.title ??
-            _nonEmpty(doc.frontmatter['description']) ??
-            p.basenameWithoutExtension(relative);
-        final section = '## $heading\n\n$body';
-        (alwaysApply ? always : rest).add(section);
-      }
-      sections.addAll([...always, ...rest]);
-    }
+    final rules = await CursorRuleMarkdown.loadGlobalRules(sourceDir);
+    final sections = [
+      for (final r in rules) '## ${r.heading}\n\n${r.body}',
+    ];
 
     final managed = StringBuffer()
       ..writeln(rulesBegin)
@@ -156,7 +127,13 @@ class CursorToDeepSeekConverter {
     final existing = await file.exists() ? await file.readAsString() : '';
     await file.parent.create(recursive: true);
     await file.writeAsString(
-      _mergeMarked(existing, managed.toString().trimRight()),
+      CursorRuleMarkdown.mergeMarked(
+        existing,
+        managed.toString().trimRight(),
+        beginMarker: rulesBegin,
+        endMarker: rulesEnd,
+        targetName: 'AGENTS.md',
+      ),
     );
     return sections.length;
   }
@@ -190,6 +167,22 @@ class CursorToDeepSeekConverter {
     );
     if (disable != null) buffer.writeln('disable-model-invocation: $disable');
     if (userInvocable != null) buffer.writeln('user-invocable: $userInvocable');
+    const handledKeys = {
+      'name',
+      'description',
+      'disable-model-invocation',
+      'user-invocable',
+      ..._legacyKeys,
+    };
+    for (final entry in doc.frontmatter.entries) {
+      if (handledKeys.contains(entry.key)) continue;
+      final rawEntry = doc.rawEntries[entry.key];
+      if (rawEntry != null && rawEntry.isNotEmpty) {
+        buffer.writeln(rawEntry);
+      } else {
+        buffer.writeln('${entry.key}: ${DshYaml.quote(entry.value)}');
+      }
+    }
     buffer.writeln('---');
     final body = doc.body.trim();
     if (body.isNotEmpty) {
@@ -226,11 +219,6 @@ class CursorToDeepSeekConverter {
     };
   }
 
-  bool _isRuleFile(String path) {
-    final extension = p.extension(path).toLowerCase();
-    return extension == '.mdc' || extension == '.md';
-  }
-
   static String skillNameFor(String folderName, String? frontmatterName) {
     if (frontmatterName != null && _skillName.hasMatch(frontmatterName)) {
       return frontmatterName;
@@ -241,28 +229,6 @@ class CursorToDeepSeekConverter {
         .replaceAll(RegExp(r'^-+|-+$'), '');
     if (_skillName.hasMatch(kebab)) return kebab;
     return 'skill';
-  }
-
-  static String? _nonEmpty(String? value) {
-    final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return null;
-    return trimmed;
-  }
-
-  static String _mergeMarked(String existing, String managed) {
-    final begin = existing.indexOf(rulesBegin);
-    final end = existing.indexOf(rulesEnd);
-    if (begin >= 0 && end > begin) {
-      final after = end + rulesEnd.length;
-      return existing.replaceRange(begin, after, managed);
-    }
-    if (begin >= 0 || end >= 0) {
-      throw const FormatException(
-        'AGENTS.md cursor-rules markers are incomplete; nothing was written',
-      );
-    }
-    if (existing.trim().isEmpty) return '$managed\n';
-    return '${existing.trimRight()}\n\n$managed\n';
   }
 }
 
