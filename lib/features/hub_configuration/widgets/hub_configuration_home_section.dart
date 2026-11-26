@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../common/app_locale.dart';
 import '../../../common/app_motion.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/skill_sync/skill_sync.dart';
@@ -20,11 +21,11 @@ class HubConfigurationHomeSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionHeader('Hub configuration'),
+        SectionHeader(tr('Hub 配置', 'Hub configuration')),
         const SizedBox(height: 8),
         const HubConfigurationBulkCard(),
         const SizedBox(height: 16),
-        const SectionHeader('Catalog'),
+        SectionHeader(tr('MCP 清单', 'Catalog')),
         const SizedBox(height: 8),
         CatalogSyncCard(
           onOpenMcpSettings: () {
@@ -32,7 +33,7 @@ class HubConfigurationHomeSection extends StatelessWidget {
           },
         ),
         const SizedBox(height: 16),
-        const SectionHeader('Folder resources'),
+        SectionHeader(tr('文件夹资源', 'Folder resources')),
         const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, constraints) {

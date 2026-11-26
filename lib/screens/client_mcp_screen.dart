@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../common/agent_platforms.dart';
+import '../common/app_locale.dart';
 import '../common/app_motion.dart';
 import '../controllers/hub_controller.dart';
 import '../features/hub_configuration/widgets/directory_path_row.dart';
@@ -18,10 +19,10 @@ class ClientMcpScreen extends StatelessWidget {
     final hub = context.watch<HubController>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Client MCP'),
+        title: Text(tr('客户端 MCP', 'Client MCP')),
         actions: [
           IconButton(
-            tooltip: 'Refresh configuration status',
+            tooltip: tr('刷新配置状态', 'Refresh configuration status'),
             onPressed: hub.refreshClientStatus,
             icon: const Icon(Icons.refresh),
           ),
@@ -31,18 +32,21 @@ class ClientMcpScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Connection Status',
+            tr('连接状态', 'Connection Status'),
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 4),
           Text(
-            'Write all MCPs to client configuration and view the local MCP list.',
+            tr(
+              '把全部 MCP 写入客户端配置，并查看本机 MCP 列表。',
+              'Write all MCPs to client configuration and view the local MCP list.',
+            ),
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
           _ClientConfigCard(hub: hub),
           const SizedBox(height: 24),
-          const SectionHeader('MCP List'),
+          SectionHeader(tr('MCP 列表', 'MCP List')),
           const SizedBox(height: 8),
           Card(
             clipBehavior: Clip.antiAlias,
@@ -52,9 +56,12 @@ class ClientMcpScreen extends StatelessWidget {
                 vertical: 10,
               ),
               leading: const Icon(Icons.storage_outlined),
-              title: const Text('Local MCP'),
+              title: Text(tr('本地 MCP', 'Local MCP')),
               subtitle: Text(
-                'Add, start, stop, and update MCPs · ${hub.servers.length} total',
+                tr(
+                  '添加、启动、停止和更新 MCP · 共 ${hub.servers.length} 个',
+                  'Add, start, stop, and update MCPs · ${hub.servers.length} total',
+                ),
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => pushAppPage<void>(context, const LocalMcpScreen()),
@@ -72,7 +79,7 @@ class _ClientConfigCard extends StatelessWidget {
   final HubController hub;
 
   String _buttonLabel(McpClientAlignReport? report) {
-    if (report == null) return 'Checking…';
+    if (report == null) return tr('检测中…', 'Checking…');
     return report.shortLabel;
   }
 
@@ -83,7 +90,7 @@ class _ClientConfigCard extends StatelessWidget {
     final detailLines = <String>[];
     final reports = platforms.map((p) => hub.clientAlignReport(p.id)).toList();
     if (reports.any((r) => r == null)) {
-      detailLines.add('Checking…');
+      detailLines.add(tr('检测中…', 'Checking…'));
     } else {
       for (final platform in platforms) {
         final report = hub.clientAlignReport(platform.id);
@@ -92,12 +99,19 @@ class _ClientConfigCard extends StatelessWidget {
         }
       }
       if (detailLines.isEmpty) {
-        detailLines.add('${platforms.map((p) => p.label).join(' / ')} aligned');
+        detailLines.add(
+          tr(
+            '${platforms.map((p) => p.label).join(' / ')} 已全部对齐',
+            '${platforms.map((p) => p.label).join(' / ')} aligned',
+          ),
+        );
       }
     }
 
-    final configureAllLabel =
-        'Configure ${platforms.map((p) => p.label).join(' + ')}';
+    final configureAllLabel = tr(
+      '一键配置 ${platforms.map((p) => p.label).join(' + ')}',
+      'Configure ${platforms.map((p) => p.label).join(' + ')}',
+    );
 
     return Card(
       child: Padding(
@@ -108,11 +122,17 @@ class _ClientConfigCard extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.psychology_outlined),
-              title: const Text('Configure Clients'),
+              title: Text(tr('配置客户端', 'Configure Clients')),
               subtitle: Text(
                 supported
-                    ? 'Write all Hub MCPs to the clients and remove entries deleted from Hub'
-                    : 'Writing client configuration is not supported on this platform',
+                    ? tr(
+                        '将 Hub 中全部 MCP 写入各客户端，并清理 Hub 已删除的条目',
+                        'Write all Hub MCPs to the clients and remove entries deleted from Hub',
+                      )
+                    : tr(
+                        '当前平台不支持写入客户端配置',
+                        'Writing client configuration is not supported on this platform',
+                      ),
               ),
             ),
             FilledButton.icon(
@@ -144,7 +164,9 @@ class _ClientConfigCard extends StatelessWidget {
                       );
                     },
               icon: const Icon(Icons.download_outlined),
-              label: const Text('Import unregistered MCPs from clients'),
+              label: Text(
+                tr('从客户端导入未登记 MCP', 'Import unregistered MCPs from clients'),
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(

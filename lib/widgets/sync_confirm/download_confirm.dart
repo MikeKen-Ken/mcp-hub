@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/app_locale.dart';
 import '../../common/package_time.dart';
 
 class RemotePackageDateQuery {
@@ -24,11 +25,11 @@ Future<bool> confirmRemoteDownload(
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(tr('取消', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm download'),
+              child: Text(tr('确认下载', 'Confirm download')),
             ),
           ],
         ),
@@ -42,13 +43,20 @@ Future<bool> confirmCatalogReplace(
 }) {
   return confirmRemoteDownload(
     context,
-    title: 'Replace the local Catalog?',
-    body:
-        'This will download the remote Catalog and replace the Hub list now.\n\n'
-        'Extra local entries will be removed; paths, secrets, and enabled states remain local.\n\n'
-        'Use Merge if you want to keep entries from both sides. Client MCP config does not change.',
+    title: tr('确认替换本地 MCP 清单？', 'Replace the local Catalog?'),
+    body: tr(
+      '这会下载远端 MCP 清单并立即替换 Hub 列表。\n\n'
+          '本地多余的条目会被移除；本地路径、密钥和启用状态会保留。\n\n'
+          '若想保留两边新增条目请使用「合并」。此操作不会修改客户端 MCP 配置。',
+      'This will download the remote Catalog and replace the Hub list now.\n\n'
+          'Extra local entries will be removed; paths, secrets, and enabled states remain local.\n\n'
+          'Use Merge if you want to keep entries from both sides. Client MCP config does not change.',
+    ),
     packages: [
-      RemotePackageDateQuery(label: 'Catalog', load: loadRemoteUploadedAt),
+      RemotePackageDateQuery(
+        label: tr('MCP 清单', 'Catalog'),
+        load: loadRemoteUploadedAt,
+      ),
     ],
   );
 }
@@ -60,12 +68,18 @@ Future<bool> confirmHubConfigurationDownload(
 }) {
   return confirmRemoteDownload(
     context,
-    title: 'Download Hub configuration?',
-    body:
-        'Catalog download replaces the Hub list now. Folder resource download replaces the Hub cache.\n\n'
-        'Cursor folders and Client MCP config do not change.',
+    title: tr('确认下载 Hub 配置？', 'Download Hub configuration?'),
+    body: tr(
+      'MCP 清单下载会立即替换 Hub 列表；文件夹资源下载会替换本地 Hub 缓存。\n\n'
+          'Cursor 正式目录和客户端 MCP 配置暂不会改动。',
+      'Catalog download replaces the Hub list now. Folder resource download replaces the Hub cache.\n\n'
+          'Cursor folders and Client MCP config do not change.',
+    ),
     packages: [
-      RemotePackageDateQuery(label: 'Catalog', load: loadCatalogUploadedAt),
+      RemotePackageDateQuery(
+        label: tr('MCP 清单', 'Catalog'),
+        load: loadCatalogUploadedAt,
+      ),
       ...folderPackages,
     ],
   );
@@ -126,20 +140,32 @@ class _RemoteDateLine extends StatelessWidget {
         future: future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return Text('$label: Reading remote date…', style: style);
+            return Text(
+              tr('$label：正在读取远端日期…', '$label: Reading remote date…'),
+              style: style,
+            );
           }
           if (snapshot.hasError) {
-            return Text('$label: Could not read remote date', style: style);
+            return Text(
+              tr('$label：无法读取远端日期', '$label: Could not read remote date'),
+              style: style,
+            );
           }
           final time = snapshot.data;
           if (time == null) {
             return Text(
-              '$label: No remote package or date available',
+              tr(
+                '$label：暂无远端压缩包或日期信息',
+                '$label: No remote package or date available',
+              ),
               style: style,
             );
           }
           return Text(
-            '$label: remote version ${formatPackageTime(time)}',
+            tr(
+              '$label：远端版本 ${formatPackageTime(time)}',
+              '$label: remote version ${formatPackageTime(time)}',
+            ),
             style: style,
           );
         },

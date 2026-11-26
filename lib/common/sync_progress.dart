@@ -1,3 +1,5 @@
+import 'app_locale.dart';
+
 /// 一次下载/上传的进度快照。
 class SyncProgress {
   const SyncProgress({required this.label, this.current = 0, this.total});
@@ -18,7 +20,9 @@ class SyncProgress {
   String get caption {
     final max = total;
     if (max != null && max > 0) return '$label  $current / $max';
-    if (current > 0) return '$label  $current processed';
+    if (current > 0) {
+      return tr('$label  已处理 $current 项', '$label  $current processed');
+    }
     return label;
   }
 }

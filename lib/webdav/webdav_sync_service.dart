@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
 
+import '../common/app_locale.dart';
 import '../common/package_time.dart';
 import '../common/sync_progress.dart';
 import '../features/sync_status/sync_status.dart';
@@ -29,6 +30,7 @@ class WebDavSyncService extends ChangeNotifier {
     WebDavZipTransfer? zipTransfer,
     PackageVersionStore? versionStore,
     LastSyncAttemptStore? this._attemptStore,
+    this.onAutoSyncLogged,
   }) : _baseStore = baseStore ?? CatalogSyncBaseStore(),
        _catalogZip = catalogZip ?? CatalogZipCodec(),
        _zipTransfer = zipTransfer ?? WebDavZipTransfer(),
@@ -42,6 +44,14 @@ class WebDavSyncService extends ChangeNotifier {
   final WebDavZipTransfer _zipTransfer;
   final PackageVersionStore _versionStore;
   final LastSyncAttemptStore? _attemptStore;
+  final void Function({
+    required String action,
+    required bool ok,
+    required String message,
+    required bool dataChanged,
+    Duration? duration,
+    String? error,
+  })? onAutoSyncLogged;
 
   CatalogSyncStatus status = CatalogSyncStatus.idle;
   String? lastError;
@@ -143,9 +153,10 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
-    lastAction = 'Upload';
-    progress = const SyncProgress(
-      label: 'Packaging MCP catalog',
+    final sw = Stopwatch()..start();
+    lastAction = tr('上传', 'Upload');
+    progress = SyncProgress(
+      label: tr('正在打包 MCP 清单', 'Packaging MCP catalog'),
       current: 0,
       total: 2,
     );
@@ -157,8 +168,8 @@ class WebDavSyncService extends ChangeNotifier {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         tombstones: {...local.tombstones, ..._tombstones},
       );
-      progress = const SyncProgress(
-        label: 'Uploading archive',
+      progress = SyncProgress(
+        label: tr('正在上传压缩包', 'Uploading archive'),
         current: 1,
         total: 2,
       );
@@ -170,8 +181,8 @@ class WebDavSyncService extends ChangeNotifier {
         dateTimeFromEpochMs(doc.updatedAt) ?? DateTime.now(),
       );
       lastError = null;
-      progress = const SyncProgress(
-        label: 'Upload complete',
+      progress = SyncProgress(
+        label: tr('上传完成', 'Upload complete'),
         current: 2,
         total: 2,
       );
@@ -186,11 +197,33 @@ class WebDavSyncService extends ChangeNotifier {
         ),
       );
       _setStatus(CatalogSyncStatus.success);
+      if (automatic) {
+        onAutoSyncLogged?.call(
+          action: tr('自动上传 MCP 清单', 'Auto upload MCP catalog'),
+          ok: true,
+          message: tr(
+            '后台防抖自动上传成功（共 ${doc.servers.length} 个 MCP）',
+            'Background debounced auto upload succeeded (${doc.servers.length} MCPs)',
+          ),
+          dataChanged: true,
+          duration: sw.elapsed,
+        );
+      }
     } catch (error) {
       lastError = '$error';
       await _rememberAttempt(ok: false, shouldRecord: true);
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV push failed: $error');
+      if (automatic) {
+        onAutoSyncLogged?.call(
+          action: tr('自动上传 MCP 清单', 'Auto upload MCP catalog'),
+          ok: false,
+          message: tr('后台自动上传失败：$error', 'Background auto upload failed: $error'),
+          dataChanged: false,
+          duration: sw.elapsed,
+          error: '$error',
+        );
+      }
     } finally {
       progress = null;
       _inFlight = false;
@@ -219,11 +252,12 @@ class WebDavSyncService extends ChangeNotifier {
     if (client == null) return;
 
     _inFlight = true;
-    lastAction = merge ? 'Merge' : 'Download';
+    final sw = Stopwatch()..start();
+    lastAction = merge ? tr('合并', 'Merge') : tr('下载', 'Download');
     progress = SyncProgress(
       label: merge
-          ? 'Downloading and merging MCP catalog'
-          : 'Downloading MCP catalog',
+          ? tr('正在下载并合并 MCP 清单', 'Downloading and merging MCP catalog')
+          : tr('正在下载 MCP 清单', 'Downloading MCP catalog'),
       current: 0,
       total: 3,
     );
@@ -232,8 +266,8 @@ class WebDavSyncService extends ChangeNotifier {
       final remote = await _readRemoteCatalog(client, config);
       if (!merge && remote == null) {
         lastError = null;
-        progress = const SyncProgress(
-          label: 'No remote catalog',
+        progress = SyncProgress(
+          label: tr('远端暂无清单', 'No remote catalog'),
           current: 3,
           total: 3,
         );
@@ -242,7 +276,9 @@ class WebDavSyncService extends ChangeNotifier {
       }
       final remoteDoc = remote ?? CatalogSyncDocument.empty;
       progress = SyncProgress(
-        label: merge ? 'Merging catalog' : 'Replacing local catalog',
+        label: merge
+            ? tr('正在合并清单', 'Merging catalog')
+            : tr('正在覆盖本机清单', 'Replacing local catalog'),
         current: 1,
         total: 3,
       );
@@ -258,8 +294,8 @@ class WebDavSyncService extends ChangeNotifier {
       } else {
         next = remoteDoc;
       }
-      progress = const SyncProgress(
-        label: 'Writing locally',
+      progress = SyncProgress(
+        label: tr('正在写入本地', 'Writing locally'),
         current: 2,
         total: 3,
       );
@@ -279,7 +315,7 @@ class WebDavSyncService extends ChangeNotifier {
       );
       lastError = null;
       progress = SyncProgress(
-        label: merge ? '合并完成' : '下载完成',
+        label: merge ? tr('合并完成', 'Merge complete') : tr('下载完成', 'Download complete'),
         current: 3,
         total: 3,
       );
@@ -296,11 +332,33 @@ class WebDavSyncService extends ChangeNotifier {
         ),
       );
       _setStatus(CatalogSyncStatus.success);
+      if (automatic && dataChanged) {
+        onAutoSyncLogged?.call(
+          action: tr('自动合并 MCP 清单', 'Auto merge MCP catalog'),
+          ok: true,
+          message: tr(
+            '后台轮询合并完成并检测到变更（当前共 ${next.servers.length} 个 MCP）',
+            'Background polling merge detected changes (${next.servers.length} MCPs)',
+          ),
+          dataChanged: true,
+          duration: sw.elapsed,
+        );
+      }
     } catch (error) {
       lastError = '$error';
       await _rememberAttempt(ok: false, shouldRecord: true);
       _setStatus(CatalogSyncStatus.error);
       debugPrint('WebDAV pull failed: $error');
+      if (automatic) {
+        onAutoSyncLogged?.call(
+          action: tr('自动合并 MCP 清单', 'Auto merge MCP catalog'),
+          ok: false,
+          message: tr('后台自动合并失败：$error', 'Background auto merge failed: $error'),
+          dataChanged: false,
+          duration: sw.elapsed,
+          error: '$error',
+        );
+      }
     } finally {
       progress = null;
       _inFlight = false;

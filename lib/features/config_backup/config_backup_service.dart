@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../app_brand.dart';
+import '../../common/app_locale.dart';
 import '../../features/skill_sync/agent_resource_kind.dart';
 import '../../features/skill_sync/cursor_hooks_bundle.dart';
 import '../../features/skill_sync/skill_folder_copy.dart';
@@ -93,9 +94,12 @@ class ConfigBackupService {
     required List<McpServerEntry> servers,
   }) async {
     if (!McpPaths.isDesktopSupported) {
-      return const ConfigBackupResult(
+      return ConfigBackupResult(
         ok: false,
-        message: 'Configuration backup is not supported on this platform',
+        message: tr(
+          '当前平台不支持配置备份',
+          'Configuration backup is not supported on this platform',
+        ),
       );
     }
 
@@ -177,12 +181,17 @@ class ConfigBackupService {
         path: zipPath,
         fileCount: fileCount,
         serverCount: servers.length,
-        message:
-            'Backup exported: ${servers.length} MCPs, $fileCount files → $zipPath',
+        message: tr(
+          '备份已导出：${servers.length} 个 MCP，$fileCount 个文件 → $zipPath',
+          'Backup exported: ${servers.length} MCPs, $fileCount files → $zipPath',
+        ),
       );
     } catch (error) {
       debugPrint('配置导出失败: $error');
-      return ConfigBackupResult(ok: false, message: 'Export failed: $error');
+      return ConfigBackupResult(
+        ok: false,
+        message: tr('导出失败：$error', 'Export failed: $error'),
+      );
     } finally {
       await _safeDeleteDir(staging);
     }
@@ -281,10 +290,13 @@ class ConfigBackupService {
   /// 从备份 zip 恢复。返回解析出的 servers（由调用方写入 catalog）与资源恢复计数。
   Future<ConfigBackupImportPayload> importFromZip(String zipPath) async {
     if (!McpPaths.isDesktopSupported) {
-      return const ConfigBackupImportPayload(
+      return ConfigBackupImportPayload(
         result: ConfigBackupResult(
           ok: false,
-          message: 'Configuration backup is not supported on this platform',
+          message: tr(
+            '当前平台不支持配置恢复',
+            'Configuration backup is not supported on this platform',
+          ),
         ),
       );
     }
@@ -294,7 +306,7 @@ class ConfigBackupService {
       return ConfigBackupImportPayload(
         result: ConfigBackupResult(
           ok: false,
-          message: 'Backup file not found: $zipPath',
+          message: tr('未找到备份文件：$zipPath', 'Backup file not found: $zipPath'),
         ),
       );
     }
@@ -308,11 +320,13 @@ class ConfigBackupService {
         p.join(root.path, ConfigBackupManifest.fileName),
       );
       if (!await manifestFile.exists()) {
-        return const ConfigBackupImportPayload(
+        return ConfigBackupImportPayload(
           result: ConfigBackupResult(
             ok: false,
-            message:
-                'Invalid Agent Hub backup package (manifest.json is missing)',
+            message: tr(
+              '无效的 Agent Hub 备份包（缺少 manifest.json）',
+              'Invalid Agent Hub backup package (manifest.json is missing)',
+            ),
           ),
         );
       }
@@ -324,8 +338,10 @@ class ConfigBackupService {
         return ConfigBackupImportPayload(
           result: ConfigBackupResult(
             ok: false,
-            message:
-                'Backup format is newer (v${manifest.formatVersion}); update ${AppBrand.displayName} first',
+            message: tr(
+              '备份格式版本较新（v${manifest.formatVersion}），请先更新 ${AppBrand.displayName}',
+              'Backup format is newer (v${manifest.formatVersion}); update ${AppBrand.displayName} first',
+            ),
           ),
         );
       }
@@ -417,14 +433,23 @@ class ConfigBackupService {
           fileCount: restoredFiles,
           serverCount: serverCount,
           message: servers == null
-              ? 'Agent configuration restored: $restoredFiles files (backup contained no MCP catalog)'
-              : 'Backup restored: $serverCount MCPs, $restoredFiles files',
+              ? tr(
+                  '已恢复 Agent 配置：$restoredFiles 个文件（备份中未包含 MCP 清单）',
+                  'Agent configuration restored: $restoredFiles files (backup contained no MCP catalog)',
+                )
+              : tr(
+                  '备份已恢复：$serverCount 个 MCP，$restoredFiles 个文件',
+                  'Backup restored: $serverCount MCPs, $restoredFiles files',
+                ),
         ),
       );
     } catch (error) {
       debugPrint('配置导入失败: $error');
       return ConfigBackupImportPayload(
-        result: ConfigBackupResult(ok: false, message: 'Import failed: $error'),
+        result: ConfigBackupResult(
+          ok: false,
+          message: tr('导入失败：$error', 'Import failed: $error'),
+        ),
       );
     } finally {
       await _safeDeleteDir(staging);

@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../common/app_locale.dart';
+
 /// 平台安装：Android 调起 APK 安装器；Windows 写 updater 并退出替换。
 class AppUpdateInstaller {
   AppUpdateInstaller({MethodChannel? androidChannel})
@@ -82,13 +84,18 @@ class AppUpdateInstaller {
 
   Future<void> installAndroidApk(File apkFile) async {
     if (!Platform.isAndroid) {
-      throw UnsupportedError('APK installation is supported only on Android');
+      throw UnsupportedError(
+        tr('仅 Android 支持安装 APK', 'APK installation is supported only on Android'),
+      );
     }
     final allowed = await canRequestPackageInstalls();
     if (!allowed) {
       await openUnknownSourcesSettings();
       throw StateError(
-        'Allow installation from unknown sources, then click Update again',
+        tr(
+          '请先在系统设置中允许安装未知来源应用，然后再点击更新',
+          'Allow installation from unknown sources, then click Update again',
+        ),
       );
     }
     await _androidChannel.invokeMethod<void>('installApk', {
@@ -99,7 +106,9 @@ class AppUpdateInstaller {
   /// 启动 PowerShell updater，等待本进程退出后覆盖安装目录并重启。
   Future<void> applyWindowsZipUpdate(Directory extractedDir) async {
     if (!Platform.isWindows) {
-      throw UnsupportedError('ZIP self-update is supported only on Windows');
+      throw UnsupportedError(
+        tr('仅 Windows 支持 ZIP 自更新', 'ZIP self-update is supported only on Windows'),
+      );
     }
     final exePath = Platform.resolvedExecutable;
     final installDir = File(exePath).parent.path;

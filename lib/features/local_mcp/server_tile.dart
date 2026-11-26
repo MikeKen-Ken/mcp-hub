@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../common/app_locale.dart';
 import '../../controllers/hub_controller.dart';
 import '../../models/mcp_runtime_phase.dart';
 import '../../models/mcp_server_entry.dart';
@@ -77,7 +78,7 @@ class _ServerTileContent extends StatelessWidget {
                   ),
                   if (server.shouldAutoStartByHub) ...[
                     const SizedBox(width: 6),
-                    const StatusBadge(label: 'Auto'),
+                    StatusBadge(label: tr('自动', 'Auto')),
                   ],
                 ],
               ),
@@ -123,7 +124,7 @@ class _ServerTileContent extends StatelessWidget {
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.link, size: 20),
-                title: Text(server.url ?? '(URL not set)'),
+                title: Text(server.url ?? tr('(未设置 URL)', '(URL not set)')),
                 subtitle: isHub && snapshot.hubHostError != null
                     ? Text(snapshot.hubHostError!)
                     : null,
@@ -134,7 +135,7 @@ class _ServerTileContent extends StatelessWidget {
                 leading: const Icon(Icons.terminal, size: 20),
                 title: Text(
                   [
-                    server.command ?? '(command not set)',
+                    server.command ?? tr('(未设置命令)', '(command not set)'),
                     ...server.args,
                   ].join(' '),
                   maxLines: 2,
@@ -150,25 +151,25 @@ class _ServerTileContent extends StatelessWidget {
                     TextButton.icon(
                       onPressed: () => hub.startServer(server.id),
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start'),
+                      label: Text(tr('启动', 'Start')),
                     ),
                   if (runtime.canStop)
                     TextButton.icon(
                       onPressed: () => hub.stopServer(server.id),
                       icon: const Icon(Icons.stop),
-                      label: const Text('Stop'),
+                      label: Text(tr('停止', 'Stop')),
                     ),
                   if (runtime.canUpdate)
                     TextButton.icon(
                       onPressed: () => _update(context, hub, server),
                       icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('Update'),
+                      label: Text(tr('更新', 'Update')),
                     ),
                   if (!isHub)
                     TextButton.icon(
                       onPressed: () => _remove(context, hub, server),
                       icon: const Icon(Icons.delete_outline),
-                      label: const Text('Remove'),
+                      label: Text(tr('移除', 'Remove')),
                     ),
                 ],
               ),
@@ -187,7 +188,11 @@ class _ServerTileContent extends StatelessWidget {
     try {
       await hub.updateServer(server.id);
       if (!context.mounted) return;
-      showHubNotice(context, message: hub.lastMessage ?? 'Updated', ok: true);
+      showHubNotice(
+        context,
+        message: hub.lastMessage ?? tr('已更新', 'Updated'),
+        ok: true,
+      );
     } catch (error) {
       if (!context.mounted) return;
       showHubNotice(context, message: '$error', ok: false);
@@ -202,18 +207,21 @@ class _ServerTileContent extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove MCP?'),
+        title: Text(tr('确认移除 MCP？', 'Remove MCP?')),
         content: Text(
-          'This will remove the MCP from Hub and delete its local clone directory.\n${server.name}',
+          tr(
+            '这会从 Hub 移除该 MCP，并删除本机克隆目录。\n${server.name}',
+            'This will remove the MCP from Hub and delete its local clone directory.\n${server.name}',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(tr('取消', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Remove'),
+            child: Text(tr('移除', 'Remove')),
           ),
         ],
       ),
@@ -222,7 +230,11 @@ class _ServerTileContent extends StatelessWidget {
     try {
       await hub.removeServer(server.id);
       if (!context.mounted) return;
-      showHubNotice(context, message: hub.lastMessage ?? 'Removed', ok: true);
+      showHubNotice(
+        context,
+        message: hub.lastMessage ?? tr('已移除', 'Removed'),
+        ok: true,
+      );
     } catch (error) {
       if (!context.mounted) return;
       showHubNotice(context, message: '$error', ok: false);

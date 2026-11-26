@@ -24,8 +24,8 @@ void main() {
         ),
       ),
     );
-    expect(find.textContaining('Last failure'), findsOneWidget);
-    expect(find.text('Details'), findsOneWidget);
+    expect(find.textContaining('最近失败'), findsOneWidget);
+    expect(find.text('详情'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 

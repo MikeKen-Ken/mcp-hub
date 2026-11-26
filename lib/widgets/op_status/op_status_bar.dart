@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/app_locale.dart';
 import '../../common/app_motion.dart';
 import '../../common/sync_progress.dart';
 import '../hub_notice/hub_notice.dart';
@@ -102,7 +103,7 @@ class _FailureStrip extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Last failure: ${notice.title}',
+                  tr('最近失败：${notice.title}', 'Last failure: ${notice.title}'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
@@ -117,7 +118,7 @@ class _FailureStrip extends StatelessWidget {
                   foregroundColor: scheme.onErrorContainer,
                   visualDensity: VisualDensity.compact,
                 ),
-                child: const Text('Details'),
+                child: Text(tr('详情', 'Details')),
               ),
             ],
           ),

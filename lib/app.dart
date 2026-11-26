@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'app_brand.dart';
+import 'common/app_locale.dart';
 import 'controllers/hub_controller.dart';
 import 'screens/home_screen.dart';
 
@@ -98,28 +99,31 @@ class _McpHubAppState extends State<McpHubApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      navigatorObservers: [_routeObserver],
-      title: AppBrand.displayName,
-      debugShowCheckedModeBanner: false,
-      theme: _buildTheme(Brightness.light, const Color(0xFF0F766E)),
-      darkTheme: _buildTheme(Brightness.dark, const Color(0xFF2DD4BF)),
-      shortcuts: <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.escape): _EscapeIntent(),
-      },
-      actions: <Type, Action<Intent>>{
-        _EscapeIntent: CallbackAction<_EscapeIntent>(
-          onInvoke: (_) {
-            final navigator = _navigatorKey.currentState;
-            if (_routeObserver.canPop && navigator != null) {
-              navigator.pop();
-            }
-            return null;
-          },
-        ),
-      },
-      home: const HomeScreen(),
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: AppLocale.notifier,
+      builder: (context, _, _) => MaterialApp(
+        navigatorKey: _navigatorKey,
+        navigatorObservers: [_routeObserver],
+        title: AppBrand.displayName,
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(Brightness.light, const Color(0xFF0F766E)),
+        darkTheme: _buildTheme(Brightness.dark, const Color(0xFF2DD4BF)),
+        shortcuts: <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.escape): _EscapeIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          _EscapeIntent: CallbackAction<_EscapeIntent>(
+            onInvoke: (_) {
+              final navigator = _navigatorKey.currentState;
+              if (_routeObserver.canPop && navigator != null) {
+                navigator.pop();
+              }
+              return null;
+            },
+          ),
+        },
+        home: const HomeScreen(),
+      ),
     );
   }
 }
@@ -157,6 +161,7 @@ class _HubNavigatorObserver extends NavigatorObserver {
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLocale.load();
   final hub = HubController();
   runApp(ChangeNotifierProvider.value(value: hub, child: const McpHubApp()));
   await hub.load();

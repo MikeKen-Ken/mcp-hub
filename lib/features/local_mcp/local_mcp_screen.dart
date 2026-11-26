@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../common/app_locale.dart';
 import '../../common/app_motion.dart';
 import '../../controllers/hub_controller.dart';
 import '../../screens/add_server_screen.dart';
@@ -22,17 +23,17 @@ class LocalMcpScreen extends StatelessWidget {
         final hub = context.read<HubController>();
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Local MCP'),
+            title: Text(tr('本地 MCP', 'Local MCP')),
             actions: [
               IconButton(
-                tooltip: 'Update all',
+                tooltip: tr('全部更新', 'Update all'),
                 onPressed: snapshot.hasUpdatableServers
                     ? () async {
                         await hub.updateAllServers();
                         if (!context.mounted) return;
                         showHubNotice(
                           context,
-                          message: hub.lastMessage ?? 'Update complete',
+                          message: hub.lastMessage ?? tr('更新完成', 'Update complete'),
                         );
                       }
                     : null,
@@ -44,7 +45,7 @@ class LocalMcpScreen extends StatelessWidget {
             onPressed: () =>
                 pushAppPage<void>(context, const AddServerScreen()),
             icon: const Icon(Icons.add),
-            label: const Text('Add MCP'),
+            label: Text(tr('添加 MCP', 'Add MCP')),
           ),
           body: ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
@@ -54,7 +55,10 @@ class LocalMcpScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               if (index == 0) {
                 return Text(
-                  'The switch controls whether this MCP is written to Cursor / Codex; built-in hubMCP is always retained.',
+                  tr(
+                    '开关控制该 MCP 是否写入 Cursor / Codex 等客户端；内置 hubMCP 始终保留。',
+                    'The switch controls whether this MCP is written to Cursor / Codex; built-in hubMCP is always retained.',
+                  ),
                   style: Theme.of(context).textTheme.bodySmall,
                 );
               }

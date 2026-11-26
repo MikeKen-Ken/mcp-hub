@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../common/app_locale.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/skill_sync/skill_sync.dart';
 import '../../../services/mcp_paths.dart';
@@ -36,12 +37,15 @@ class HubConfigurationBulkCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Hub configuration',
+              tr('Hub 配置', 'Hub configuration'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
-              'Download, merge, and upload move Catalog and Folder resources. Apply and Convert are Folder resources only.',
+              tr(
+                '下载、合并和上传会同时处理 MCP 清单与文件夹资源；应用和转换仅处理文件夹资源。',
+                'Download, merge, and upload move Catalog and Folder resources. Apply and Convert are Folder resources only.',
+              ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 14),
@@ -78,7 +82,7 @@ class HubConfigurationBulkCard extends StatelessWidget {
                           });
                         },
                   icon: const Icon(Icons.cloud_download_outlined),
-                  label: const Text('Download Hub configuration'),
+                  label: Text(tr('下载 Hub 配置', 'Download Hub configuration')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -94,9 +98,9 @@ class HubConfigurationBulkCard extends StatelessWidget {
                           });
                         },
                   icon: const Icon(Icons.merge_outlined),
-                  label: const Text('Merge Hub configuration'),
+                  label: Text(tr('合并 Hub 配置', 'Merge Hub configuration')),
                 ),
-                FilledButton.tonalIcon(
+                FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () async {
@@ -111,7 +115,7 @@ class HubConfigurationBulkCard extends StatelessWidget {
                           });
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('Apply Folder resources'),
+                  label: Text(tr('应用文件夹资源', 'Apply Folder resources')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -119,8 +123,10 @@ class HubConfigurationBulkCard extends StatelessWidget {
                       : () async {
                           final confirmed = await confirmRemoteOverwrite(
                             context,
-                            scope:
-                                'Hub configuration (Catalog and Folder resources)',
+                            scope: tr(
+                              'Hub 配置（MCP 清单与文件夹资源）',
+                              'Hub configuration (Catalog and Folder resources)',
+                            ),
                           );
                           if (!confirmed || !context.mounted) return;
                           await _run(context, () async {
@@ -129,7 +135,7 @@ class HubConfigurationBulkCard extends StatelessWidget {
                           });
                         },
                   icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('Upload Hub configuration'),
+                  label: Text(tr('上传 Hub 配置', 'Upload Hub configuration')),
                 ),
                 FilledButton.icon(
                   onPressed: !supported || busy
@@ -140,7 +146,7 @@ class HubConfigurationBulkCard extends StatelessWidget {
                           return (ok: result.ok, message: result.message);
                         }),
                   icon: const Icon(Icons.transform_outlined),
-                  label: const Text('Convert Folder resources'),
+                  label: Text(tr('转换文件夹资源', 'Convert Folder resources')),
                 ),
               ],
             ),
@@ -163,16 +169,16 @@ class HubConfigurationBulkCard extends StatelessWidget {
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('View Cache Directories'),
+              title: Text(tr('查看缓存目录', 'View Cache Directories')),
               children: [
                 DirectoryPathRow(
-                  label: 'Skill cache root',
+                  label: tr('Skill 缓存根目录', 'Skill cache root'),
                   displayPath: McpPaths.skillsCacheRoot,
                   directoryPath: McpPaths.skillsCacheRoot,
                   enabled: supported,
                 ),
                 DirectoryPathRow(
-                  label: 'Other resource cache root',
+                  label: tr('其他资源缓存根目录', 'Other resource cache root'),
                   displayPath: McpPaths.agentResourcesCacheRoot,
                   directoryPath: McpPaths.agentResourcesCacheRoot,
                   enabled: supported,
@@ -190,21 +196,27 @@ Future<bool> confirmFolderResourcesApply(BuildContext context) async {
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Apply Folder resources?'),
-          content: const Text(
-            'This will mirror the cached Folder resources into the official Cursor directories.\n\n'
-            'Local Cursor files and directories missing from the cache will also be deleted.\n\n'
-            'This does not write the Catalog into Client MCP config. Use Write to Clients for MCP.\n\n'
-            'This does not convert Codex / OpenCode; use Convert Folder resources when needed.',
+          title: Text(tr('确认应用文件夹资源？', 'Apply Folder resources?')),
+          content: Text(
+            tr(
+              '这会把缓存中的文件夹资源全量镜像写入 Cursor 正式目录。\n\n'
+                  '缓存中缺失的本地 Cursor 文件与目录也会被删除。\n\n'
+                  '此操作不会把 MCP 清单写入客户端配置；如需写入 MCP 请使用「写入客户端」。\n\n'
+                  '此操作也不会自动转换 Codex / OpenCode；如需转换请使用「转换文件夹资源」。',
+              'This will mirror the cached Folder resources into the official Cursor directories.\n\n'
+                  'Local Cursor files and directories missing from the cache will also be deleted.\n\n'
+                  'This does not write the Catalog into Client MCP config. Use Write to Clients for MCP.\n\n'
+                  'This does not convert Codex / OpenCode; use Convert Folder resources when needed.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(tr('取消', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm apply'),
+              child: Text(tr('确认应用', 'Confirm apply')),
             ),
           ],
         ),

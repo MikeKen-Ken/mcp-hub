@@ -1,3 +1,5 @@
+import '../common/app_locale.dart';
+
 /// MCP 在 Hub 视角下的运行阶段（动态）。
 enum McpRuntimePhase {
   stopped,
@@ -11,11 +13,11 @@ enum McpRuntimePhase {
 
 extension McpRuntimePhaseLabels on McpRuntimePhase {
   String get label => switch (this) {
-    McpRuntimePhase.stopped => 'Stopped',
-    McpRuntimePhase.starting => 'Starting',
-    McpRuntimePhase.running => 'Running',
-    McpRuntimePhase.error => 'Error',
-    McpRuntimePhase.external => 'External',
+    McpRuntimePhase.stopped => tr('已停止', 'Stopped'),
+    McpRuntimePhase.starting => tr('启动中', 'Starting'),
+    McpRuntimePhase.running => tr('运行中', 'Running'),
+    McpRuntimePhase.error => tr('异常', 'Error'),
+    McpRuntimePhase.external => tr('外部', 'External'),
   };
 
   bool get isActive => this == McpRuntimePhase.running;

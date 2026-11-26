@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../common/agent_platforms.dart';
+import '../../../common/app_locale.dart';
+import '../../../common/package_time.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/skill_sync/skill_sync.dart';
 import '../../../features/sync_status/sync_status.dart';
-import '../../../common/package_time.dart';
 import '../../../services/mcp_paths.dart';
 import '../../../widgets/hub_notice/hub_notice.dart';
 import '../../../widgets/op_status/op_status.dart';
@@ -74,8 +75,10 @@ class FolderResourceSyncCard extends StatelessWidget {
                           ),
                           CursorCountChip(
                             count: counts.forResource(resource),
-                            tooltip:
-                                '${counts.forResource(resource)} ${resource.wireName} in Cursor',
+                            tooltip: tr(
+                              'Cursor 中已有 ${counts.forResource(resource)} 个 ${resource.label}',
+                              '${counts.forResource(resource)} ${resource.wireName} in Cursor',
+                            ),
                           ),
                         ],
                       ),
@@ -89,16 +92,22 @@ class FolderResourceSyncCard extends StatelessWidget {
                             : null,
                         syncing: thisBusy,
                         unavailableLabel: !supported
-                            ? 'Directory download/upload is not supported on this platform'
+                            ? tr(
+                                '当前平台不支持目录下载/上传',
+                                'Directory download/upload is not supported on this platform',
+                              )
                             : (webDavReady
                                   ? null
-                                  : 'WebDAV is not ready; local conversion is still available'),
+                                  : tr(
+                                      'WebDAV 尚未就绪，仍可使用本地转换',
+                                      'WebDAV is not ready; local conversion is still available',
+                                    )),
                       ),
                       if (_canConvert) ...[
                         const SizedBox(height: 6),
-                        const SyncStatusPill(
+                        SyncStatusPill(
                           icon: Icons.transform_outlined,
-                          label: 'Conversion supported',
+                          label: tr('支持一键转换', 'Conversion supported'),
                           active: true,
                         ),
                       ],
@@ -118,10 +127,16 @@ class FolderResourceSyncCard extends StatelessWidget {
                       : () async {
                           final confirmed = await confirmRemoteDownload(
                             context,
-                            title: 'Download remote ${resource.label}?',
-                            body:
-                                'This will download the remote ${resource.label} archive and replace the local cache.\n\n'
-                                'The official Cursor directory will not be changed.',
+                            title: tr(
+                              '确认下载远端 ${resource.label}？',
+                              'Download remote ${resource.label}?',
+                            ),
+                            body: tr(
+                              '这会下载远端 ${resource.label} 压缩包并覆盖本地缓存。\n\n'
+                                  'Cursor 正式目录暂不会改动。',
+                              'This will download the remote ${resource.label} archive and replace the local cache.\n\n'
+                                  'The official Cursor directory will not be changed.',
+                            ),
                             packages: [
                               RemotePackageDateQuery(
                                 label: resource.label,
@@ -137,7 +152,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                           );
                         },
                   icon: const Icon(Icons.cloud_download_outlined),
-                  label: const Text('Download'),
+                  label: Text(tr('下载', 'Download')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -147,9 +162,9 @@ class FolderResourceSyncCard extends StatelessWidget {
                           () => hub.mergeResourceToAllTargets(resource),
                         ),
                   icon: const Icon(Icons.merge_outlined),
-                  label: const Text('Merge'),
+                  label: Text(tr('合并', 'Merge')),
                 ),
-                FilledButton.tonalIcon(
+                FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () async {
@@ -164,7 +179,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                           );
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('Apply to Cursor'),
+                  label: Text(tr('应用到 Cursor', 'Apply to Cursor')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -181,7 +196,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                           );
                         },
                   icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('Upload'),
+                  label: Text(tr('上传', 'Upload')),
                 ),
                 if (_canConvert)
                   FilledButton.icon(
@@ -192,7 +207,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                             () => hub.convertResourceToAllTargets(resource),
                           ),
                     icon: const Icon(Icons.transform_outlined),
-                    label: const Text('Convert'),
+                    label: Text(tr('转换', 'Convert')),
                   ),
               ],
             ),
@@ -206,7 +221,9 @@ class FolderResourceSyncCard extends StatelessWidget {
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('View Directories and Conversion Rules'),
+              title: Text(
+                tr('查看目录与转换规则', 'View Directories and Conversion Rules'),
+              ),
               children: [
                 if (_convertHint != null)
                   Align(
@@ -222,14 +239,20 @@ class FolderResourceSyncCard extends StatelessWidget {
                 for (final target in SkillTarget.values)
                   DirectoryPathRow(
                     label: target == SkillTarget.cursor
-                        ? '${target.label} (official directory)'
-                        : '${target.label} (local conversion)',
+                        ? tr(
+                            '${target.label}（正式目录）',
+                            '${target.label} (official directory)',
+                          )
+                        : tr(
+                            '${target.label}（本地转换）',
+                            '${target.label} (local conversion)',
+                          ),
                     displayPath: _pathLabelFor(hub, target),
                     directoryPath: _directoryFor(hub, target),
                     enabled: supported && resource.supportsLocalPath(target),
                   ),
                 DirectoryPathRow(
-                  label: 'Cache (Cursor)',
+                  label: tr('缓存（Cursor）', 'Cache (Cursor)'),
                   displayPath: McpPaths.resourceCachePath(
                     resource.wireName,
                     SkillTarget.cursor.wireName,
@@ -249,22 +272,38 @@ class FolderResourceSyncCard extends StatelessWidget {
   }
 
   String? get _convertHint => switch (resource) {
-    AgentResourceKind.skill =>
+    AgentResourceKind.skill => tr(
+      '一键转换：以本机 Cursor 为源镜像并转换为目标格式'
+          '（Codex：生成 openai.yaml；OpenCode：改写 SKILL.md frontmatter；'
+          'WorkBuddy / WorkBuddy AI：直接复制并保留目标端已有 Skill；'
+          'DeepSeek Harness：复制到 ~/.dsh/skills 并按需补全 kebab-case name 与 description；'
+          '豆包：复制到工作区 .user_skills 并补齐 name / description；'
+          'Antigravity：复制到 ~/.gemini/config/skills 并规范化 name 与 description）',
       'One-click conversion: mirror the package, then convert it to the target format '
           '(Codex: openai.yaml; OpenCode: SKILL.md frontmatter; '
           'WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept; '
           'DeepSeek Harness: copy into ~/.dsh/skills and fill kebab-case name plus description when missing; '
           'Doubao: copy into the workspace .user_skills and add name / description; '
           'Antigravity: copy into ~/.gemini/config/skills and normalize the kebab-case name plus description)',
-    AgentResourceKind.rule =>
+    ),
+    AgentResourceKind.rule => tr(
+      '一键转换：从 Cursor 规则生成 Codex / OpenCode 的 AGENTS.md；'
+          'WorkBuddy / WorkBuddy AI 复制到 rules/cursor-sync/；'
+          'DeepSeek Harness 更新 ~/.dsh/AGENTS.md 托管段；'
+          'Antigravity 更新 ~/.gemini/GEMINI.md 托管段',
       'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; '
           'WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/; '
           'DeepSeek Harness updates the managed section of ~/.dsh/AGENTS.md; '
           'Antigravity updates the managed section of ~/.gemini/GEMINI.md',
-    AgentResourceKind.command =>
+    ),
+    AgentResourceKind.command => tr(
+      '一键转换：将 Cursor Command 镜像到 OpenCode commands/<name>.md（多余项会清理；Codex 暂无对等目录）',
       'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
-    AgentResourceKind.hook =>
+    ),
+    AgentResourceKind.hook => tr(
+      '一键转换：从 Cursor hooks.json 与 hooks/ 生成 Codex hooks.json 与 hooks/（自动适配事件名与 matcher；OpenCode 暂无对等 hooks.json）',
       'One-click conversion: generate Codex hooks.json and hooks/ from Cursor hooks.json and hooks/ (event names and matchers are adapted to Codex; OpenCode has no equivalent hooks.json)',
+    ),
   };
 
   bool get _canConvert =>
@@ -325,20 +364,25 @@ Future<bool> confirmFolderResourceApply(
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Apply to Cursor?'),
+          title: Text(tr('确认应用到 Cursor？', 'Apply to Cursor?')),
           content: Text(
-            'This will mirror the cached $scope into the official Cursor directory.\n\n'
-            'Local Cursor files and directories missing from the cache will also be deleted.\n\n'
-            'This does not convert Codex / OpenCode; use Convert Folder resources when needed.',
+            tr(
+              '这会把缓存中的 $scope 全量镜像写入 Cursor 正式目录。\n\n'
+                  '缓存中缺失的本地 Cursor 文件与目录也会被删除。\n\n'
+                  '此操作不会自动转换 Codex / OpenCode；如需转换请使用「转换」。',
+              'This will mirror the cached $scope into the official Cursor directory.\n\n'
+                  'Local Cursor files and directories missing from the cache will also be deleted.\n\n'
+                  'This does not convert Codex / OpenCode; use Convert Folder resources when needed.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(tr('取消', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm apply'),
+              child: Text(tr('确认应用', 'Confirm apply')),
             ),
           ],
         ),

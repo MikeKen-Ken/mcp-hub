@@ -5,10 +5,12 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../common/agent_platforms.dart';
+import '../common/app_locale.dart';
 import '../common/package_time.dart';
 import '../app_brand.dart';
 import '../features/config_backup/config_backup.dart';
 import '../features/hub_configuration/hub_configuration.dart';
+import '../features/operation_logs/operation_logs.dart';
 import '../features/skill_sync/skill_sync.dart';
 import '../features/sync_status/sync_status.dart';
 import '../models/mcp_server_entry.dart';
@@ -37,16 +39,21 @@ class HubController extends ChangeNotifier {
     McpRepoService? repoService,
     McpProcessManager? processManager,
     WebDavConfigStore? webDavConfigStore,
+    OperationLogStore? operationLogStore,
     bool initiallyLoading = true,
   }) : _catalogStore = catalogStore ?? McpCatalogStore(),
        _repoService = repoService ?? McpRepoService(),
        _processManager =
            processManager ?? McpProcessManager(onStateChanged: () {}),
        _webDavConfigStore = webDavConfigStore ?? WebDavConfigStore(),
+       _ownsOperationLogs = operationLogStore == null,
        _loading = initiallyLoading {
     if (processManager == null) {
       _processManager.onStateChanged = _onProcessStateChanged;
     }
+    operationLogs = operationLogStore ?? OperationLogStore();
+    operationLogs.addListener(_onOperationLogsChanged);
+    _logRecorder = OperationLogRecorder(operationLogs);
     hubMcpHost = HubMcpHost(this);
     hubMcpHost.addListener(_onHostChanged);
     _packageVersions = PackageVersionStore();
@@ -57,6 +64,26 @@ class HubController extends ChangeNotifier {
       applyDocument: _applySyncDocument,
       versionStore: _packageVersions,
       attemptStore: syncAttempts,
+      onAutoSyncLogged: ({
+        required action,
+        required ok,
+        required message,
+        required dataChanged,
+        duration,
+        error,
+      }) {
+        if (!ok || dataChanged) {
+          unawaited(
+            _logRecorder.recordWebDavCatalog(
+              action: action,
+              ok: ok,
+              message: message,
+              durationMs: duration?.inMilliseconds,
+              trigger: OperationLogTrigger.auto,
+            ),
+          );
+        }
+      },
     );
     webDavSync.addListener(_onWebDavChanged);
     skillSync = SkillSyncService(
@@ -71,12 +98,24 @@ class HubController extends ChangeNotifier {
       ensureReady: _ensureWebDavReadyForManualSync,
       currentMessage: () => _lastMessage,
       setMessage: (message) => _lastMessage = message,
+      logRecorder: _logRecorder,
     );
     hubConfiguration.addListener(_onHubConfigurationChanged);
     configBackup = ConfigBackupService();
     autoConfigBackup = AutoConfigBackupService(
       backupService: configBackup,
       loadServers: () async => List<McpServerEntry>.from(_servers),
+      onAutoBackupLogged: (result, duration) {
+        unawaited(
+          _logRecorder.recordBackup(
+            action: tr('定时自动备份', 'Scheduled auto backup'),
+            target: result.path,
+            trigger: OperationLogTrigger.auto,
+            result: result,
+            durationMs: duration.inMilliseconds,
+          ),
+        );
+      },
     );
     autoConfigBackup.addListener(_onAutoConfigBackupChanged);
   }
@@ -85,8 +124,11 @@ class HubController extends ChangeNotifier {
   final McpRepoService _repoService;
   final McpProcessManager _processManager;
   final WebDavConfigStore _webDavConfigStore;
+  final bool _ownsOperationLogs;
   final _uuid = const Uuid();
 
+  late final OperationLogStore operationLogs;
+  late final OperationLogRecorder _logRecorder;
   late final HubMcpHost hubMcpHost;
   late final PackageVersionStore _packageVersions;
   late final LastSyncAttemptStore syncAttempts;
@@ -181,9 +223,12 @@ class HubController extends ChangeNotifier {
 
   void _onAutoConfigBackupChanged() => notifyListeners();
 
+  void _onOperationLogsChanged() => notifyListeners();
+
   Future<void> load() async {
     _loading = true;
     notifyListeners();
+    await operationLogs.load();
     webDavConfig = await _webDavConfigStore.load();
     _servers = await _catalogStore.load();
     await _packageVersions.load();
@@ -273,7 +318,10 @@ class HubController extends ChangeNotifier {
     await _repairInvalidWorkingDirectories();
     await _catalogStore.save(_servers);
     await _refreshGitManagedFlags();
-    _lastMessage = 'Merged catalog from WebDAV (${doc.servers.length} MCPs)';
+    _lastMessage = tr(
+      '已从 WebDAV 合并清单（共 ${doc.servers.length} 个 MCP）',
+      'Merged catalog from WebDAV (${doc.servers.length} MCPs)',
+    );
     notifyListeners();
     await refreshClientStatus();
     // 合并后补拉本机已启用且有启动命令的 MCP。
@@ -289,8 +337,10 @@ class HubController extends ChangeNotifier {
       url: hubEndpointUrl,
       enabled: true,
       builtIn: true,
-      notes:
-          'Built-in: use AI to manage this Hub (add repositories, toggle services, configure clients, and more)',
+      notes: tr(
+        '内置：通过 AI 管理当前 Hub（添加仓库、启停服务、配置客户端等）',
+        'Built-in: use AI to manage this Hub (add repositories, toggle services, configure clients, and more)',
+      ),
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -388,13 +438,26 @@ class HubController extends ChangeNotifier {
       }
     }
     notifyListeners();
-    final sync = await configureAllClients();
+    final sync = await configureAllClients(log: false);
     if (sync.ok) {
       _lastMessage = enabled
-          ? 'Enabled $id and synced to Cursor / Codex / OpenCode'
-          : 'Disabled $id and synced to Cursor / Codex / OpenCode';
+          ? tr(
+              '已启用 $id 并同步到 Cursor / Codex / OpenCode',
+              'Enabled $id and synced to Cursor / Codex / OpenCode',
+            )
+          : tr(
+              '已停用 $id 并同步到 Cursor / Codex / OpenCode',
+              'Disabled $id and synced to Cursor / Codex / OpenCode',
+            );
       notifyListeners();
     }
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: enabled ? tr('启用 MCP', 'Enable MCP') : tr('停用 MCP', 'Disable MCP'),
+      target: id,
+      ok: sync.ok,
+      message: _lastMessage ?? sync.message,
+    );
   }
 
   Future<String> addServer({
@@ -415,7 +478,10 @@ class HubController extends ChangeNotifier {
     final id = _slug(resolvedName.isNotEmpty ? resolvedName : fromUrl ?? '');
     if (id == HubMcpConstants.serverKey) {
       throw StateError(
-        'Reserved name cannot be used: ${HubMcpConstants.serverKey}',
+        tr(
+          '不可使用保留名称：${HubMcpConstants.serverKey}',
+          'Reserved name cannot be used: ${HubMcpConstants.serverKey}',
+        ),
       );
     }
 
@@ -430,6 +496,13 @@ class HubController extends ChangeNotifier {
       _lastMessage = result.message;
       if (!result.ok) {
         notifyListeners();
+        await _logRecorder.record(
+          category: OperationLogCategory.mcp,
+          action: tr('添加 MCP', 'Add MCP'),
+          target: resolvedName.isNotEmpty ? resolvedName : id,
+          ok: false,
+          message: result.message,
+        );
         throw StateError(result.message);
       }
       localPath = result.localPath ?? localPath;
@@ -441,6 +514,13 @@ class HubController extends ChangeNotifier {
             postPull.message,
           ]);
           notifyListeners();
+          await _logRecorder.record(
+            category: OperationLogCategory.mcp,
+            action: tr('添加 MCP', 'Add MCP'),
+            target: resolvedName.isNotEmpty ? resolvedName : id,
+            ok: false,
+            message: _lastMessage!,
+          );
           throw StateError(postPull.message);
         }
         _lastMessage = McpRepoService.joinMessages([
@@ -474,7 +554,9 @@ class HubController extends ChangeNotifier {
     );
 
     if (_servers.any((s) => s.id == entry.id)) {
-      throw StateError('An MCP with the same name already exists: $id');
+      throw StateError(
+        tr('已存在同名 MCP：$id', 'An MCP with the same name already exists: $id'),
+      );
     }
 
     _servers = [..._servers, entry];
@@ -483,8 +565,15 @@ class HubController extends ChangeNotifier {
     if (entry.shouldAutoStartByHub) {
       await _processManager.start(entry);
     }
-    _lastMessage = 'Added ${entry.name}';
+    _lastMessage = tr('已添加 ${entry.name}', 'Added ${entry.name}');
     notifyListeners();
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('添加 MCP', 'Add MCP'),
+      target: entry.name,
+      ok: true,
+      message: _lastMessage!,
+    );
     await refreshClientStatus();
     return entry.id;
   }
@@ -498,41 +587,69 @@ class HubController extends ChangeNotifier {
       }
     }
     if (server == null) {
-      throw StateError('MCP not found: $id');
+      throw StateError(tr('未找到 MCP：$id', 'MCP not found: $id'));
     }
     if (server.builtIn) {
-      throw StateError('Built-in hubMCP does not need git pull');
+      throw StateError(
+        tr('内置 hubMCP 无需执行 git pull', 'Built-in hubMCP does not need git pull'),
+      );
     }
     final path = server.localPath;
     if (path == null || path.isEmpty) {
-      throw StateError('No local repository path; cannot update');
+      throw StateError(
+        tr('缺少本地仓库路径，无法更新', 'No local repository path; cannot update'),
+      );
     }
     if (!await _repoService.isHubGitCheckout(path)) {
       throw StateError(
-        'This is not a Git repository managed by Hub; cannot update',
+        tr(
+          '非 Hub 管理的 Git 仓库，无法更新',
+          'This is not a Git repository managed by Hub; cannot update',
+        ),
       );
     }
+    final sw = Stopwatch()..start();
     final wasRunning = processState(id).status == McpProcessStatus.running;
     final result = await _repoService.updateCheckout(localPath: path);
     _lastMessage = '${server.name}: ${result.message}';
     notifyListeners();
     if (!result.ok) {
+      await _logRecorder.record(
+        category: OperationLogCategory.mcp,
+        action: tr('更新 MCP 仓库', 'Update MCP repository'),
+        target: server.name,
+        ok: false,
+        message: _lastMessage!,
+        durationMs: sw.elapsedMilliseconds,
+      );
       throw StateError(result.message);
     }
     if (wasRunning && server.shouldAutoStartByHub) {
       await _processManager.start(server);
-      _lastMessage = '${server.name}: ${result.message} (process restarted)';
+      _lastMessage = tr(
+        '${server.name}：${result.message}（进程已重启）',
+        '${server.name}: ${result.message} (process restarted)',
+      );
       notifyListeners();
     }
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('更新 MCP 仓库', 'Update MCP repository'),
+      target: server.name,
+      ok: true,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
   }
 
   Future<void> updateAllServers() async {
+    final sw = Stopwatch()..start();
     await _refreshGitManagedFlags();
     final withPath = _servers
         .where((s) => !s.builtIn && isGitManaged(s.id))
         .toList();
     if (withPath.isEmpty) {
-      _lastMessage = 'No local repositories can be updated';
+      _lastMessage = tr('暂无可更新的本地仓库', 'No local repositories can be updated');
       notifyListeners();
       return;
     }
@@ -549,20 +666,34 @@ class HubController extends ChangeNotifier {
         failCount++;
       } else if (wasRunning && server.shouldAutoStartByHub) {
         await _processManager.start(server);
-        line = '$line (process restarted)';
+        line = tr('$line（进程已重启）', '$line (process restarted)');
       }
       lines.add(line);
     }
     final summary = failCount == 0
-        ? 'Updated ${lines.length} repositories'
-        : 'Partially failed (${lines.length - failCount} succeeded / $failCount failed)';
+        ? tr('已更新 ${lines.length} 个仓库', 'Updated ${lines.length} repositories')
+        : tr(
+            '部分失败（${lines.length - failCount} 项成功 / $failCount 项失败）',
+            'Partially failed (${lines.length - failCount} succeeded / $failCount failed)',
+          );
     _lastMessage = '$summary\n${lines.join('\n')}';
     notifyListeners();
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('更新全部 MCP 仓库', 'Update all MCP repositories'),
+      target: tr('全部仓库', 'All repositories'),
+      ok: failCount == 0,
+      partial: failCount > 0 && failCount < lines.length,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
   }
 
   Future<void> removeServer(String id) async {
     if (id == HubMcpConstants.serverKey) {
-      throw StateError('Built-in hubMCP cannot be removed');
+      throw StateError(
+        tr('内置 hubMCP 不可移除', 'Built-in hubMCP cannot be removed'),
+      );
     }
     McpServerEntry? server;
     for (final s in _servers) {
@@ -579,9 +710,18 @@ class HubController extends ChangeNotifier {
       final result = await _repoService.deleteLocal(localPath: path);
       deleteMsg = result.message;
       if (!result.ok) {
-        _lastMessage =
-            'Process stopped, but deleting the local directory failed: $deleteMsg';
+        _lastMessage = tr(
+          '进程已停止，但删除本地目录失败：$deleteMsg',
+          'Process stopped, but deleting the local directory failed: $deleteMsg',
+        );
         notifyListeners();
+        await _logRecorder.record(
+          category: OperationLogCategory.mcp,
+          action: tr('移除 MCP', 'Remove MCP'),
+          target: id,
+          ok: false,
+          message: _lastMessage!,
+        );
         throw StateError(deleteMsg);
       }
     }
@@ -591,9 +731,16 @@ class HubController extends ChangeNotifier {
     await _persist();
     await _refreshGitManagedFlags();
     _lastMessage = deleteMsg == null
-        ? 'Removed $id'
-        : 'Removed $id; $deleteMsg';
+        ? tr('已移除 $id', 'Removed $id')
+        : tr('已移除 $id；$deleteMsg', 'Removed $id; $deleteMsg');
     notifyListeners();
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('移除 MCP', 'Remove MCP'),
+      target: id,
+      ok: true,
+      message: _lastMessage!,
+    );
     await refreshClientStatus();
   }
 
@@ -601,9 +748,16 @@ class HubController extends ChangeNotifier {
     if (id == HubMcpConstants.serverKey) {
       await hubMcpHost.start();
       _lastMessage = hubMcpHost.isRunning
-          ? 'hubMCP started at $hubEndpointUrl'
-          : (hubMcpHost.lastError ?? 'Failed to start');
+          ? tr('hubMCP 已启动：$hubEndpointUrl', 'hubMCP started at $hubEndpointUrl')
+          : (hubMcpHost.lastError ?? tr('启动失败', 'Failed to start'));
       notifyListeners();
+      await _logRecorder.record(
+        category: OperationLogCategory.mcp,
+        action: tr('启动 MCP 服务', 'Start MCP server'),
+        target: id,
+        ok: hubMcpHost.isRunning,
+        message: _lastMessage!,
+      );
       return;
     }
     McpServerEntry? server;
@@ -616,26 +770,51 @@ class HubController extends ChangeNotifier {
     if (server == null) return;
     final state = await _processManager.start(server);
     _lastMessage = switch (state.status) {
-      McpProcessStatus.running => 'Started ${server.name} (pid ${state.pid})',
-      McpProcessStatus.error => state.lastError ?? 'Failed to start',
-      _ => state.lastError ?? 'Not started',
+      McpProcessStatus.running => tr(
+        '已启动 ${server.name}（pid ${state.pid}）',
+        'Started ${server.name} (pid ${state.pid})',
+      ),
+      McpProcessStatus.error => state.lastError ?? tr('启动失败', 'Failed to start'),
+      _ => state.lastError ?? tr('未启动', 'Not started'),
     };
     notifyListeners();
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('启动 MCP 服务', 'Start MCP server'),
+      target: server.name,
+      ok: state.status == McpProcessStatus.running,
+      message: _lastMessage!,
+    );
   }
 
   Future<void> stopServer(String id) async {
     if (id == HubMcpConstants.serverKey) {
       await hubMcpHost.stop();
-      _lastMessage = 'hubMCP stopped';
+      _lastMessage = tr('hubMCP 已停止', 'hubMCP stopped');
       notifyListeners();
+      await _logRecorder.record(
+        category: OperationLogCategory.mcp,
+        action: tr('停止 MCP 服务', 'Stop MCP server'),
+        target: id,
+        ok: true,
+        message: _lastMessage!,
+      );
       return;
     }
     await _processManager.stop(id);
-    _lastMessage = 'Stopped $id';
+    _lastMessage = tr('已停止 $id', 'Stopped $id');
     notifyListeners();
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('停止 MCP 服务', 'Stop MCP server'),
+      target: id,
+      ok: true,
+      message: _lastMessage!,
+    );
   }
 
   Future<McpConfigureResult> configureClient(AgentPlatformId platform) async {
+    final sw = Stopwatch()..start();
     final removeIds = webDavSync.tombstones.keys.toSet();
     final result = await McpClientConfigurator.configure(
       platform,
@@ -643,12 +822,21 @@ class HubController extends ChangeNotifier {
       removeIds: removeIds,
     );
     _lastMessage = result.message;
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('写入客户端 MCP 配置', 'Write client MCP config'),
+      target: platform.label,
+      ok: result.ok,
+      message: result.message,
+      durationMs: sw.elapsedMilliseconds,
+    );
     await refreshClientStatus();
     notifyListeners();
     return result;
   }
 
-  Future<McpConfigureResult> configureAllClients() async {
+  Future<McpConfigureResult> configureAllClients({bool log = true}) async {
+    final sw = Stopwatch()..start();
     final removeIds = webDavSync.tombstones.keys.toSet();
     final results = <McpConfigureResult>[];
     for (final platform in AgentPlatforms.mcpConfigurable) {
@@ -663,6 +851,16 @@ class HubController extends ChangeNotifier {
     final message = results.map((r) => r.message).join('；');
     final ok = results.every((r) => r.ok);
     _lastMessage = message;
+    if (log) {
+      await _logRecorder.record(
+        category: OperationLogCategory.mcp,
+        action: tr('一键配置全部客户端 MCP', 'Configure all client MCPs'),
+        target: tr('全部支持客户端', 'All supported clients'),
+        ok: ok,
+        message: message,
+        durationMs: sw.elapsedMilliseconds,
+      );
+    }
     notifyListeners();
     await refreshClientStatus();
     return McpConfigureResult(ok: ok, message: message);
@@ -670,17 +868,36 @@ class HubController extends ChangeNotifier {
 
   /// 从 Cursor / Codex / Open Code 配置导入 Hub 未登记的 MCP。
   Future<McpClientImportResult> importMissingFromClients() async {
+    final sw = Stopwatch()..start();
     final result = await McpClientConfigurator.importMissingServers(
       hubServers: _servers,
     );
     if (!result.ok || result.imported.isEmpty) {
       _lastMessage = result.message;
+      await _logRecorder.record(
+        category: OperationLogCategory.mcp,
+        action: tr('从客户端导入 MCP', 'Import MCP from clients'),
+        target: tr('全部客户端', 'All clients'),
+        ok: result.ok,
+        message: result.message,
+        durationMs: sw.elapsedMilliseconds,
+      );
       notifyListeners();
       return result;
     }
     await _mergeImportedServers(result.imported);
-    _lastMessage =
-        'Imported ${result.importedCount} MCPs: ${result.imported.map((s) => s.id).join(', ')}';
+    _lastMessage = tr(
+      '已导入 ${result.importedCount} 个 MCP：${result.imported.map((s) => s.id).join('、')}',
+      'Imported ${result.importedCount} MCPs: ${result.imported.map((s) => s.id).join(', ')}',
+    );
+    await _logRecorder.record(
+      category: OperationLogCategory.mcp,
+      action: tr('从客户端导入 MCP', 'Import MCP from clients'),
+      target: tr('全部客户端', 'All clients'),
+      ok: true,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
     notifyListeners();
     return result.copyWith(message: _lastMessage!);
   }
@@ -721,8 +938,8 @@ class HubController extends ChangeNotifier {
       }
     }
     _lastMessage = config.enabled
-        ? 'WebDAV saved and enabled'
-        : 'WebDAV disabled';
+        ? tr('已保存并启用 WebDAV', 'WebDAV saved and enabled')
+        : tr('已停用 WebDAV', 'WebDAV disabled');
     notifyListeners();
   }
 
@@ -745,78 +962,128 @@ class HubController extends ChangeNotifier {
 
   Future<void> syncWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
+    final sw = Stopwatch()..start();
     await webDavSync.syncNow();
-    _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'WebDAV merge and upload complete'
-        : 'Merge/upload failed: ${webDavSync.lastError ?? 'Unknown error'}';
+    final ok = webDavSync.status == CatalogSyncStatus.success;
+    _lastMessage = ok
+        ? tr('WebDAV 合并与上传完成', 'WebDAV merge and upload complete')
+        : tr(
+            '合并/上传失败：${webDavSync.lastError ?? tr('未知错误', 'Unknown error')}',
+            'Merge/upload failed: ${webDavSync.lastError ?? 'Unknown error'}',
+          );
+    await _logRecorder.recordWebDavCatalog(
+      action: tr('同步 MCP 清单（合并并上传）', 'Sync MCP catalog (merge & upload)'),
+      ok: ok,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
     notifyListeners();
   }
 
   /// 用远端 catalog.zip 覆盖本机 MCP 清单（不合并）。
   Future<void> pullWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
+    final sw = Stopwatch()..start();
     await webDavSync.pullNow();
-    _lastMessage = webDavSync.status == CatalogSyncStatus.success
+    final ok = webDavSync.status == CatalogSyncStatus.success;
+    _lastMessage = ok
         ? (webDavSync.catalogUploadedAt == null
-              ? 'Downloaded and replaced the MCP catalog from WebDAV'
-              : 'Downloaded and replaced the MCP catalog from WebDAV (remote version ${formatPackageTime(webDavSync.catalogUploadedAt)})')
-        : 'Download failed: ${webDavSync.lastError ?? 'Unknown error'}';
+              ? tr(
+                  '已从 WebDAV 下载并覆盖本机 MCP 清单',
+                  'Downloaded and replaced the MCP catalog from WebDAV',
+                )
+              : tr(
+                  '已从 WebDAV 下载并覆盖本机 MCP 清单（远端版本 ${formatPackageTime(webDavSync.catalogUploadedAt)}）',
+                  'Downloaded and replaced the MCP catalog from WebDAV (remote version ${formatPackageTime(webDavSync.catalogUploadedAt)})',
+                ))
+        : tr(
+            '下载失败：${webDavSync.lastError ?? tr('未知错误', 'Unknown error')}',
+            'Download failed: ${webDavSync.lastError ?? 'Unknown error'}',
+          );
+    await _logRecorder.recordWebDavCatalog(
+      action: tr('下载 MCP 清单（覆盖本机）', 'Download MCP catalog (replace local)'),
+      ok: ok,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
     notifyListeners();
   }
 
   /// 下载 catalog.zip 后与本机三路合并。
   Future<void> mergeWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
+    final sw = Stopwatch()..start();
     await webDavSync.mergeNow();
-    _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'Merged the MCP catalog from WebDAV'
-        : 'Merge failed: ${webDavSync.lastError ?? 'Unknown error'}';
+    final ok = webDavSync.status == CatalogSyncStatus.success;
+    _lastMessage = ok
+        ? tr('已从 WebDAV 合并 MCP 清单', 'Merged the MCP catalog from WebDAV')
+        : tr(
+            '合并失败：${webDavSync.lastError ?? tr('未知错误', 'Unknown error')}',
+            'Merge failed: ${webDavSync.lastError ?? 'Unknown error'}',
+          );
+    await _logRecorder.recordWebDavCatalog(
+      action: tr('合并 MCP 清单', 'Merge MCP catalog'),
+      ok: ok,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
     notifyListeners();
   }
 
   /// 把本机 MCP 清单打成 catalog.zip 覆盖上传。
   Future<void> pushWebDavNow() async {
     if (!_ensureWebDavReadyForManualSync()) return;
+    final sw = Stopwatch()..start();
     await webDavSync.pushNow();
-    _lastMessage = webDavSync.status == CatalogSyncStatus.success
-        ? 'Uploaded the MCP catalog archive to WebDAV'
-        : 'Upload failed: ${webDavSync.lastError ?? 'Unknown error'}';
+    final ok = webDavSync.status == CatalogSyncStatus.success;
+    _lastMessage = ok
+        ? tr('已将 MCP 清单压缩包上传到 WebDAV', 'Uploaded the MCP catalog archive to WebDAV')
+        : tr(
+            '上传失败：${webDavSync.lastError ?? tr('未知错误', 'Unknown error')}',
+            'Upload failed: ${webDavSync.lastError ?? 'Unknown error'}',
+          );
+    await _logRecorder.recordWebDavCatalog(
+      action: tr('上传 MCP 清单', 'Upload MCP catalog'),
+      ok: ok,
+      message: _lastMessage!,
+      durationMs: sw.elapsedMilliseconds,
+    );
     notifyListeners();
   }
 
   bool _ensureWebDavReadyForManualSync() {
     if (!isWebDavReady) {
-      _lastMessage = 'Enable and configure WebDAV first';
+      _lastMessage = tr('请先启用并配置 WebDAV', 'Enable and configure WebDAV first');
       notifyListeners();
       return false;
     }
     if (isSyncBusy) {
-      _lastMessage = 'Download/upload in progress; please wait';
+      _lastMessage = tr(
+        '正在下载或上传，请稍候',
+        'Download/upload in progress; please wait',
+      );
       notifyListeners();
       return false;
     }
     return true;
   }
 
-  Future<SkillSyncResult> syncSkillsFromWebDav(SkillTarget target) async {
-    final result = await skillSync.syncFromWebDav(target);
-    _lastMessage = result.message;
-    notifyListeners();
-    return result;
-  }
+  Future<SkillSyncResult> syncSkillsFromWebDav(SkillTarget target) =>
+      syncResourceFromWebDav(AgentResourceKind.skill, target);
 
-  Future<SkillSyncResult> pushSkillsToWebDav(SkillTarget target) async {
-    final result = await skillSync.pushToWebDav(target);
-    _lastMessage = result.message;
-    notifyListeners();
-    return result;
-  }
+  Future<SkillSyncResult> pushSkillsToWebDav(SkillTarget target) =>
+      pushResourceToWebDav(AgentResourceKind.skill, target);
 
   Future<SkillSyncResult> syncResourceFromWebDav(
     AgentResourceKind resource,
     SkillTarget target,
   ) async {
-    final result = await skillSync.syncResourceFromWebDav(resource, target);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('下载 ${resource.label}', 'Download ${resource.label}'),
+      target: target.label,
+      run: () => skillSync.syncResourceFromWebDav(resource, target),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -826,7 +1093,12 @@ class HubController extends ChangeNotifier {
     AgentResourceKind resource,
     SkillTarget target,
   ) async {
-    final result = await skillSync.pushResourceToWebDav(resource, target);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('上传 ${resource.label}', 'Upload ${resource.label}'),
+      target: target.label,
+      run: () => skillSync.pushResourceToWebDav(resource, target),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -835,7 +1107,12 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> syncResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    final result = await skillSync.syncResourceToAllTargets(resource);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('下载 ${resource.label} 到缓存', 'Download ${resource.label} to cache'),
+      target: 'Cursor',
+      run: () => skillSync.syncResourceToAllTargets(resource),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -844,7 +1121,12 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> pushResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    final result = await skillSync.pushResourceToAllTargets(resource);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('上传 ${resource.label}', 'Upload ${resource.label}'),
+      target: 'Cursor',
+      run: () => skillSync.pushResourceToAllTargets(resource),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -853,7 +1135,12 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> mergeResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    final result = await skillSync.mergeResourceToAllTargets(resource);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('合并 ${resource.label} 到缓存', 'Merge ${resource.label} into cache'),
+      target: 'Cursor',
+      run: () => skillSync.mergeResourceToAllTargets(resource),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -863,7 +1150,12 @@ class HubController extends ChangeNotifier {
     AgentResourceKind resource, {
     SkillTarget target = SkillTarget.codex,
   }) async {
-    final result = await skillSync.convertFromCursor(resource, target: target);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.convert,
+      action: tr('转换 ${resource.label}', 'Convert ${resource.label}'),
+      target: 'Cursor → ${target.label}',
+      run: () => skillSync.convertFromCursor(resource, target: target),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -873,7 +1165,12 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> convertResourceToAllTargets(
     AgentResourceKind resource,
   ) async {
-    final result = await skillSync.convertResourceToAllTargets(resource);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.convert,
+      action: tr('一键转换 ${resource.label}', 'Convert ${resource.label} to all'),
+      target: tr('全部可转换客户端', 'All convertible targets'),
+      run: () => skillSync.convertResourceToAllTargets(resource),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -881,7 +1178,12 @@ class HubController extends ChangeNotifier {
 
   /// 一键转换全部可转换资源（Cursor → Codex / Open Code）。
   Future<SkillSyncResult> convertAllResourcesFromCursor() async {
-    final result = await skillSync.convertAllFromCursor();
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.convert,
+      action: tr('转换文件夹资源', 'Convert Folder resources'),
+      target: tr('全部资源 → 全部可转换客户端', 'All resources → All targets'),
+      run: () => skillSync.convertAllFromCursor(),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -896,21 +1198,36 @@ class HubController extends ChangeNotifier {
   }
 
   Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
-    final result = await skillSync.syncAllResourcesFromWebDav();
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('下载全部文件夹资源', 'Download all folder resources'),
+      target: tr('全部文件夹资源', 'All folder resources'),
+      run: () => skillSync.syncAllResourcesFromWebDav(),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
   }
 
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
-    final result = await skillSync.pushAllResourcesToWebDav();
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('上传全部文件夹资源', 'Upload all folder resources'),
+      target: tr('全部文件夹资源', 'All folder resources'),
+      run: () => skillSync.pushAllResourcesToWebDav(),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
   }
 
   Future<SkillSyncResult> mergeAllResourcesFromWebDav() async {
-    final result = await skillSync.mergeAllResourcesFromWebDav();
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.sync,
+      action: tr('合并全部文件夹资源', 'Merge all folder resources'),
+      target: tr('全部文件夹资源', 'All folder resources'),
+      run: () => skillSync.mergeAllResourcesFromWebDav(),
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -920,23 +1237,35 @@ class HubController extends ChangeNotifier {
   Future<SkillSyncResult> applyResourceFromCache(
     AgentResourceKind resource,
   ) async {
-    final result = await skillSync.applyResourceFromCache(resource);
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.apply,
+      action: tr('应用 ${resource.label} 到 Cursor', 'Apply ${resource.label} to Cursor'),
+      target: 'Cursor',
+      run: () => skillSync.applyResourceFromCache(resource),
+    );
     _lastMessage = result.message;
     await refreshCursorItemCounts();
     return result;
   }
 
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
-    final result = await skillSync.applyAllResourcesFromCache();
+    final result = await _logRecorder.runSkillSyncLogged(
+      category: OperationLogCategory.apply,
+      action: tr('应用文件夹资源', 'Apply Folder resources'),
+      target: tr('全部资源 → Cursor', 'All resources → Cursor'),
+      run: () => skillSync.applyAllResourcesFromCache(),
+    );
     _lastMessage = result.message;
     await refreshCursorItemCounts();
     return result;
   }
 
   Future<ConfigBackupResult> exportConfigBackup(String zipPath) async {
-    final result = await configBackup.exportToZip(
-      zipPath: zipPath,
-      servers: _servers,
+    final result = await _logRecorder.runBackupLogged(
+      action: tr('导出配置备份', 'Export config backup'),
+      target: zipPath,
+      run: () => configBackup.exportToZip(zipPath: zipPath, servers: _servers),
+      toResult: (r) => r,
     );
     _lastMessage = result.message;
     notifyListeners();
@@ -944,7 +1273,12 @@ class HubController extends ChangeNotifier {
   }
 
   Future<ConfigBackupResult> importConfigBackup(String zipPath) async {
-    final payload = await configBackup.importFromZip(zipPath);
+    final payload = await _logRecorder.runBackupLogged(
+      action: tr('导入恢复备份', 'Import config backup'),
+      target: zipPath,
+      run: () => configBackup.importFromZip(zipPath),
+      toResult: (p) => p.result,
+    );
     if (!payload.result.ok) {
       _lastMessage = payload.result.message;
       notifyListeners();
@@ -965,20 +1299,30 @@ class HubController extends ChangeNotifier {
   Future<void> saveAutoBackupSettings(AutoBackupSettings settings) async {
     await autoConfigBackup.updateSettings(settings);
     _lastMessage = settings.enabled
-        ? 'Automatic backup enabled'
-        : 'Automatic backup disabled';
+        ? tr('已启用自动备份', 'Automatic backup enabled')
+        : tr('已停用自动备份', 'Automatic backup disabled');
     notifyListeners();
   }
 
   Future<ConfigBackupResult> runAutoBackupNow() async {
-    final result = await autoConfigBackup.backupNow();
+    final result = await _logRecorder.runBackupLogged(
+      action: tr('立即执行自动备份', 'Run auto backup now'),
+      target: autoConfigBackup.effectiveDirectory,
+      run: () => autoConfigBackup.backupNow(),
+      toResult: (r) => r,
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
   }
 
   Future<ConfigBackupResult> cleanupExpiredAutoBackups() async {
-    final result = await autoConfigBackup.cleanupNow();
+    final result = await _logRecorder.runBackupLogged(
+      action: tr('清理过期自动备份', 'Clean up expired auto backups'),
+      target: autoConfigBackup.effectiveDirectory,
+      run: () => autoConfigBackup.cleanupNow(),
+      toResult: (r) => r,
+    );
     _lastMessage = result.message;
     notifyListeners();
     return result;
@@ -1016,6 +1360,8 @@ class HubController extends ChangeNotifier {
 
   @override
   void dispose() {
+    operationLogs.removeListener(_onOperationLogsChanged);
+    if (_ownsOperationLogs) operationLogs.dispose();
     hubMcpHost.removeListener(_onHostChanged);
     webDavSync.removeListener(_onWebDavChanged);
     skillSync.removeListener(_onSkillSyncChanged);

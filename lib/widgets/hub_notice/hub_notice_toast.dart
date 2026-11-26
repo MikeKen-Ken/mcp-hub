@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../common/app_locale.dart';
 import 'hub_notice_copy.dart';
 
 /// 在根层弹出短通知：成败用图标区分，长文进「详情」，切页后仍保留。
@@ -62,11 +63,11 @@ void _showNoticeDetail(BuildContext context, HubNotice notice) {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: detail));
             },
-            child: const Text('Copy'),
+            child: Text(tr('复制', 'Copy')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: Text(tr('关闭', 'Close')),
           ),
         ],
       );
@@ -119,7 +120,7 @@ class _HubNoticeSnackContent extends StatelessWidget {
               foregroundColor: onBar,
               visualDensity: VisualDensity.compact,
             ),
-            child: const Text('Details'),
+            child: Text(tr('详情', 'Details')),
           ),
       ],
     );

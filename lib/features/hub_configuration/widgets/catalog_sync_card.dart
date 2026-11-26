@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../common/agent_platforms.dart';
+import '../../../common/app_locale.dart';
 import '../../../common/package_time.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/sync_status/sync_status.dart';
@@ -22,11 +23,9 @@ class CatalogSyncCard extends StatelessWidget {
   ) async {
     await action();
     if (!context.mounted) return;
-    showHubNotice(
-      context,
-      message: hub.lastMessage ?? 'Complete',
-      ok: hub.lastMessage?.contains('failed') == true ? false : null,
-    );
+    final msg = hub.lastMessage ?? tr('完成', 'Complete');
+    final failed = msg.contains('失败') || msg.toLowerCase().contains('failed');
+    showHubNotice(context, message: msg, ok: failed ? false : null);
   }
 
   @override
@@ -63,7 +62,10 @@ class CatalogSyncCard extends StatelessWidget {
                           ),
                           CursorCountChip(
                             count: counts.mcp,
-                            tooltip: '${counts.mcp} MCPs in Cursor',
+                            tooltip: tr(
+                              'Cursor 中已有 ${counts.mcp} 个 MCP',
+                              '${counts.mcp} MCPs in Cursor',
+                            ),
                           ),
                         ],
                       ),
@@ -79,10 +81,16 @@ class CatalogSyncCard extends StatelessWidget {
                             : null,
                         syncing: busy && hub.isWebDavSyncing,
                         unavailableLabel: !supported
-                            ? 'Writing MCP configuration is not supported on this platform'
+                            ? tr(
+                                '当前平台不支持写入 MCP 配置',
+                                'Writing MCP configuration is not supported on this platform',
+                              )
                             : (webDavReady
                                   ? null
-                                  : 'WebDAV is not ready; client configuration can still be updated'),
+                                  : tr(
+                                      'WebDAV 尚未就绪，仍可本地写入客户端配置',
+                                      'WebDAV is not ready; client configuration can still be updated',
+                                    )),
                       ),
                     ],
                   ),
@@ -107,7 +115,7 @@ class CatalogSyncCard extends StatelessWidget {
                           await _run(context, hub, hub.pullWebDavNow);
                         },
                   icon: const Icon(Icons.cloud_download_outlined),
-                  label: const Text('Download'),
+                  label: Text(tr('下载', 'Download')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -118,7 +126,7 @@ class CatalogSyncCard extends StatelessWidget {
                           await _run(context, hub, hub.mergeWebDavNow);
                         },
                   icon: const Icon(Icons.merge_outlined),
-                  label: const Text('Merge'),
+                  label: Text(tr('合并', 'Merge')),
                 ),
                 FilledButton.tonalIcon(
                   onPressed: !supported || busy
@@ -137,7 +145,7 @@ class CatalogSyncCard extends StatelessWidget {
                           );
                         },
                   icon: const Icon(Icons.install_desktop_outlined),
-                  label: const Text('Write to Clients'),
+                  label: Text(tr('写入客户端', 'Write to Clients')),
                 ),
                 OutlinedButton.icon(
                   onPressed: !supported || !webDavReady || busy
@@ -145,13 +153,13 @@ class CatalogSyncCard extends StatelessWidget {
                       : () async {
                           final confirmed = await confirmRemoteOverwrite(
                             context,
-                            scope: 'Catalog',
+                            scope: tr('MCP 清单', 'Catalog'),
                           );
                           if (!confirmed || !context.mounted) return;
                           await _run(context, hub, hub.pushWebDavNow);
                         },
                   icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('Upload'),
+                  label: Text(tr('上传', 'Upload')),
                 ),
               ],
             ),
@@ -163,12 +171,12 @@ class CatalogSyncCard extends StatelessWidget {
             FilledButton.tonalIcon(
               onPressed: onOpenMcpSettings,
               icon: const Icon(Icons.tune_outlined),
-              label: const Text('Open MCP Settings'),
+              label: Text(tr('打开 MCP 设置', 'Open MCP Settings')),
             ),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text('View Configuration Directories'),
+              title: Text(tr('查看配置目录', 'View Configuration Directories')),
               children: [
                 for (final platform in AgentPlatforms.mcpConfigurable)
                   DirectoryPathRow(
@@ -190,19 +198,23 @@ Future<bool> confirmWriteToClients(BuildContext context) async {
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Write to clients?'),
-          content: const Text(
-            'This will write all current MCPs to Cursor and Codex configuration.\n\n'
-            'MCPs with matching names will be updated; other client-managed services will be preserved.',
+          title: Text(tr('确认写入客户端？', 'Write to clients?')),
+          content: Text(
+            tr(
+              '这会把当前全部 MCP 写入已登记的客户端配置。\n\n'
+                  '同名 MCP 会被更新，客户端里其他非 Hub 管理的服务会保留。',
+              'This will write all current MCPs to Cursor and Codex configuration.\n\n'
+                  'MCPs with matching names will be updated; other client-managed services will be preserved.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(tr('取消', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm write'),
+              child: Text(tr('确认写入', 'Confirm write')),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import '../../common/app_locale.dart';
 import '../../common/package_time.dart';
 import '../../webdav/webdav_sync_service.dart';
 import '../skill_sync/skill_sync_service.dart';
@@ -13,8 +14,11 @@ Future<HubConfigurationResult> downloadHubConfigurationPacks({
       return catalogPackOutcome(
         ok: webDav.status == CatalogSyncStatus.success,
         successMessage: webDav.catalogUploadedAt == null
-            ? 'Downloaded and replaced the Catalog'
-            : 'Downloaded and replaced the Catalog (remote version ${formatPackageTime(webDav.catalogUploadedAt)})',
+            ? tr('已下载并替换 MCP 清单', 'Downloaded and replaced the Catalog')
+            : tr(
+                '已下载并替换 MCP 清单（远端版本 ${formatPackageTime(webDav.catalogUploadedAt)}）',
+                'Downloaded and replaced the Catalog (remote version ${formatPackageTime(webDav.catalogUploadedAt)})',
+              ),
         error: webDav.lastError,
       );
     },
@@ -31,7 +35,7 @@ Future<HubConfigurationResult> mergeHubConfigurationPacks({
       await webDav.mergeNow();
       return catalogPackOutcome(
         ok: webDav.status == CatalogSyncStatus.success,
-        successMessage: 'Merged the Catalog',
+        successMessage: tr('已合并 MCP 清单', 'Merged the Catalog'),
         error: webDav.lastError,
       );
     },
@@ -48,7 +52,7 @@ Future<HubConfigurationResult> uploadHubConfigurationPacks({
       await webDav.pushNow();
       return catalogPackOutcome(
         ok: webDav.status == CatalogSyncStatus.success,
-        successMessage: 'Uploaded the Catalog',
+        successMessage: tr('已上传 MCP 清单', 'Uploaded the Catalog'),
         error: webDav.lastError,
       );
     },

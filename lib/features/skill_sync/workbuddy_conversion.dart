@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../common/agent_platforms.dart';
+import '../../common/app_locale.dart';
 import '../../services/mcp_paths.dart';
 import 'agent_resource_kind.dart';
 import 'convert/cursor_to_workbuddy_converter.dart';
@@ -29,8 +30,10 @@ class WorkBuddyConversion {
       return SkillSyncResult(
         ok: false,
         target: target,
-        message:
-            '${resource.label} has no confirmed $label directory and cannot be converted',
+        message: tr(
+          '${resource.label} 暂无已确认的 $label 目录，无法转换',
+          '${resource.label} has no confirmed $label directory and cannot be converted',
+        ),
       );
     }
 
@@ -42,20 +45,28 @@ class WorkBuddyConversion {
       _ => null,
     };
     if (configDir == null || destination == null || source == null) {
-      throw StateError('$label conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 $label 转换', '$label conversion is not supported on this platform'),
+      );
     }
     if (!await Directory(configDir).exists()) {
       return SkillSyncResult(
         ok: true,
         target: target,
-        message: '$label is not installed ($configDir not found), skipped',
+        message: tr(
+          '$label 未安装（未找到 $configDir），已跳过',
+          '$label is not installed ($configDir not found), skipped',
+        ),
       );
     }
     if (!await Directory(source).exists()) {
       return SkillSyncResult(
         ok: true,
         target: target,
-        message: 'Cursor ${resource.label} directory not found, skipped → $source',
+        message: tr(
+          'Cursor ${resource.label} 目录不存在，跳过转换 → $source',
+          'Cursor ${resource.label} directory not found, skipped → $source',
+        ),
       );
     }
 
@@ -76,16 +87,26 @@ class WorkBuddyConversion {
     );
     final errorHint = result.errors.isEmpty
         ? ''
-        : '; failed ${result.errors.length} packages (${result.errors.join(', ')})';
+        : tr(
+            '；失败 ${result.errors.length} 个包（${result.errors.join('，')}）',
+            '; failed ${result.errors.length} packages (${result.errors.join(', ')})',
+          );
     return SkillSyncResult(
       ok: result.errors.isEmpty,
       target: target,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
       message: result.packages == 0 && result.errors.isEmpty
-          ? 'Cursor Skill directory is empty, nothing converted → $destination'
-          : 'Copied ${result.packages} Skills from Cursor to ${target.label} '
-                '(${result.copiedFiles} files; existing ${target.label} Skills not in Cursor are kept$errorHint) → $destination',
+          ? tr(
+              'Cursor Skill 目录为空，未转换任何包 → $destination',
+              'Cursor Skill directory is empty, nothing converted → $destination',
+            )
+          : tr(
+              '已从 Cursor 复制 ${result.packages} 个 Skill 到 ${target.label}'
+                  '（${result.copiedFiles} 个文件；保留目标端原有 Skill$errorHint）→ $destination',
+              'Copied ${result.packages} Skills from Cursor to ${target.label} '
+                  '(${result.copiedFiles} files; existing ${target.label} Skills not in Cursor are kept$errorHint) → $destination',
+            ),
     );
   }
 
@@ -104,9 +125,16 @@ class WorkBuddyConversion {
       deployedFiles: count,
       packageCount: 0,
       message: count == 0
-          ? 'Cursor Rule directory is empty, ${target.label} cursor-sync folder cleared → $destination'
-          : 'Copied $count Rules from Cursor to ${target.label} '
-                '(${CursorToWorkBuddyConverter.managedRulesFolder}/ folder) → $destination',
+          ? tr(
+              'Cursor Rule 目录为空，已清理 ${target.label} cursor-sync 目录 → $destination',
+              'Cursor Rule directory is empty, ${target.label} cursor-sync folder cleared → $destination',
+            )
+          : tr(
+              '已从 Cursor 复制 $count 条 Rule 到 ${target.label}'
+                  '（${CursorToWorkBuddyConverter.managedRulesFolder}/ 目录）→ $destination',
+              'Copied $count Rules from Cursor to ${target.label} '
+                  '(${CursorToWorkBuddyConverter.managedRulesFolder}/ folder) → $destination',
+            ),
     );
   }
 }

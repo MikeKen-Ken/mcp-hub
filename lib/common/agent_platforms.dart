@@ -1,3 +1,4 @@
+import '../common/app_locale.dart';
 import '../features/skill_sync/agent_resource_kind.dart';
 import '../services/mcp_paths.dart';
 import 'agent_platform_id.dart';
@@ -363,5 +364,8 @@ extension AgentPlatformIdCompat on AgentPlatformId {
 
   String? get conversionBlockReason => hasConfirmedConversionFormat
       ? null
-      : 'The local configuration format for this target is unconfirmed. This entry will not write any files';
+      : tr(
+          '该目标本地配置格式尚未确认，不会写入任何文件',
+          'The local configuration format for this target is unconfirmed. This entry will not write any files',
+        );
 }

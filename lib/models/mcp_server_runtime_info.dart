@@ -1,3 +1,4 @@
+import '../common/app_locale.dart';
 import 'mcp_management_kind.dart';
 import 'mcp_runtime_phase.dart';
 
@@ -28,7 +29,7 @@ class McpServerRuntimeInfo {
 
   String get phaseBadgeLabel {
     if (phase == McpRuntimePhase.running && pid != null) {
-      return 'Running · pid $pid';
+      return tr('运行中 · pid $pid', 'Running · pid $pid');
     }
     return phaseLabel;
   }

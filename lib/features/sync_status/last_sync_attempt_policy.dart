@@ -16,7 +16,12 @@ bool shouldRecordWebDavAttempt({
 }
 
 bool isWebDavTransferActivity(String activity) {
-  return activity == 'Download' || activity == 'Merge' || activity == 'Upload';
+  return activity == 'Download' ||
+      activity == 'Merge' ||
+      activity == 'Upload' ||
+      activity == '下载' ||
+      activity == '合并' ||
+      activity == '上传';
 }
 
 Future<void> recordResourceWebDavAttempt({

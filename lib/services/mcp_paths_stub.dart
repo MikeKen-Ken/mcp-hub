@@ -8,6 +8,7 @@ abstract final class McpPaths {
   static String? get serversRoot => null;
   static String? get catalogPath => null;
   static String? get syncBasePath => null;
+  static String? get operationLogsPath => null;
   static String? get skillsCacheRoot => null;
   static String? get cursorSkillsCachePath => null;
   static String? get codexSkillsCachePath => null;

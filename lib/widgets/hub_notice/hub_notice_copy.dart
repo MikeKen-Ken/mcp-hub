@@ -1,3 +1,5 @@
+import '../../common/app_locale.dart';
+
 /// 通知语义：成功 / 失败 / 普通提示。
 enum HubNoticeKind { success, error, info }
 
@@ -17,7 +19,9 @@ class HubNotice {
       final kind = ok == false ? HubNoticeKind.error : HubNoticeKind.info;
       return HubNotice(
         kind: kind,
-        title: kind == HubNoticeKind.error ? 'Failed' : 'Complete',
+        title: kind == HubNoticeKind.error
+            ? tr('失败', 'Failed')
+            : tr('完成', 'Complete'),
       );
     }
     final kind = _resolveKind(cleaned, ok);
@@ -27,9 +31,9 @@ class HubNotice {
   }
 
   String get kindLabel => switch (kind) {
-    HubNoticeKind.success => 'Success',
-    HubNoticeKind.error => 'Error',
-    HubNoticeKind.info => 'Notice',
+    HubNoticeKind.success => tr('成功', 'Success'),
+    HubNoticeKind.error => tr('失败', 'Error'),
+    HubNoticeKind.info => tr('提示', 'Notice'),
   };
 }
 
@@ -51,30 +55,36 @@ HubNoticeKind _resolveKind(String message, bool? ok) {
   if (ok == false) return HubNoticeKind.error;
   if (ok == true) return HubNoticeKind.success;
   final lower = message.toLowerCase();
-  if (message.contains('failed') ||
-      message.contains('Failed') ||
-      message.contains('error') ||
-      message.contains('Error') ||
+  if (message.contains('失败') ||
+      message.contains('错误') ||
+      lower.contains('failed') ||
       lower.contains('fatal:') ||
       lower.contains('exception') ||
       RegExp(r'\berror\b').hasMatch(lower)) {
     return HubNoticeKind.error;
   }
-  if (message.startsWith('Downloaded') ||
+  if (message.startsWith('已') ||
+      message.contains('完成') ||
+      message.contains('成功') ||
+      message.startsWith('Downloaded') ||
       message.startsWith('Applied') ||
       message.startsWith('Uploaded') ||
       message.startsWith('Updated') ||
-      message.contains('complete') ||
-      message.contains('success')) {
+      lower.contains('complete') ||
+      lower.contains('success')) {
     return HubNoticeKind.success;
   }
   return HubNoticeKind.info;
 }
 
 bool _isPartialFailure(String message) {
-  return message.contains('partially failed') ||
-      (message.contains('failed') &&
-          (message.contains('success') || message.contains('Downloaded')));
+  return message.contains('部分失败') ||
+      message.contains('partially failed') ||
+      (message.contains('失败') &&
+          (message.contains('成功') || message.contains('已'))) ||
+      (message.toLowerCase().contains('failed') &&
+          (message.toLowerCase().contains('success') ||
+              message.contains('Downloaded')));
 }
 
 String _buildTitle(String message, HubNoticeKind kind) {
@@ -88,24 +98,32 @@ String _buildTitle(String message, HubNoticeKind kind) {
       .where((part) => part.isNotEmpty)
       .toList();
   if (parts.isEmpty) {
-    return kind == HubNoticeKind.error ? 'Error' : 'Complete';
+    return kind == HubNoticeKind.error
+        ? tr('失败', 'Error')
+        : tr('完成', 'Complete');
   }
   if (parts.length == 1) {
     return _ellipsis(parts.first);
   }
   final failed = parts.where(_partLooksFailed).length;
   if (failed > 0 && failed < parts.length) {
-    return 'Partially failed (${parts.length - failed} succeeded / $failed failed)';
+    return tr(
+      '部分失败（${parts.length - failed} 成功 / $failed 失败）',
+      'Partially failed (${parts.length - failed} succeeded / $failed failed)',
+    );
   }
   if (failed == parts.length) {
-    return _ellipsis('Failed: ${parts.first}');
+    return _ellipsis(tr('失败：${parts.first}', 'Failed: ${parts.first}'));
   }
-  return _ellipsis('${parts.first}（共 ${parts.length} 项）');
+  return _ellipsis(
+    tr('${parts.first}（共 ${parts.length} 项）', '${parts.first} (${parts.length} items)'),
+  );
 }
 
 bool _partLooksFailed(String part) {
   final lower = part.toLowerCase();
-  return part.contains('failed') ||
+  return part.contains('失败') ||
+      lower.contains('failed') ||
       lower.contains('fatal:') ||
       lower.contains('error:');
 }
@@ -129,13 +147,13 @@ bool _looksLikeGitDump(String message) {
 }
 
 String _gitTitle(String message, HubNoticeKind kind) {
-  if (kind == HubNoticeKind.error) return 'Update failed';
+  if (kind == HubNoticeKind.error) return tr('更新失败', 'Update failed');
   if (message.contains('Already up to date') ||
       message.contains('Already up-to-date') ||
-      message.contains('already up to date')) {
-    return 'Already up to date';
+      message.contains('已是最新')) {
+    return tr('已是最新', 'Already up to date');
   }
-  return 'Updated';
+  return tr('已更新', 'Updated');
 }
 
 String _ellipsis(String text) {

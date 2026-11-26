@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../common/agent_platforms.dart';
+import '../../common/app_locale.dart';
 import '../../services/mcp_paths.dart';
 import 'agent_resource_kind.dart';
 import 'convert/cursor_to_doubao_converter.dart';
@@ -24,9 +25,15 @@ class DoubaoConversion {
         ok: false,
         target: target,
         message: resource == AgentResourceKind.skill
-            ? 'Skill cannot be converted to Doubao on this platform'
-            : '${resource.label} has no Doubao equivalent directory and cannot be converted '
-                  '(Doubao connectors are configured in the app, not in a local file)',
+            ? tr(
+                '当前平台不支持将 Skill 转换到豆包',
+                'Skill cannot be converted to Doubao on this platform',
+              )
+            : tr(
+                '${resource.label} 暂无豆包对等目录，无法转换（豆包连接器在客户端内配置）',
+                '${resource.label} has no Doubao equivalent directory and cannot be converted '
+                    '(Doubao connectors are configured in the app, not in a local file)',
+              ),
       );
     }
 
@@ -34,20 +41,28 @@ class DoubaoConversion {
     final source = McpPaths.cursorSkillsPath;
     final destination = AgentPlatforms.localResourcePath(resource, target);
     if (workspace == null || destination == null || source == null) {
-      throw StateError('Doubao conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持豆包转换', 'Doubao conversion is not supported on this platform'),
+      );
     }
     if (!await Directory(workspace).exists()) {
       return SkillSyncResult(
         ok: true,
         target: target,
-        message: 'Doubao is not installed ($workspace not found), skipped',
+        message: tr(
+          '豆包未安装（未找到 $workspace），已跳过',
+          'Doubao is not installed ($workspace not found), skipped',
+        ),
       );
     }
     if (!await Directory(source).exists()) {
       return SkillSyncResult(
         ok: true,
         target: target,
-        message: 'Cursor Skill directory not found, skipped → $source',
+        message: tr(
+          'Cursor Skill 目录不存在，跳过转换 → $source',
+          'Cursor Skill directory not found, skipped → $source',
+        ),
       );
     }
 
@@ -57,19 +72,32 @@ class DoubaoConversion {
     );
     final rewriteHint = result.rewrittenSkills == 0
         ? ''
-        : ', normalized ${result.rewrittenSkills} SKILL.md frontmatter';
+        : tr(
+            '，已规范化 ${result.rewrittenSkills} 个 SKILL.md frontmatter',
+            ', normalized ${result.rewrittenSkills} SKILL.md frontmatter',
+          );
     final errorHint = result.errors.isEmpty
         ? ''
-        : '; failed ${result.errors.length} packages (${result.errors.join(', ')})';
+        : tr(
+            '；失败 ${result.errors.length} 个包（${result.errors.join('，')}）',
+            '; failed ${result.errors.length} packages (${result.errors.join(', ')})',
+          );
     return SkillSyncResult(
       ok: result.errors.isEmpty,
       target: target,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
       message: result.packages == 0 && result.errors.isEmpty
-          ? 'Cursor Skill directory is empty, nothing converted → $destination'
-          : 'Converted ${result.packages} Skills from Cursor to Doubao '
-                '(${result.copiedFiles} files$rewriteHint; existing Doubao Skills not in Cursor are kept$errorHint) → $destination',
+          ? tr(
+              'Cursor Skill 目录为空，未转换任何包 → $destination',
+              'Cursor Skill directory is empty, nothing converted → $destination',
+            )
+          : tr(
+              '已从 Cursor 转换 ${result.packages} 个 Skill 到豆包'
+                  '（${result.copiedFiles} 个文件$rewriteHint；保留目标端原有 Skill$errorHint）→ $destination',
+              'Converted ${result.packages} Skills from Cursor to Doubao '
+                  '(${result.copiedFiles} files$rewriteHint; existing Doubao Skills not in Cursor are kept$errorHint) → $destination',
+            ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../common/app_locale.dart';
 import 'mcp_paths.dart';
 import 'mcp_repo_post_pull.dart';
 
@@ -25,10 +26,12 @@ class McpRepoService {
   }) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(
+      return McpRepoCloneResult(
         ok: false,
-        message:
-            'Local repository management is not supported on this platform',
+        message: tr(
+          '当前平台不支持本地仓库管理',
+          'Local repository management is not supported on this platform',
+        ),
       );
     }
 
@@ -37,7 +40,7 @@ class McpRepoService {
     if (await dir.exists()) {
       return McpRepoCloneResult(
         ok: true,
-        message: 'Directory already exists; clone skipped',
+        message: tr('目录已存在，跳过克隆', 'Directory already exists; clone skipped'),
         localPath: target,
       );
     }
@@ -53,13 +56,16 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: false,
         message: err.isEmpty
-            ? 'git clone failed (code ${result.exitCode})'
+            ? tr(
+                'git clone 失败 (exit ${result.exitCode})',
+                'git clone failed (code ${result.exitCode})',
+              )
             : err,
       );
     }
     return McpRepoCloneResult(
       ok: true,
-      message: 'Cloned to $target',
+      message: tr('已克隆到 $target', 'Cloned to $target'),
       localPath: target,
     );
   }
@@ -91,15 +97,17 @@ class McpRepoService {
     if (!await dir.exists()) {
       return McpRepoCloneResult(
         ok: false,
-        message: 'Local directory does not exist: $localPath',
+        message: tr('本地目录不存在：$localPath', 'Local directory does not exist: $localPath'),
       );
     }
     if (!await isHubGitCheckout(localPath)) {
       return McpRepoCloneResult(
         ok: false,
         localPath: localPath,
-        message:
-            'This is not a Hub-managed Git repository; it cannot be updated',
+        message: tr(
+          '不是 Hub 管理的 Git 仓库，无法更新',
+          'This is not a Hub-managed Git repository; it cannot be updated',
+        ),
       );
     }
     final result = await Process.run(
@@ -116,8 +124,11 @@ class McpRepoService {
         ok: false,
         localPath: localPath,
         message: detail.isEmpty
-            ? 'git pull failed (code ${result.exitCode})'
-            : 'git pull failed: $detail',
+            ? tr(
+                'git pull 失败 (exit ${result.exitCode})',
+                'git pull failed (code ${result.exitCode})',
+              )
+            : tr('git pull 失败：$detail', 'git pull failed: $detail'),
       );
     }
     final out = (result.stdout as String).trim();
@@ -127,13 +138,13 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: localPath,
-        message: 'Already up to date',
+        message: tr('已是最新', 'Already up to date'),
       );
     }
     return McpRepoCloneResult(
       ok: true,
       localPath: localPath,
-      message: 'Updated; $out',
+      message: tr('已更新；$out', 'Updated; $out'),
     );
   }
 
@@ -168,10 +179,12 @@ class McpRepoService {
   Future<McpRepoCloneResult> deleteLocal({required String localPath}) async {
     final root = McpPaths.serversRoot;
     if (root == null) {
-      return const McpRepoCloneResult(
+      return McpRepoCloneResult(
         ok: false,
-        message:
-            'Local repository management is not supported on this platform',
+        message: tr(
+          '当前平台不支持本地仓库管理',
+          'Local repository management is not supported on this platform',
+        ),
       );
     }
 
@@ -179,8 +192,10 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: p.normalize(localPath),
-        message:
-            'Path is outside Hub servers; local directory deletion skipped',
+        message: tr(
+          '路径不在 Hub servers 目录下，跳过删除本地目录',
+          'Path is outside Hub servers; local directory deletion skipped',
+        ),
       );
     }
     final normalizedPath = p.normalize(localPath);
@@ -190,7 +205,10 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: normalizedPath,
-        message: 'Local directory does not exist; deletion skipped',
+        message: tr(
+          '本地目录不存在，跳过删除',
+          'Local directory does not exist; deletion skipped',
+        ),
       );
     }
 
@@ -199,13 +217,13 @@ class McpRepoService {
       return McpRepoCloneResult(
         ok: true,
         localPath: normalizedPath,
-        message: 'Deleted local directory $normalizedPath',
+        message: tr('已删除本地目录 $normalizedPath', 'Deleted local directory $normalizedPath'),
       );
     } catch (error) {
       return McpRepoCloneResult(
         ok: false,
         localPath: normalizedPath,
-        message: 'Failed to delete local directory: $error',
+        message: tr('删除本地目录失败：$error', 'Failed to delete local directory: $error'),
       );
     }
   }

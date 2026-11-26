@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../../common/app_locale.dart';
 import '../../services/mcp_paths.dart';
 import 'agent_resource_kind.dart';
 import 'convert/cursor_to_codex_agents_converter.dart';
@@ -30,11 +31,13 @@ class ResourceConversion {
       AgentResourceKind.rule => _convertRulesFromCursor(),
       AgentResourceKind.hook => _convertHooksFromCursor(),
       AgentResourceKind.command => Future.value(
-        const SkillSyncResult(
+        SkillSyncResult(
           ok: false,
           target: SkillTarget.codex,
-          message:
-              'Command has no Codex equivalent directory and cannot be converted',
+          message: tr(
+            'Command 暂无 Codex 对等目录，无法转换',
+            'Command has no Codex equivalent directory and cannot be converted',
+          ),
         ),
       ),
     };
@@ -47,7 +50,9 @@ class ResourceConversion {
     if (openCodeSkillsPath == null ||
         openCodeRulesPath == null ||
         openCodeCommandsPath == null) {
-      throw StateError('OpenCode conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 OpenCode 转换', 'OpenCode conversion is not supported on this platform'),
+      );
     }
     final cursorSkillsPath = McpPaths.cursorSkillsPath;
     final cursorRulesPath = McpPaths.cursorRulesPath;
@@ -55,7 +60,9 @@ class ResourceConversion {
     if (cursorSkillsPath == null ||
         cursorRulesPath == null ||
         cursorCommandsPath == null) {
-      throw StateError('Cursor conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 Cursor 转换', 'Cursor conversion is not supported on this platform'),
+      );
     }
 
     return switch (resource) {
@@ -71,11 +78,13 @@ class ResourceConversion {
         cursorCommandsPath,
         openCodeCommandsPath,
       ),
-      AgentResourceKind.hook => const SkillSyncResult(
+      AgentResourceKind.hook => SkillSyncResult(
         ok: false,
         target: SkillTarget.openCode,
-        message:
-            'Hook has no OpenCode equivalent hooks.json and cannot be converted',
+        message: tr(
+          'Hook 暂无 Open Code 对等 hooks.json，无法转换',
+          'Hook has no OpenCode equivalent hooks.json and cannot be converted',
+        ),
       ),
     };
   }
@@ -84,7 +93,9 @@ class ResourceConversion {
     final cursor = CursorHooksLayout.cursorUser();
     final codex = CursorHooksLayout.codexUser();
     if (cursor == null || codex == null) {
-      throw StateError('Hook conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 Hook 转换', 'Hook conversion is not supported on this platform'),
+      );
     }
     final converted = await hooksConverter.convertAll(
       cursor: cursor,
@@ -93,9 +104,12 @@ class ResourceConversion {
     );
     final skipHint = converted.skippedEvents.isEmpty
         ? ''
-        : '；已跳过无 Codex 对应事件：${converted.skippedEvents.join("、")}';
+        : tr(
+            '；已跳过无 Codex 对应事件：${converted.skippedEvents.join("、")}',
+            '; skipped unsupported Codex events: ${converted.skippedEvents.join(", ")}',
+          );
     final flagHint = converted.enabledFeatureFlag
-        ? '；已写入 features.hooks = true'
+        ? tr('；已写入 features.hooks = true', '; wrote features.hooks = true')
         : '';
     return SkillSyncResult(
       ok: true,
@@ -103,11 +117,20 @@ class ResourceConversion {
       deployedFiles: converted.copiedFiles,
       packageCount: converted.convertedHooks,
       message: converted.convertedHooks == 0
-          ? 'Cursor Hook 为空或无可映射事件，已写入 Codex hooks.json'
-                '$skipHint$flagHint → ${codex.hooksJsonPath}'
-          : '已从 Cursor 转换 ${converted.convertedHooks} 条 Hook 到 Codex'
-                '（复制 ${converted.copiedFiles} 个文件$skipHint$flagHint）'
-                ' → ${codex.hooksJsonPath}',
+          ? tr(
+              'Cursor Hook 为空或无可映射事件，已写入 Codex hooks.json'
+                  '$skipHint$flagHint → ${codex.hooksJsonPath}',
+              'Cursor Hooks empty or unmapped; wrote Codex hooks.json'
+                  '$skipHint$flagHint → ${codex.hooksJsonPath}',
+            )
+          : tr(
+              '已从 Cursor 转换 ${converted.convertedHooks} 条 Hook 到 Codex'
+                  '（复制 ${converted.copiedFiles} 个文件$skipHint$flagHint）'
+                  ' → ${codex.hooksJsonPath}',
+              'Converted ${converted.convertedHooks} Hooks from Cursor to Codex'
+                  ' (${converted.copiedFiles} files$skipHint$flagHint)'
+                  ' → ${codex.hooksJsonPath}',
+            ),
     );
   }
 
@@ -120,7 +143,10 @@ class ResourceConversion {
       return SkillSyncResult(
         ok: true,
         target: SkillTarget.openCode,
-        message: 'Cursor Skill 目录不存在，跳过转换 → $source',
+        message: tr(
+          'Cursor Skill 目录不存在，跳过转换 → $source',
+          'Cursor Skill directory not found, skipped → $source',
+        ),
       );
     }
     final skills = await openCodeConverter.convertSkills(
@@ -129,22 +155,38 @@ class ResourceConversion {
     );
     final removeHint = skills.removedPackages == 0
         ? ''
-        : '，并删除多余 ${skills.removedPackages} 个包';
+        : tr(
+            '，并删除多余 ${skills.removedPackages} 个包',
+            ', removed ${skills.removedPackages} extra packages',
+          );
     final extraHint = skills.deletedEntries == 0
         ? ''
-        : '，包内删除 ${skills.deletedEntries} 项';
+        : tr(
+            '，包内删除 ${skills.deletedEntries} 项',
+            ', removed ${skills.deletedEntries} extra items inside packages',
+          );
     final errorHint = skills.errors.isEmpty
         ? ''
-        : '；失败 ${skills.errors.length} 个包（${skills.errors.join('，')}）';
+        : tr(
+            '；失败 ${skills.errors.length} 个包（${skills.errors.join('，')}）',
+            '; failed ${skills.errors.length} packages (${skills.errors.join(', ')})',
+          );
     return SkillSyncResult(
       ok: skills.errors.isEmpty,
       target: SkillTarget.openCode,
       deployedFiles: skills.copiedFiles,
       packageCount: skills.packages,
       message: skills.packages == 0 && skills.errors.isEmpty
-          ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
-          : '已从 Cursor 批量转换 ${skills.packages} 个 Skill 到 Open Code'
-                '（复制 ${skills.copiedFiles} 个文件$extraHint$removeHint$errorHint）→ $target',
+          ? tr(
+              'Cursor Skill 目录为空，未转换任何包$removeHint → $target',
+              'Cursor Skill directory is empty, nothing converted$removeHint → $target',
+            )
+          : tr(
+              '已从 Cursor 批量转换 ${skills.packages} 个 Skill 到 Open Code'
+                  '（复制 ${skills.copiedFiles} 个文件$extraHint$removeHint$errorHint）→ $target',
+              'Converted ${skills.packages} Skills from Cursor to Open Code'
+                  ' (${skills.copiedFiles} files$extraHint$removeHint$errorHint) → $target',
+            ),
     );
   }
 
@@ -157,7 +199,10 @@ class ResourceConversion {
       return SkillSyncResult(
         ok: true,
         target: SkillTarget.openCode,
-        message: 'Cursor Rule 目录不存在，跳过转换 → $source',
+        message: tr(
+          'Cursor Rule 目录不存在，跳过转换 → $source',
+          'Cursor Rule directory not found, skipped → $source',
+        ),
       );
     }
     final count = await openCodeConverter.convertRules(
@@ -170,8 +215,14 @@ class ResourceConversion {
       deployedFiles: count,
       packageCount: 0,
       message: count == 0
-          ? 'Cursor Rule 目录为空，已生成空的 AGENTS.md → $target'
-          : '已从 Cursor 批量转换 $count 条 Rule 到 Open Code AGENTS.md → $target',
+          ? tr(
+              'Cursor Rule 目录为空，已生成空的 AGENTS.md → $target',
+              'Cursor Rule directory is empty, wrote empty AGENTS.md → $target',
+            )
+          : tr(
+              '已从 Cursor 批量转换 $count 条 Rule 到 Open Code AGENTS.md → $target',
+              'Converted $count Rules from Cursor to Open Code AGENTS.md → $target',
+            ),
     );
   }
 
@@ -184,7 +235,10 @@ class ResourceConversion {
       return SkillSyncResult(
         ok: true,
         target: SkillTarget.openCode,
-        message: 'Cursor Command 目录不存在，跳过转换 → $source',
+        message: tr(
+          'Cursor Command 目录不存在，跳过转换 → $source',
+          'Cursor Command directory not found, skipped → $source',
+        ),
       );
     }
     final commands = await openCodeConverter.convertCommands(
@@ -193,15 +247,21 @@ class ResourceConversion {
     );
     final deleteHint = commands.deleted == 0
         ? ''
-        : '，并删除多余 ${commands.deleted} 项';
+        : tr(
+            '，并删除多余 ${commands.deleted} 项',
+            ', removed ${commands.deleted} extra items',
+          );
     return SkillSyncResult(
       ok: true,
       target: SkillTarget.openCode,
       deployedFiles: commands.written,
       packageCount: 0,
-      message:
-          '已从 Cursor 转换 Open Code Command：${commands.written} 个'
-          '$deleteHint → $target',
+      message: tr(
+        '已从 Cursor 转换 Open Code Command：${commands.written} 个'
+            '$deleteHint → $target',
+        'Converted ${commands.written} Commands from Cursor to Open Code'
+            '$deleteHint → $target',
+      ),
     );
   }
 
@@ -209,14 +269,19 @@ class ResourceConversion {
     final source = McpPaths.cursorSkillsPath;
     final target = McpPaths.codexSkillsPath;
     if (source == null || target == null) {
-      throw StateError('Skill conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 Skill 转换', 'Skill conversion is not supported on this platform'),
+      );
     }
     final sourceDir = Directory(source);
     if (!await sourceDir.exists()) {
       return SkillSyncResult(
         ok: true,
         target: SkillTarget.codex,
-        message: 'Cursor Skill 目录不存在，跳过转换 → $source',
+        message: tr(
+          'Cursor Skill 目录不存在，跳过转换 → $source',
+          'Cursor Skill directory not found, skipped → $source',
+        ),
       );
     }
     final converted = await skillConverter.convertAll(
@@ -232,21 +297,39 @@ class ResourceConversion {
       (sum, e) => sum + e.deletedEntries,
     );
     final removed = converted.removedPackages;
-    final removeHint = removed == 0 ? '' : '，并删除多余 $removed 个包';
-    final extraHint = deletedInPacks == 0 ? '' : '，包内删除 $deletedInPacks 项';
+    final removeHint = removed == 0
+        ? ''
+        : tr('，并删除多余 $removed 个包', ', removed $removed extra packages');
+    final extraHint = deletedInPacks == 0
+        ? ''
+        : tr(
+            '，包内删除 $deletedInPacks 项',
+            ', removed $deletedInPacks extra items inside packages',
+          );
     final errorHint = converted.errors.isEmpty
         ? ''
-        : '；失败 ${converted.errors.length} 个包（${converted.errors.join('，')}）';
+        : tr(
+            '；失败 ${converted.errors.length} 个包（${converted.errors.join('，')}）',
+            '; failed ${converted.errors.length} packages (${converted.errors.join(', ')})',
+          );
     return SkillSyncResult(
       ok: converted.errors.isEmpty,
       target: SkillTarget.codex,
       deployedFiles: copied,
       packageCount: converted.items.length,
       message: converted.items.isEmpty && converted.errors.isEmpty
-          ? 'Cursor Skill 目录为空，未转换任何包$removeHint → $target'
-          : '已从 Cursor 批量转换 ${converted.items.length} 个 Skill 到 Codex'
-                '（复制 $copied 个文件，并写入 agents/openai.yaml'
-                '$extraHint$removeHint$errorHint）→ $target',
+          ? tr(
+              'Cursor Skill 目录为空，未转换任何包$removeHint → $target',
+              'Cursor Skill directory is empty, nothing converted$removeHint → $target',
+            )
+          : tr(
+              '已从 Cursor 批量转换 ${converted.items.length} 个 Skill 到 Codex'
+                  '（复制 $copied 个文件，并写入 agents/openai.yaml'
+                  '$extraHint$removeHint$errorHint）→ $target',
+              'Converted ${converted.items.length} Skills from Cursor to Codex'
+                  ' ($copied files, wrote agents/openai.yaml'
+                  '$extraHint$removeHint$errorHint) → $target',
+            ),
     );
   }
 
@@ -254,14 +337,19 @@ class ResourceConversion {
     final source = McpPaths.cursorRulesPath;
     final target = McpPaths.codexAgentsMdPath;
     if (source == null || target == null) {
-      throw StateError('Rule conversion is not supported on this platform');
+      throw StateError(
+        tr('当前平台不支持 Rule 转换', 'Rule conversion is not supported on this platform'),
+      );
     }
     final sourceDir = Directory(source);
     if (!await sourceDir.exists()) {
       return SkillSyncResult(
         ok: true,
         target: SkillTarget.codex,
-        message: 'Cursor Rule 目录不存在，跳过转换 → $source',
+        message: tr(
+          'Cursor Rule 目录不存在，跳过转换 → $source',
+          'Cursor Rule directory not found, skipped → $source',
+        ),
       );
     }
     final items = await agentsConverter.convertAll(
@@ -274,8 +362,14 @@ class ResourceConversion {
       deployedFiles: items.length,
       packageCount: items.length,
       message: items.isEmpty
-          ? 'Cursor Rule 目录为空，已生成空的 AGENTS.md → $target'
-          : '已从 Cursor 批量转换 ${items.length} 条 Rule 到 Codex AGENTS.md → $target',
+          ? tr(
+              'Cursor Rule 目录为空，已生成空的 AGENTS.md → $target',
+              'Cursor Rule directory is empty, wrote empty AGENTS.md → $target',
+            )
+          : tr(
+              '已从 Cursor 批量转换 ${items.length} 条 Rule 到 Codex AGENTS.md → $target',
+              'Converted ${items.length} Rules from Cursor to Codex AGENTS.md → $target',
+            ),
     );
   }
 }

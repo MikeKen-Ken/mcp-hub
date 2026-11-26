@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../common/agent_platforms.dart';
+import '../../common/app_locale.dart';
 import '../../common/package_time.dart';
 import '../../common/sync_progress.dart';
 import '../../common/writable_temp.dart';
@@ -83,9 +84,12 @@ class SkillSyncService extends ChangeNotifier {
   String? bulkFailure;
   final Map<AgentResourceKind, String> resourceFailures = {};
   DateTime? _progressStamp;
-  static const _codexNotOnWebDavMessage =
-      'WebDAV only downloads/uploads Cursor directories; Codex / OpenCode files are generated locally from Cursor. '
-      'Use “One-click conversion”, or first “Apply to Cursor” from the cache.';
+  static String get _codexNotOnWebDavMessage => tr(
+    'WebDAV 仅下载/上传 Cursor 目录；Codex / Open Code 由本机从 Cursor 转换生成，'
+        '请使用「一键转换」或先将缓存「应用到 Cursor」',
+    'WebDAV only downloads/uploads Cursor directories; Codex / OpenCode files are generated locally from Cursor. '
+        'Use “One-click conversion”, or first “Apply to Cursor” from the cache.',
+  );
   String? cachePathFor(SkillTarget target) => switch (target) {
     SkillTarget.cursor => McpPaths.cursorSkillsCachePath,
     SkillTarget.codex => McpPaths.codexSkillsCachePath,
@@ -184,7 +188,7 @@ class SkillSyncService extends ChangeNotifier {
       resource,
       target,
       () => _doSyncOne(resource, target),
-      activity: 'Download',
+      activity: tr('下载', 'Download'),
     );
   }
 
@@ -194,8 +198,8 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     return _forEachWebDavTarget(
       resource: resource,
-      activity: 'Download',
-      emptyMessage: 'No client can download ${resource.label}',
+      activity: tr('下载', 'Download'),
+      emptyMessage: tr('没有可下载 ${resource.label} 的客户端', 'No client can download ${resource.label}'),
       each: _doSyncOne,
     );
   }
@@ -216,7 +220,7 @@ class SkillSyncService extends ChangeNotifier {
       resource,
       target,
       () => _doMergeOne(resource, target),
-      activity: 'Merge',
+      activity: tr('合并', 'Merge'),
     );
   }
 
@@ -225,8 +229,8 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     return _forEachWebDavTarget(
       resource: resource,
-      activity: 'Merge',
-      emptyMessage: 'No client can merge ${resource.label}',
+      activity: tr('合并', 'Merge'),
+      emptyMessage: tr('没有可合并 ${resource.label} 的客户端', 'No client can merge ${resource.label}'),
       each: _doMergeOne,
     );
   }
@@ -251,7 +255,7 @@ class SkillSyncService extends ChangeNotifier {
       resource,
       target,
       () => _doPushOne(resource, target),
-      activity: 'Upload',
+      activity: tr('上传', 'Upload'),
     );
   }
 
@@ -261,8 +265,8 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     return _forEachWebDavTarget(
       resource: resource,
-      activity: 'Upload',
-      emptyMessage: 'No client can upload ${resource.label}',
+      activity: tr('上传', 'Upload'),
+      emptyMessage: tr('没有可上传 ${resource.label} 的客户端', 'No client can upload ${resource.label}'),
       each: _doPushOne,
     );
   }
@@ -271,8 +275,8 @@ class SkillSyncService extends ChangeNotifier {
   Future<SkillSyncResult> syncAllResourcesFromWebDav() async {
     return _forEachWebDavTarget(
       resource: null,
-      activity: 'Download',
-      emptyMessage: 'No resources can be downloaded',
+      activity: tr('下载', 'Download'),
+      emptyMessage: tr('没有可下载的资源', 'No resources can be downloaded'),
       each: _doSyncOne,
     );
   }
@@ -281,8 +285,8 @@ class SkillSyncService extends ChangeNotifier {
   Future<SkillSyncResult> mergeAllResourcesFromWebDav() async {
     return _forEachWebDavTarget(
       resource: null,
-      activity: 'Merge',
-      emptyMessage: 'No resources can be merged',
+      activity: tr('合并', 'Merge'),
+      emptyMessage: tr('没有可合并的资源', 'No resources can be merged'),
       each: _doMergeOne,
     );
   }
@@ -291,8 +295,8 @@ class SkillSyncService extends ChangeNotifier {
   Future<SkillSyncResult> pushAllResourcesToWebDav() async {
     return _forEachWebDavTarget(
       resource: null,
-      activity: 'Upload',
-      emptyMessage: 'No resources can be uploaded',
+      activity: tr('上传', 'Upload'),
+      emptyMessage: tr('没有可上传的资源', 'No resources can be uploaded'),
       each: _doPushOne,
     );
   }
@@ -318,7 +322,7 @@ class SkillSyncService extends ChangeNotifier {
       resource,
       target,
       () => _doApplyOne(resource, target),
-      activity: 'Apply',
+      activity: tr('应用', 'Apply'),
     );
   }
 
@@ -326,8 +330,8 @@ class SkillSyncService extends ChangeNotifier {
   Future<SkillSyncResult> applyAllResourcesFromCache() async {
     return _forEachWebDavTarget(
       resource: null,
-      activity: 'Apply',
-      emptyMessage: 'No resources can be applied',
+      activity: tr('应用', 'Apply'),
+      emptyMessage: tr('没有可应用的资源', 'No resources can be applied'),
       each: _doApplyOne,
     );
   }
@@ -344,7 +348,7 @@ class SkillSyncService extends ChangeNotifier {
     return _run(resource, target, () async {
       if (!McpPaths.isDesktopSupported) {
         throw StateError(
-          'Directory conversion is not supported on this platform',
+          tr('当前平台不支持目录转换', 'Directory conversion is not supported on this platform'),
         );
       }
       if (target == SkillTarget.openCode) {
@@ -366,7 +370,7 @@ class SkillSyncService extends ChangeNotifier {
         return _unsupportedTarget(target);
       }
       return _conversion.convertCodex(resource);
-    }, activity: 'Convert');
+    }, activity: tr('转换', 'Convert'));
   }
 
   /// 以本机 Cursor 正式目录为源，转换单个资源到全部可转换目标（不碰缓存）。
@@ -376,11 +380,11 @@ class SkillSyncService extends ChangeNotifier {
     return _run(resource, SkillTarget.cursor, () async {
       if (!McpPaths.isDesktopSupported) {
         throw StateError(
-          'Directory conversion is not supported on this platform',
+          tr('当前平台不支持目录转换', 'Directory conversion is not supported on this platform'),
         );
       }
       return _convertResourceToTargets(resource);
-    }, activity: 'Convert');
+    }, activity: tr('转换', 'Convert'));
   }
 
   Future<SkillSyncResult> _convertResourceToTargets(
@@ -400,7 +404,7 @@ class SkillSyncService extends ChangeNotifier {
         if (!codex.ok) allOk = false;
       } catch (error) {
         allOk = false;
-        parts.add('Codex: failed ($error)');
+        parts.add(tr('Codex：失败（$error）', 'Codex: failed ($error)'));
         debugPrint('${resource.label} 转换 Codex 失败: $error');
       }
     }
@@ -414,7 +418,7 @@ class SkillSyncService extends ChangeNotifier {
         if (!openCode.ok) allOk = false;
       } catch (error) {
         allOk = false;
-        parts.add('OpenCode: failed ($error)');
+        parts.add(tr('Open Code：失败（$error）', 'OpenCode: failed ($error)'));
         debugPrint('${resource.label} 转换 Open Code 失败: $error');
       }
     }
@@ -428,7 +432,7 @@ class SkillSyncService extends ChangeNotifier {
         if (!result.ok) allOk = false;
       } catch (error) {
         allOk = false;
-        parts.add('DeepSeek Harness: failed ($error)');
+        parts.add(tr('DeepSeek Harness：失败（$error）', 'DeepSeek Harness: failed ($error)'));
         debugPrint('${resource.label} 转换 DeepSeek Harness 失败: $error');
       }
     }
@@ -443,7 +447,7 @@ class SkillSyncService extends ChangeNotifier {
           if (!result.ok) allOk = false;
         } catch (error) {
           allOk = false;
-          parts.add('${target.label}: failed ($error)');
+          parts.add(tr('${target.label}：失败（$error）', '${target.label}: failed ($error)'));
           debugPrint('${resource.label} 转换 ${target.label} 失败: $error');
         }
       }
@@ -458,7 +462,7 @@ class SkillSyncService extends ChangeNotifier {
         if (!result.ok) allOk = false;
       } catch (error) {
         allOk = false;
-        parts.add('Doubao: failed ($error)');
+        parts.add(tr('豆包：失败（$error）', 'Doubao: failed ($error)'));
         debugPrint('${resource.label} 转换 Doubao 失败: $error');
       }
     }
@@ -472,7 +476,7 @@ class SkillSyncService extends ChangeNotifier {
         if (!result.ok) allOk = false;
       } catch (error) {
         allOk = false;
-        parts.add('Antigravity: failed ($error)');
+        parts.add(tr('Antigravity：失败（$error）', 'Antigravity: failed ($error)'));
         debugPrint('${resource.label} 转换 Antigravity 失败: $error');
       }
     }
@@ -481,7 +485,10 @@ class SkillSyncService extends ChangeNotifier {
       return SkillSyncResult(
         ok: false,
         target: SkillTarget.cursor,
-        message: 'No conversion target is available for ${resource.label}',
+        message: tr(
+          '${resource.label} 暂无可转换目标',
+          'No conversion target is available for ${resource.label}',
+        ),
       );
     }
     return SkillSyncResult(
@@ -498,7 +505,7 @@ class SkillSyncService extends ChangeNotifier {
     return _run(null, SkillTarget.cursor, () async {
       if (!McpPaths.isDesktopSupported) {
         throw StateError(
-          'Directory conversion is not supported on this platform',
+          tr('当前平台不支持目录转换', 'Directory conversion is not supported on this platform'),
         );
       }
       var deployedFiles = 0;
@@ -522,7 +529,7 @@ class SkillSyncService extends ChangeNotifier {
           if (!one.ok) allOk = false;
         } catch (error) {
           allOk = false;
-          parts.add('${resource.label}: failed ($error)');
+          parts.add(tr('${resource.label}：失败（$error）', '${resource.label}: failed ($error)'));
           debugPrint('转换全部 ${resource.label} 失败: $error');
         }
       }
@@ -532,17 +539,19 @@ class SkillSyncService extends ChangeNotifier {
         deployedFiles: deployedFiles,
         packageCount: packageCount,
         message: parts.isEmpty
-            ? 'No resources can be converted'
-            : parts.join('; '),
+            ? tr('没有可转换的资源', 'No resources can be converted')
+            : parts.join('；'),
       );
-    }, activity: 'Convert');
+    }, activity: tr('转换', 'Convert'));
   }
 
   SkillSyncResult _unsupportedTarget(SkillTarget target) => SkillSyncResult(
     ok: false,
     target: target,
-    message:
-        'No converter is available for ${target.label}; no files were written',
+    message: tr(
+      '${target.label} 暂无可用转换器，未写入文件',
+      'No converter is available for ${target.label}; no files were written',
+    ),
   );
 
   /// 仅下载到缓存目录：用远端压缩包覆盖缓存，不触碰正式配置。
@@ -552,15 +561,17 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) {
-      throw StateError('Configure and enable WebDAV first');
+      throw StateError(tr('请先配置并启用 WebDAV', 'Configure and enable WebDAV first'));
     }
     final cachePath = resourceCachePathFor(resource, target);
     if (cachePath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 下载');
+      throw StateError(
+        tr('${target.label} 不支持 ${resource.label} 下载', '${target.label} does not support downloading ${resource.label}'),
+      );
     }
     final client = _folderSync.clientFor(config);
     if (client == null) {
-      throw StateError('WebDAV is not fully configured');
+      throw StateError(tr('WebDAV 未配置完整', 'WebDAV is not fully configured'));
     }
     final pulled = await _folderSync.pullFolder(
       client: client,
@@ -569,7 +580,7 @@ class SkillSyncService extends ChangeNotifier {
       targetWireName: target.wireName,
       localDir: cachePath,
       onProgress: (done, total) =>
-          _reportProgress('Downloading ${resource.label}', done, total),
+          _reportProgress(tr('正在下载 ${resource.label}', 'Downloading ${resource.label}'), done, total),
     );
     await _rememberPackageUploadedAt(resource, pulled.uploadedAt);
     final packages = resource == AgentResourceKind.skill
@@ -577,7 +588,10 @@ class SkillSyncService extends ChangeNotifier {
         : 0;
     final versionHint = pulled.uploadedAt == null
         ? ''
-        : ' (remote version ${formatPackageTime(pulled.uploadedAt)})';
+        : tr(
+            '（远端版本 ${formatPackageTime(pulled.uploadedAt)}）',
+            ' (remote version ${formatPackageTime(pulled.uploadedAt)})',
+          );
     final noOp = pulled.fileCount == 0 && pulled.uploadedAt == null;
     return SkillSyncResult(
       ok: true,
@@ -585,12 +599,18 @@ class SkillSyncService extends ChangeNotifier {
       pulledFiles: pulled.fileCount,
       packageCount: packages,
       recordAttempt: !noOp,
-      message:
-          'Downloaded the Cursor ${resource.label} archive to the cache: '
-          '${pulled.fileCount} files'
-          '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
-          '$versionHint'
-          ' → $cachePath (official directory unchanged; use “Apply to Cursor”)',
+      message: tr(
+        '已将 Cursor ${resource.label} 压缩包下载到缓存：'
+            '${pulled.fileCount} 个文件'
+            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+            '$versionHint'
+            ' → $cachePath（正式目录未动，请按需点击「应用到 Cursor」）',
+        'Downloaded the Cursor ${resource.label} archive to the cache: '
+            '${pulled.fileCount} files'
+            '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
+            '$versionHint'
+            ' → $cachePath (official directory unchanged; use “Apply to Cursor”)',
+      ),
     );
   }
 
@@ -601,15 +621,17 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) {
-      throw StateError('Configure and enable WebDAV first');
+      throw StateError(tr('请先配置并启用 WebDAV', 'Configure and enable WebDAV first'));
     }
     final cachePath = resourceCachePathFor(resource, target);
     if (cachePath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 合并');
+      throw StateError(
+        tr('${target.label} 不支持 ${resource.label} 合并', '${target.label} does not support merging ${resource.label}'),
+      );
     }
     final client = _folderSync.clientFor(config);
     if (client == null) {
-      throw StateError('WebDAV 未配置完整');
+      throw StateError(tr('WebDAV 未配置完整', 'WebDAV is not fully configured'));
     }
     final merged = await _folderSync.mergeFolder(
       client: client,
@@ -618,7 +640,7 @@ class SkillSyncService extends ChangeNotifier {
       targetWireName: target.wireName,
       localDir: cachePath,
       onProgress: (done, total) =>
-          _reportProgress('Merging ${resource.label}', done, total),
+          _reportProgress(tr('正在合并 ${resource.label}', 'Merging ${resource.label}'), done, total),
     );
     await _rememberPackageUploadedAt(resource, merged.uploadedAt);
     final packages = resource == AgentResourceKind.skill
@@ -626,18 +648,27 @@ class SkillSyncService extends ChangeNotifier {
         : 0;
     final versionHint = merged.uploadedAt == null
         ? ''
-        : ' (remote version ${formatPackageTime(merged.uploadedAt)})';
+        : tr(
+            '（远端版本 ${formatPackageTime(merged.uploadedAt)}）',
+            ' (remote version ${formatPackageTime(merged.uploadedAt)})',
+          );
     return SkillSyncResult(
       ok: true,
       target: target,
       pulledFiles: merged.fileCount,
       packageCount: packages,
-      message:
-          'Merged Cursor ${resource.label} into the cache: '
-          '${merged.fileCount} files written'
-          '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
-          '$versionHint'
-          ' → $cachePath (extra cache items were kept; official directory unchanged)',
+      message: tr(
+        '已将 Cursor ${resource.label} 合并到缓存：'
+            '写入 ${merged.fileCount} 个文件'
+            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+            '$versionHint'
+            ' → $cachePath（保留缓存原有项；正式目录未动）',
+        'Merged Cursor ${resource.label} into the cache: '
+            '${merged.fileCount} files written'
+            '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
+            '$versionHint'
+            ' → $cachePath (extra cache items were kept; official directory unchanged)',
+      ),
     );
   }
 
@@ -648,19 +679,23 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     if (!McpPaths.isDesktopSupported) {
       throw StateError(
-        'Directory application is not supported on this platform',
+        tr('当前平台不支持目录应用', 'Directory application is not supported on this platform'),
       );
     }
     final cachePath = resourceCachePathFor(resource, target);
     if (cachePath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 覆盖');
+      throw StateError(
+        tr('${target.label} 不支持 ${resource.label} 覆盖', '${target.label} does not support applying ${resource.label}'),
+      );
     }
     await Directory(cachePath).create(recursive: true);
 
     if (resource == AgentResourceKind.hook) {
       final layout = CursorHooksLayout.cursorUser();
       if (layout == null) {
-        throw StateError('Hook application is not supported on this platform');
+        throw StateError(
+          tr('当前平台不支持 Hook 应用', 'Hook application is not supported on this platform'),
+        );
       }
       final deploy = await _hooksBundle.applyToLayout(
         bundleDir: cachePath,
@@ -670,17 +705,24 @@ class SkillSyncService extends ChangeNotifier {
         ok: true,
         target: target,
         deployedFiles: deploy.copiedFiles,
-        message:
-            'Applied cached Cursor Hook files (hooks.json and hooks/): '
-            '${deploy.copiedFiles} files written, ${deploy.deletedEntries} extra items removed'
-            ' → ${layout.hooksJsonPath}'
-            ' (Codex not converted; use “One-click conversion”)',
+        message: tr(
+          '已应用缓存中的 Cursor Hook（hooks.json 与 hooks/）：'
+              '写入 ${deploy.copiedFiles} 个文件，删除多余 ${deploy.deletedEntries} 项'
+              ' → ${layout.hooksJsonPath}'
+              '（未自动转换 Codex；请使用「一键转换」）',
+          'Applied cached Cursor Hook files (hooks.json and hooks/): '
+              '${deploy.copiedFiles} files written, ${deploy.deletedEntries} extra items removed'
+              ' → ${layout.hooksJsonPath}'
+              ' (Codex not converted; use “One-click conversion”)',
+        ),
       );
     }
 
     final deployPath = resourceDeployPathFor(resource, target);
     if (deployPath == null) {
-      throw StateError('${target.label} 不支持 ${resource.label} 覆盖');
+      throw StateError(
+        tr('${target.label} 不支持 ${resource.label} 覆盖', '${target.label} does not support applying ${resource.label}'),
+      );
     }
     final deploy = await _folderCopy.mirrorContents(
       sourceDir: cachePath,
@@ -694,12 +736,18 @@ class SkillSyncService extends ChangeNotifier {
       target: target,
       deployedFiles: deploy.copiedFiles,
       packageCount: packages,
-      message:
-          'Applied the cached Cursor ${resource.label}: '
-          '${deploy.copiedFiles} files written, ${deploy.deletedEntries} extra items removed'
-          '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
-          ' → $deployPath'
-          ' (Codex / OpenCode not converted; use “One-click conversion”)',
+      message: tr(
+        '已将缓存的 Cursor ${resource.label} 应用到正式目录：'
+            '写入 ${deploy.copiedFiles} 个文件，删除多余 ${deploy.deletedEntries} 项'
+            '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+            ' → $deployPath'
+            '（未自动转换 Codex / OpenCode；请使用「一键转换」）',
+        'Applied the cached Cursor ${resource.label}: '
+            '${deploy.copiedFiles} files written, ${deploy.deletedEntries} extra items removed'
+            '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
+            ' → $deployPath'
+            ' (Codex / OpenCode not converted; use “One-click conversion”)',
+      ),
     );
   }
 
@@ -710,14 +758,16 @@ class SkillSyncService extends ChangeNotifier {
   ) async {
     final config = await _loadConfig();
     if (!config.enabled || !config.isConfigured) {
-      throw StateError('Configure and enable WebDAV first');
+      throw StateError(tr('请先配置并启用 WebDAV', 'Configure and enable WebDAV first'));
     }
     Directory? staging;
     late final String localDir;
     if (resource == AgentResourceKind.hook) {
       final layout = CursorHooksLayout.cursorUser();
       if (layout == null) {
-        throw StateError('Hook upload is not supported on this platform');
+        throw StateError(
+          tr('当前平台不支持 Hook 上传', 'Hook upload is not supported on this platform'),
+        );
       }
       staging = await WritableTemp.createDir('mcp_hub_hooks_push');
       await _hooksBundle.exportFromLayout(
@@ -728,7 +778,9 @@ class SkillSyncService extends ChangeNotifier {
     } else {
       final deployPath = resourceDeployPathFor(resource, target);
       if (deployPath == null) {
-        throw StateError('${target.label} 不支持 ${resource.label} 上传');
+        throw StateError(
+          tr('${target.label} 不支持 ${resource.label} 上传', '${target.label} does not support uploading ${resource.label}'),
+        );
       }
       // 正式目录不存在时创建空目录再上传，使远端与「空的本机 Cursor」一致。
       await Directory(deployPath).create(recursive: true);
@@ -737,7 +789,7 @@ class SkillSyncService extends ChangeNotifier {
     try {
       final client = _folderSync.clientFor(config);
       if (client == null) {
-        throw StateError('WebDAV 未配置完整');
+        throw StateError(tr('WebDAV 未配置完整', 'WebDAV is not fully configured'));
       }
       final remoteZip = _folderSync.remoteResourceZip(
         config,
@@ -749,7 +801,7 @@ class SkillSyncService extends ChangeNotifier {
         resourceWireName: resource.wireName,
         localDir: localDir,
         onProgress: (done, total) =>
-            _reportProgress('Uploading ${resource.label}', done, total),
+            _reportProgress(tr('正在上传 ${resource.label}', 'Uploading ${resource.label}'), done, total),
       );
       final uploadedAt = DateTime.now().toUtc();
       await _rememberPackageUploadedAt(resource, uploadedAt);
@@ -761,11 +813,16 @@ class SkillSyncService extends ChangeNotifier {
         target: target,
         pushedFiles: pushed,
         packageCount: packages,
-        message:
-            'Packaged and uploaded ${resource.label} from the official Cursor directory: $pushed files'
-            '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
-            ' (version ${formatPackageTime(uploadedAt)})'
-            ' → $remoteZip (same-name archive replaced)',
+        message: tr(
+          '已从 Cursor 正式目录打包并上传 ${resource.label}：$pushed 个文件'
+              '${resource == AgentResourceKind.skill ? '（约 $packages 个 Skill 包）' : ''}'
+              '（版本 ${formatPackageTime(uploadedAt)}）'
+              ' → $remoteZip（已覆盖同名压缩包）',
+          'Packaged and uploaded ${resource.label} from the official Cursor directory: $pushed files'
+              '${resource == AgentResourceKind.skill ? ' (about $packages Skill packages)' : ''}'
+              ' (version ${formatPackageTime(uploadedAt)})'
+              ' → $remoteZip (same-name archive replaced)',
+        ),
       );
     } finally {
       if (staging != null) {
@@ -819,7 +876,7 @@ class SkillSyncService extends ChangeNotifier {
               );
             } catch (error) {
               allOk = false;
-              parts.add('${kind.label}/${target.label}: failed ($error)');
+              parts.add(tr('${kind.label}/${target.label}：失败（$error）', '${kind.label}/${target.label}: failed ($error)'));
               debugPrint('$activity ${kind.label} ${target.label} 失败: $error');
               _rememberResourceOutcome(kind, false, '$error');
               await recordResourceWebDavAttempt(
@@ -850,13 +907,13 @@ class SkillSyncService extends ChangeNotifier {
     AgentResourceKind? resource,
     SkillTarget? target,
     Future<SkillSyncResult> Function() action, {
-    String activity = 'Sync',
+    String activity = '同步',
     bool persistAttempt = true,
   }) async {
     if (status == SkillSyncStatus.syncing) {
-      return const SkillSyncResult(
+      return SkillSyncResult(
         ok: false,
-        message: 'A configuration transfer is already in progress; please wait',
+        message: tr('已有配置传输正在进行中，请稍候', 'A configuration transfer is already in progress; please wait'),
       );
     }
     status = SkillSyncStatus.syncing;
@@ -864,7 +921,7 @@ class SkillSyncService extends ChangeNotifier {
     lastResource = resource;
     lastError = null;
     progress = SyncProgress(
-      label: '$activity ${resource?.label ?? 'Folder resources'}',
+      label: '$activity ${resource?.label ?? tr('文件夹资源', 'Folder resources')}',
     );
     notifyListeners();
     try {

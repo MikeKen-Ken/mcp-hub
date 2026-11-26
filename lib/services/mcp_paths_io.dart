@@ -30,6 +30,9 @@ abstract final class McpPaths {
 
   static String get syncBasePath => p.join(hubDataRoot, 'sync_base.json');
 
+  static String get operationLogsPath =>
+      p.join(hubDataRoot, 'operation_logs.json');
+
   /// WebDAV 拉取后的 Skill 本地缓存根目录。
   static String get skillsCacheRoot => p.join(hubDataRoot, 'skills');
 

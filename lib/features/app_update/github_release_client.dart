@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../common/app_locale.dart';
 import 'app_update_constants.dart';
 import 'github_release_models.dart';
 import 'release_notes_plain_text.dart';
@@ -69,7 +70,7 @@ class GithubReleaseClient {
       errors.add('API：$e');
     }
 
-    throw StateError('Failed to read Release: ${errors.join('; ')}');
+    throw StateError(tr('读取 Release 失败：${errors.join('；')}', 'Failed to read Release: ${errors.join('; ')}'));
   }
 
   Future<List<GithubReleaseInfo>> _fetchViaAtom() async {
@@ -77,7 +78,7 @@ class GithubReleaseClient {
     _ensureOk(result, label: 'Atom');
     final releases = parseReleasesAtom(result.body, owner: owner, repo: repo);
     if (releases.isEmpty) {
-      throw StateError('Atom contains no available Release');
+      throw StateError(tr('Atom 中没有可用 Release', 'Atom contains no available Release'));
     }
     return releases;
   }
@@ -119,7 +120,7 @@ class GithubReleaseClient {
     request.followRedirects = true;
     final response = await request.close();
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Download failed (HTTP ${response.statusCode})');
+      throw StateError(tr('下载失败（HTTP ${response.statusCode}）', 'Download failed (HTTP ${response.statusCode})'));
     }
     final total = response.contentLength;
     var received = 0;

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../common/app_locale.dart';
 import 'app_update_constants.dart';
 import 'app_update_installer.dart';
 import 'github_release_client.dart';
@@ -40,7 +41,7 @@ class AppUpdateService {
       return AppUpdateCheckResult(
         currentVersion: currentVersion,
         currentBuild: currentBuild,
-        message: 'In-app updates are not supported on this platform',
+        message: tr('当前平台不支持应用内更新', 'In-app updates are not supported on this platform'),
       );
     }
 
@@ -51,8 +52,10 @@ class AppUpdateService {
       return AppUpdateCheckResult(
         currentVersion: currentVersion,
         currentBuild: currentBuild,
-        message:
-            'No published release is available (drafts are not visible to clients)',
+        message: tr(
+          '暂无已发布的 Release（草稿版本对客户端不可见）',
+          'No published release is available (drafts are not visible to clients)',
+        ),
       );
     }
 
@@ -67,7 +70,10 @@ class AppUpdateService {
         currentVersion: currentVersion,
         currentBuild: currentBuild,
         release: release,
-        message: 'This release has no installer for the current platform',
+        message: tr(
+          '该版本暂无适用于当前平台的安装包',
+          'This release has no installer for the current platform',
+        ),
       );
     }
 
@@ -83,9 +89,9 @@ class AppUpdateService {
       updateAvailable: updateAvailable,
       message: updateAvailable
           ? (newer
-                ? 'New version ${release.versionLabel} found'
-                : 'A refreshed build of the same version is available')
-          : 'You are up to date',
+                ? tr('发现新版本 ${release.versionLabel}', 'New version ${release.versionLabel} found')
+                : tr('当前版本有更新构建可用', 'A refreshed build of the same version is available'))
+          : tr('当前已是最新版本', 'You are up to date'),
     );
   }
 
@@ -137,7 +143,7 @@ class AppUpdateService {
     final release = check.release;
     final asset = check.asset;
     if (release == null || asset == null || !check.updateAvailable) {
-      throw StateError('No update is available to install');
+      throw StateError(tr('当前没有可安装的更新', 'No update is available to install'));
     }
 
     final tempDir = await getTemporaryDirectory();
@@ -164,7 +170,7 @@ class AppUpdateService {
     }
 
     throw UnsupportedError(
-      'Automatic installation is not supported on this platform',
+      tr('当前平台不支持自动安装更新', 'Automatic installation is not supported on this platform'),
     );
   }
 

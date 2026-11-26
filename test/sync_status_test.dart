@@ -70,21 +70,21 @@ void main() {
     );
   });
 
-  test('last-attempt labels are last result only', () {
-    expect(lastSyncAttemptLabel(null), 'Not synced yet');
+  test('last-attempt labels default to Chinese', () {
+    expect(lastSyncAttemptLabel(null), '尚未同步');
     final at = DateTime(2026, 9, 5, 11, 12);
     expect(
       lastSyncAttemptLabel(
         LastSyncAttempt(packageKey: 'catalog', ok: true, at: at),
       ),
-      'Last succeeded ${formatPackageTime(at)}',
+      '最近成功 ${formatPackageTime(at)}',
     );
     expect(
       lastSyncAttemptOverviewLabel(
         latest: LastSyncAttempt(packageKey: 'skills', ok: false, at: at),
         syncing: true,
       ),
-      'Last failed ${formatPackageTime(at)} · Syncing…',
+      '最近失败 ${formatPackageTime(at)} · 正在同步…',
     );
   });
 

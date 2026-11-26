@@ -98,7 +98,7 @@ void main() {
       expect(info.canStart, isFalse);
       expect(info.canStop, isTrue);
       expect(info.canUpdate, isTrue);
-      expect(info.phaseBadgeLabel, 'Running · pid 42');
+      expect(info.phaseBadgeLabel, '运行中 · pid 42');
     });
 
     test('远端 HTTP 不展示进程控制', () {

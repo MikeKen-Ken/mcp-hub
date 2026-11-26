@@ -3,14 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_hub/app.dart';
 import 'package:mcp_hub/app_brand.dart';
+import 'package:mcp_hub/common/app_locale.dart';
 import 'package:mcp_hub/controllers/hub_controller.dart';
 import 'package:mcp_hub/webdav/webdav_config.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Esc closes dialogs then the previous page; root stays open', (
-    tester,
-  ) async {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await AppLocale.setLanguage(AppLanguage.zh);
+  });
+
+  testWidgets('Esc 先关闭弹窗再返回上一页，根页面保持打开', (tester) async {
     final hub = HubController(initiallyLoading: false);
     addTearDown(hub.dispose);
     await tester.pumpWidget(
@@ -18,28 +23,28 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Apply Folder resources'));
+    await tester.tap(find.text('应用文件夹资源'));
     await tester.pumpAndSettle();
-    expect(find.text('Apply Folder resources?'), findsOneWidget);
+    expect(find.text('确认应用文件夹资源？'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Apply Folder resources?'), findsNothing);
+    expect(find.text('确认应用文件夹资源？'), findsNothing);
 
-    await tester.tap(find.byTooltip('WebDAV settings'));
+    await tester.tap(find.byTooltip('WebDAV 设置'));
     await tester.pumpAndSettle();
-    expect(find.text('WebDAV Download/Upload'), findsOneWidget);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.text('Configuration Center'), findsOneWidget);
+    expect(find.text('WebDAV 下载/上传'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Configuration Center'), findsOneWidget);
+    expect(find.text('配置中心'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('配置中心'), findsOneWidget);
   });
 
-  testWidgets('home shows Agent Hub title', (tester) async {
+  testWidgets('首页默认中文显示、Apply 按钮使用深主色样式并支持查看操作日志', (tester) async {
     final hub = HubController(initiallyLoading: false);
     hub.webDavConfig = const WebDavConfig(
       enabled: true,
@@ -65,111 +70,149 @@ void main() {
     );
     await tester.pump();
     expect(find.text(AppBrand.displayName), findsOneWidget);
-    expect(find.text('Hub configuration'), findsWidgets);
-    expect(find.text('Apply Folder resources'), findsOneWidget);
-    expect(find.text('Configuration Backup'), findsNothing);
-    expect(find.text('Local MCP'), findsNothing);
+    expect(find.text('配置中心'), findsOneWidget);
+    expect(find.text('Hub 配置'), findsWidgets);
+    expect(find.text('应用文件夹资源'), findsOneWidget);
+    expect(find.text('转换文件夹资源'), findsOneWidget);
+    expect(find.text('配置备份'), findsNothing);
+    expect(find.text('本地 MCP'), findsNothing);
 
-    expect(find.text('Catalog'), findsOneWidget);
-    expect(find.text('Folder resources'), findsOneWidget);
+    expect(find.text('MCP 清单'), findsOneWidget);
+    expect(find.text('文件夹资源'), findsOneWidget);
     expect(find.text('MCP'), findsOneWidget);
     expect(find.text('Skill'), findsOneWidget);
     expect(find.text('Command'), findsOneWidget);
     expect(find.text('Rule'), findsOneWidget);
     expect(find.text('Hook'), findsOneWidget);
-    expect(find.text('Open MCP Settings'), findsOneWidget);
-    expect(find.text('Convert Folder resources'), findsOneWidget);
-    expect(find.text('Download All'), findsNothing);
-    expect(find.text('Upload All'), findsNothing);
-
-    await tester.tap(find.text('Apply Folder resources'));
-    await tester.pumpAndSettle();
-    expect(find.text('Apply Folder resources?'), findsOneWidget);
-    expect(find.text('Confirm apply'), findsOneWidget);
-    expect(find.textContaining('does not write the Catalog'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.text('Apply Folder resources?'), findsNothing);
-
-    await tester.tap(find.text('Upload Hub configuration'));
-    await tester.pumpAndSettle();
-    expect(find.text('Replace remote package?'), findsOneWidget);
-    expect(find.text('Confirm upload'), findsOneWidget);
-    expect(
-      find.textContaining('Hub configuration (Catalog and Folder resources)'),
-      findsOneWidget,
+    expect(find.text('打开 MCP 设置'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('最近操作日志'),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('Cancel'));
+    expect(find.textContaining('最近操作日志'), findsOneWidget);
+    // 滚回顶部后再点击顶部卡片按钮，避免按钮被 AppBar 遮挡
+    await tester.drag(find.byType(ListView).first, const Offset(0, 1200));
     await tester.pumpAndSettle();
-    expect(find.text('Replace remote package?'), findsNothing);
+    await tester.ensureVisible(find.text('应用文件夹资源'));
 
-    await tester.tap(find.text('Merge Hub configuration'));
-    await tester.pumpAndSettle();
-    expect(find.text('Merge Hub configuration?'), findsOneWidget);
-    expect(
-      find.textContaining('Catalog merge changes the Hub list now'),
-      findsOneWidget,
+    // 验证「应用文件夹资源」与「转换文件夹资源」均为深主色 FilledButton（无 tonal 背景色）
+    final applyButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('应用文件夹资源'),
+        matching: find.byType(FilledButton),
+      ),
     );
-    await tester.tap(find.text('Cancel'));
+    final convertButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('转换文件夹资源'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(applyButton.style?.backgroundColor, isNull);
+    expect(convertButton.style?.backgroundColor, isNull);
+
+    // 验证卡片内「应用到 Cursor」同样使用深主色 FilledButton
+    final applyCursorButtons = tester
+        .widgetList<FilledButton>(
+          find.ancestor(
+            of: find.text('应用到 Cursor'),
+            matching: find.byType(FilledButton),
+          ),
+        )
+        .toList();
+    expect(applyCursorButtons, isNotEmpty);
+    for (final button in applyCursorButtons) {
+      expect(button.style?.backgroundColor, isNull);
+    }
+
+    await tester.tap(find.text('应用文件夹资源'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认应用文件夹资源？'), findsOneWidget);
+    expect(find.text('确认应用'), findsOneWidget);
+    expect(find.textContaining('不会把 MCP 清单写入客户端配置'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认应用文件夹资源？'), findsNothing);
+
+    await tester.tap(find.text('上传 Hub 配置'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认覆盖远端压缩包？'), findsOneWidget);
+    expect(find.text('确认上传'), findsOneWidget);
+    expect(find.textContaining('Hub 配置（MCP 清单与文件夹资源）'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认覆盖远端压缩包？'), findsNothing);
+
+    await tester.tap(find.text('合并 Hub 配置'));
+    await tester.pumpAndSettle();
+    expect(find.text('确认合并 Hub 配置？'), findsOneWidget);
+    expect(find.textContaining('清单合并会立即更新 Hub 列表'), findsOneWidget);
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
     final mcpCard = find.ancestor(
-      of: find.text('Open MCP Settings'),
+      of: find.text('打开 MCP 设置'),
       matching: find.byType(Card),
     );
     final mcpApply = find.descendant(
       of: mcpCard,
-      matching: find.text('Write to Clients'),
+      matching: find.text('写入客户端'),
     );
     await tester.ensureVisible(mcpApply);
     await tester.tap(mcpApply);
     await tester.pumpAndSettle();
-    expect(find.text('Write to clients?'), findsOneWidget);
-    expect(find.textContaining('all current MCPs'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    expect(find.text('确认写入客户端？'), findsOneWidget);
+    expect(find.textContaining('当前全部 MCP'), findsOneWidget);
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
-    final mcpMerge = find.descendant(of: mcpCard, matching: find.text('Merge'));
+    final mcpMerge = find.descendant(of: mcpCard, matching: find.text('合并'));
     await tester.ensureVisible(mcpMerge);
     await tester.tap(mcpMerge);
     await tester.pumpAndSettle();
-    expect(find.text('Merge the Catalog?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    expect(find.text('确认合并 MCP 清单？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
-    final mcpUpload = find.descendant(
-      of: mcpCard,
-      matching: find.text('Upload'),
-    );
+    final mcpUpload = find.descendant(of: mcpCard, matching: find.text('上传'));
     await tester.ensureVisible(mcpUpload);
     await tester.tap(mcpUpload);
     await tester.pumpAndSettle();
-    expect(find.text('Replace remote package?'), findsOneWidget);
-    expect(find.textContaining('Catalog'), findsWidgets);
-    await tester.tap(find.text('Cancel'));
+    expect(find.text('确认覆盖远端压缩包？'), findsOneWidget);
+    expect(find.textContaining('MCP 清单'), findsWidgets);
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('WebDAV settings'));
+    // 打开操作日志页面
+    await tester.tap(find.byTooltip('操作日志'));
     await tester.pumpAndSettle();
-    expect(find.text('Configuration Backup'), findsOneWidget);
-    await tester.tap(find.text('Configuration Backup'));
+    expect(find.text('操作日志'), findsOneWidget);
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Export / Import'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('WebDAV 设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('界面语言'), findsOneWidget);
+    expect(find.text('配置备份'), findsOneWidget);
+    await tester.tap(find.text('配置备份'));
+    await tester.pumpAndSettle();
+    expect(find.text('导出 / 导入'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    final mcpSettings = find.text('Open MCP Settings');
+    final mcpSettings = find.text('打开 MCP 设置');
     await tester.ensureVisible(mcpSettings);
     await tester.tap(mcpSettings);
     await tester.pumpAndSettle();
-    expect(find.text('Client MCP'), findsOneWidget);
-    expect(find.text('Local MCP'), findsOneWidget);
+    expect(find.text('客户端 MCP'), findsOneWidget);
+    expect(find.text('本地 MCP'), findsOneWidget);
 
-    await tester.tap(find.text('Local MCP'));
+    await tester.tap(find.text('本地 MCP'));
     await tester.pumpAndSettle();
-    expect(find.text('Add MCP'), findsOneWidget);
+    expect(find.text('添加 MCP'), findsOneWidget);
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final theme = app.theme!;

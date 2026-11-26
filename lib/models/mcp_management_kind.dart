@@ -1,3 +1,5 @@
+import '../common/app_locale.dart';
+
 /// Hub 对 MCP 的管理/托管方式（静态，来自目录配置）。
 enum McpManagementKind {
   /// 内置 hubMCP（Hub 内嵌 HTTP 服务）。
@@ -21,11 +23,11 @@ enum McpManagementKind {
 
 extension McpManagementKindLabels on McpManagementKind {
   String get label => switch (this) {
-    McpManagementKind.builtInHttp => 'Built-in',
+    McpManagementKind.builtInHttp => tr('内置', 'Built-in'),
     McpManagementKind.hubGitStdio => 'Git',
-    McpManagementKind.hubStdio => 'Local',
-    McpManagementKind.remoteBridge => 'Bridge',
-    McpManagementKind.externalHttp => 'Remote',
-    McpManagementKind.unconfigured => 'Unconfigured',
+    McpManagementKind.hubStdio => tr('本地', 'Local'),
+    McpManagementKind.remoteBridge => tr('桥接', 'Bridge'),
+    McpManagementKind.externalHttp => tr('远端', 'Remote'),
+    McpManagementKind.unconfigured => tr('未配置', 'Unconfigured'),
   };
 }

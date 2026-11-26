@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:mcp_dart/mcp_dart.dart';
 
+import '../common/app_locale.dart';
 import '../controllers/hub_controller.dart';
 import 'hub_mcp_constants.dart';
 import 'hub_mcp_tools.dart';
@@ -39,8 +40,10 @@ class HubMcpHost extends ChangeNotifier {
 
   Future<void> start({int port = HubMcpConstants.defaultPort}) async {
     if (!isSupported) {
-      lastError =
-          'Embedded MCP is not supported on this platform (use the Windows, macOS, or Linux desktop app)';
+      lastError = tr(
+        '当前平台不支持内置 MCP（请使用 Windows、macOS 或 Linux 桌面端）',
+        'Embedded MCP is not supported on this platform (use the Windows, macOS, or Linux desktop app)',
+      );
       status = HubMcpStatus.error;
       notifyListeners();
       return;

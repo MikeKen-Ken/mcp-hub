@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../common/app_locale.dart';
 import '../../common/app_motion.dart';
 import '../../widgets/hub_notice/hub_notice.dart';
 import '../../widgets/settings_section.dart';
@@ -91,8 +92,10 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
       setState(() => _busy = false);
       showHubNotice(
         context,
-        message:
-            'Installer launched; follow the prompts to complete the update',
+        message: tr(
+          '已启动安装程序，请按提示完成更新',
+          'Installer launched; follow the prompts to complete the update',
+        ),
         ok: true,
       );
     } catch (e) {
@@ -109,33 +112,38 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
     final info = _info;
     final check = _check;
     final versionLabel = info == null
-        ? 'Loading…'
+        ? tr('加载中…', 'Loading…')
         : '${info.version}（${info.buildNumber}）';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Check for Updates')),
+      appBar: AppBar(title: Text(tr('检查更新', 'Check for Updates'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           SettingsSection(
             icon: Icons.system_update_alt_outlined,
-            title: 'Software Updates',
-            subtitle: 'Get installers from GitHub Releases',
+            title: tr('软件更新', 'Software Updates'),
+            subtitle: tr('从 GitHub Releases 获取安装包', 'Get installers from GitHub Releases'),
             children: [
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('Current version'),
+                title: Text(tr('当前版本', 'Current version')),
                 subtitle: Text(versionLabel),
               ),
               if (check?.release != null)
                 ListTile(
                   leading: const Icon(Icons.new_releases_outlined),
-                  title: Text('Latest ${check!.release!.versionLabel}'),
+                  title: Text(
+                    tr(
+                      '最新版本 ${check!.release!.versionLabel}',
+                      'Latest ${check.release!.versionLabel}',
+                    ),
+                  ),
                   subtitle: Text(
                     check.message ??
                         (check.updateAvailable
-                            ? 'An update is available'
-                            : 'You are up to date'),
+                            ? tr('发现可用更新', 'An update is available')
+                            : tr('已是最新版本', 'You are up to date')),
                   ),
                 ),
               if (_progress != null) ...[
@@ -147,7 +155,10 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                       LinearProgressIndicator(value: _progress),
                       const SizedBox(height: 6),
                       Text(
-                        'Download ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
+                        tr(
+                          '已下载 ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
+                          'Download ${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
+                        ),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -171,7 +182,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _busy ? null : _checkUpdate,
-                        child: const Text('Check again'),
+                        child: Text(tr('重新检查', 'Check again')),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -186,8 +197,8 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                             : _install,
                         child: Text(
                           check?.updateAvailable == true
-                              ? 'Download and install'
-                              : 'No update needed',
+                              ? tr('下载并安装', 'Download and install')
+                              : tr('无需更新', 'No update needed'),
                         ),
                       ),
                     ),
@@ -200,7 +211,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
             const SizedBox(height: 16),
             SettingsSection(
               icon: Icons.notes_outlined,
-              title: 'Release Notes',
+              title: tr('更新说明', 'Release Notes'),
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -233,20 +244,25 @@ Future<void> maybePromptAppUpdate(BuildContext context) async {
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('New version ${result.release!.versionLabel} found'),
-        content: Text(result.message ?? 'Open the update page?'),
+        title: Text(
+          tr(
+            '发现新版本 ${result.release!.versionLabel}',
+            'New version ${result.release!.versionLabel} found',
+          ),
+        ),
+        content: Text(result.message ?? tr('是否打开更新页面？', 'Open the update page?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'skip'),
-            child: const Text('Skip this version'),
+            child: Text(tr('跳过此版本', 'Skip this version')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'later'),
-            child: const Text('Later'),
+            child: Text(tr('稍后', 'Later')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, 'update'),
-            child: const Text('Update'),
+            child: Text(tr('立即更新', 'Update')),
           ),
         ],
       ),

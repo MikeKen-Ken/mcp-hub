@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../widgets/hub_notice/hub_notice.dart';
+import '../../../common/app_locale.dart';
 import '../../../services/directory_opener.dart';
+import '../../../widgets/hub_notice/hub_notice.dart';
 
 class DirectoryPathRow extends StatelessWidget {
   const DirectoryPathRow({
@@ -24,7 +25,7 @@ class DirectoryPathRow extends StatelessWidget {
       if (!context.mounted) return;
       showHubNotice(
         context,
-        message: 'Failed to open directory: $error',
+        message: tr('打开目录失败：$error', 'Failed to open directory: $error'),
         ok: false,
       );
     }
@@ -36,12 +37,12 @@ class DirectoryPathRow extends StatelessWidget {
       children: [
         Expanded(
           child: SelectableText(
-            '$label: ${displayPath ?? "(unavailable)"}',
+            '$label: ${displayPath ?? tr('(不可用)', '(unavailable)')}',
             style: Theme.of(context).textTheme.labelSmall,
           ),
         ),
         IconButton(
-          tooltip: 'Open $label directory',
+          tooltip: tr('打开 $label 目录', 'Open $label directory'),
           onPressed: enabled && directoryPath != null
               ? () => _open(context)
               : null,
