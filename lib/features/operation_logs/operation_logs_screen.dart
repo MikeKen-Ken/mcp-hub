@@ -14,7 +14,9 @@ import 'operation_log_entry.dart';
 enum _StatusFilter { all, success, failed }
 
 class OperationLogsScreen extends StatefulWidget {
-  const OperationLogsScreen({super.key});
+  const OperationLogsScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<OperationLogsScreen> createState() => _OperationLogsScreenState();
@@ -158,37 +160,67 @@ class _OperationLogsScreenState extends State<OperationLogsScreen> {
         .where((e) => e.status == OperationLogStatus.failure)
         .length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('操作日志', 'Operation Logs')),
-        actions: [
-          IconButton(
-            tooltip: tr('复制当前筛选日志', 'Copy filtered logs'),
-            onPressed: filtered.isEmpty
-                ? null
-                : () => _copyFiltered(context, hub, filtered),
-            icon: const Icon(Icons.copy_all_outlined),
-          ),
-          if (hub.isDesktopSupported)
-            IconButton(
-              tooltip: tr('导出为文本文件', 'Export to text file'),
-              onPressed: filtered.isEmpty
-                  ? null
-                  : () => _exportFiltered(context, hub, filtered),
-              icon: const Icon(Icons.download_outlined),
-            ),
-          IconButton(
-            tooltip: tr('清空日志', 'Clear logs'),
-            onPressed: all.isEmpty ? null : () => _confirmClear(context, hub),
-            icon: const Icon(Icons.delete_sweep_outlined),
-          ),
-        ],
+    final actions = <Widget>[
+      IconButton(
+        tooltip: tr('复制当前筛选日志', 'Copy filtered logs'),
+        onPressed: filtered.isEmpty
+            ? null
+            : () => _copyFiltered(context, hub, filtered),
+        icon: const Icon(Icons.copy_all_outlined, size: 19),
       ),
-      body: Column(
-        children: [
+      if (hub.isDesktopSupported)
+        IconButton(
+          tooltip: tr('导出为文本文件', 'Export to text file'),
+          onPressed: filtered.isEmpty
+              ? null
+              : () => _exportFiltered(context, hub, filtered),
+          icon: const Icon(Icons.download_outlined, size: 19),
+        ),
+      IconButton(
+        tooltip: tr('清空日志', 'Clear logs'),
+        onPressed: all.isEmpty ? null : () => _confirmClear(context, hub),
+        icon: const Icon(Icons.delete_sweep_outlined, size: 19),
+      ),
+    ];
+
+    final bodyContent = Column(
+      children: [
+        if (widget.embedded)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Column(
+            padding: const EdgeInsets.fromLTRB(28, 22, 28, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('操作日志', 'Operation Logs'),
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        tr(
+                          '查看全部同步、下载、上传、应用、转换、MCP 与备份操作明细。',
+                          'Review detailed records for sync, transfer, apply, convert, MCP, and backup operations.',
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                ...actions,
+              ],
+            ),
+          ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            widget.embedded ? 28 : 16,
+            12,
+            widget.embedded ? 28 : 16,
+            8,
+          ),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextField(
@@ -296,7 +328,12 @@ class _OperationLogsScreenState extends State<OperationLogsScreen> {
                     ),
                   )
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      widget.embedded ? 28 : 16,
+                      12,
+                      widget.embedded ? 28 : 16,
+                      24,
+                    ),
                     itemCount: filtered.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) =>
@@ -304,7 +341,24 @@ class _OperationLogsScreenState extends State<OperationLogsScreen> {
                   ),
           ),
         ],
+      );
+
+    if (widget.embedded) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: bodyContent,
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(tr('操作日志', 'Operation Logs')),
+        actions: actions,
       ),
+      body: bodyContent,
     );
   }
 }

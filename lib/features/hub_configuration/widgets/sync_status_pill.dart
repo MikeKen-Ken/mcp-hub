@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../common/app_theme.dart';
+
 class SyncStatusPill extends StatelessWidget {
   const SyncStatusPill({
     super.key,
@@ -20,23 +22,33 @@ class SyncStatusPill extends StatelessWidget {
     final bg = error
         ? scheme.errorContainer
         : active
-        ? scheme.secondaryContainer
-        : scheme.surfaceContainerHighest;
-    final fg = error ? scheme.onErrorContainer : null;
+        ? scheme.primaryContainer
+        : AppTheme.subtleBg(context);
+    final fg = error
+        ? scheme.onErrorContainer
+        : active
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
+    final border = error
+        ? scheme.error.withValues(alpha: 0.25)
+        : active
+        ? scheme.primary.withValues(alpha: 0.28)
+        : AppTheme.hairline(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: fg),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: fg),
+          const SizedBox(width: 5),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg),
           ),
         ],
       ),

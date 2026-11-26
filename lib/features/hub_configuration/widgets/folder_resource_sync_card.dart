@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../common/agent_platforms.dart';
 import '../../../common/app_locale.dart';
+import '../../../common/app_theme.dart';
 import '../../../common/package_time.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/skill_sync/skill_sync.dart';
@@ -40,6 +41,12 @@ class FolderResourceSyncCard extends StatelessWidget {
         (hub.skillSync.lastResource == resource ||
             hub.skillSync.lastResource == null ||
             hub.hubConfiguration.busy);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final cloudStyle = OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 30),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    );
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -51,13 +58,26 @@ class FolderResourceSyncCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  child: Icon(switch (resource) {
-                    AgentResourceKind.skill => Icons.auto_awesome_outlined,
-                    AgentResourceKind.command => Icons.terminal_outlined,
-                    AgentResourceKind.rule => Icons.rule_outlined,
-                    AgentResourceKind.hook => Icons.account_tree_outlined,
-                  }),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Icon(
+                    switch (resource) {
+                      AgentResourceKind.skill => Icons.auto_awesome_outlined,
+                      AgentResourceKind.command => Icons.terminal_outlined,
+                      AgentResourceKind.rule => Icons.rule_outlined,
+                      AgentResourceKind.hook => Icons.account_tree_outlined,
+                    },
+                    size: 18,
+                    color: scheme.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -69,10 +89,18 @@ class FolderResourceSyncCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               resource.label,
-                              style: Theme.of(context).textTheme.titleMedium,
+                              style: theme.textTheme.titleMedium,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (_targetSummary != null) ...[
+                            SyncStatusPill(
+                              icon: Icons.transform_outlined,
+                              label: _targetSummary!,
+                              active: true,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           CursorCountChip(
                             count: counts.forResource(resource),
                             tooltip: tr(
@@ -103,67 +131,16 @@ class FolderResourceSyncCard extends StatelessWidget {
                                       'WebDAV is not ready; local conversion is still available',
                                     )),
                       ),
-                      if (_canConvert) ...[
-                        const SizedBox(height: 6),
-                        SyncStatusPill(
-                          icon: Icons.transform_outlined,
-                          label: tr('支持一键转换', 'Conversion supported'),
-                          active: true,
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton.tonalIcon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () async {
-                          final confirmed = await confirmRemoteDownload(
-                            context,
-                            title: tr(
-                              '确认下载远端 ${resource.label}？',
-                              'Download remote ${resource.label}?',
-                            ),
-                            body: tr(
-                              '这会下载远端 ${resource.label} 压缩包并覆盖本地缓存。\n\n'
-                                  'Cursor 正式目录暂不会改动。',
-                              'This will download the remote ${resource.label} archive and replace the local cache.\n\n'
-                                  'The official Cursor directory will not be changed.',
-                            ),
-                            packages: [
-                              RemotePackageDateQuery(
-                                label: resource.label,
-                                load: () =>
-                                    hub.peekRemoteResourceUploadedAt(resource),
-                              ),
-                            ],
-                          );
-                          if (!confirmed || !context.mounted) return;
-                          await _run(
-                            context,
-                            () => hub.syncResourceToAllTargets(resource),
-                          );
-                        },
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  label: Text(tr('下载', 'Download')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () => _run(
-                          context,
-                          () => hub.mergeResourceToAllTargets(resource),
-                        ),
-                  icon: const Icon(Icons.merge_outlined),
-                  label: Text(tr('合并', 'Merge')),
-                ),
                 FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
@@ -178,38 +155,105 @@ class FolderResourceSyncCard extends StatelessWidget {
                             () => hub.applyResourceFromCache(resource),
                           );
                         },
-                  icon: const Icon(Icons.install_desktop_outlined),
+                  icon: const Icon(Icons.install_desktop_outlined, size: 16),
                   label: Text(tr('应用到 Cursor', 'Apply to Cursor')),
                 ),
-                OutlinedButton.icon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () async {
-                          final confirmed = await confirmRemoteOverwrite(
-                            context,
-                            scope: resource.label,
-                          );
-                          if (!confirmed || !context.mounted) return;
-                          await _run(
-                            context,
-                            () => hub.pushResourceToAllTargets(resource),
-                          );
-                        },
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  label: Text(tr('上传', 'Upload')),
-                ),
                 if (_canConvert)
-                  FilledButton.icon(
+                  FilledButton.tonalIcon(
                     onPressed: !supported || busy
                         ? null
                         : () => _run(
                             context,
                             () => hub.convertResourceToAllTargets(resource),
                           ),
-                    icon: const Icon(Icons.transform_outlined),
+                    icon: const Icon(Icons.transform_outlined, size: 16),
                     label: Text(tr('转换', 'Convert')),
                   ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.subtleBg(context),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.hairline(context)),
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    tr('云端：', 'Cloud:'),
+                    style: theme.textTheme.labelSmall,
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () async {
+                            final confirmed = await confirmRemoteDownload(
+                              context,
+                              title: tr(
+                                '确认下载远端 ${resource.label}？',
+                                'Download remote ${resource.label}?',
+                              ),
+                              body: tr(
+                                '这会下载远端 ${resource.label} 压缩包并覆盖本地缓存。\n\n'
+                                    'Cursor 正式目录暂不会改动。',
+                                'This will download the remote ${resource.label} archive and replace the local cache.\n\n'
+                                    'The official Cursor directory will not be changed.',
+                              ),
+                              packages: [
+                                RemotePackageDateQuery(
+                                  label: resource.label,
+                                  load: () => hub.peekRemoteResourceUploadedAt(
+                                    resource,
+                                  ),
+                                ),
+                              ],
+                            );
+                            if (!confirmed || !context.mounted) return;
+                            await _run(
+                              context,
+                              () => hub.syncResourceToAllTargets(resource),
+                            );
+                          },
+                    icon: const Icon(Icons.cloud_download_outlined, size: 15),
+                    label: Text(tr('下载', 'Download')),
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () => _run(
+                            context,
+                            () => hub.mergeResourceToAllTargets(resource),
+                          ),
+                    icon: const Icon(Icons.merge_outlined, size: 15),
+                    label: Text(tr('合并', 'Merge')),
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () async {
+                            final confirmed = await confirmRemoteOverwrite(
+                              context,
+                              scope: resource.label,
+                            );
+                            if (!confirmed || !context.mounted) return;
+                            await _run(
+                              context,
+                              () => hub.pushResourceToAllTargets(resource),
+                            );
+                          },
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 15),
+                    label: Text(tr('上传', 'Upload')),
+                  ),
+                ],
+              ),
             ),
             OpStatusBar(
               progress: busy && hub.skillSync.lastResource == resource
@@ -217,12 +261,14 @@ class FolderResourceSyncCard extends StatelessWidget {
                   : null,
               errorMessage: busy ? null : hub.skillSync.failureFor(resource),
             ),
-            const Divider(height: 24),
+            const SizedBox(height: 8),
+            const Divider(),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
+              childrenPadding: const EdgeInsets.only(bottom: 6),
               title: Text(
                 tr('查看目录与转换规则', 'View Directories and Conversion Rules'),
+                style: theme.textTheme.labelLarge,
               ),
               children: [
                 if (_convertHint != null)
@@ -232,7 +278,7 @@ class FolderResourceSyncCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
                         _convertHint!,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ),
                   ),
@@ -241,11 +287,11 @@ class FolderResourceSyncCard extends StatelessWidget {
                     label: target == SkillTarget.cursor
                         ? tr(
                             '${target.label}（正式目录）',
-                            '${target.label} (official directory)',
+                            '${target.label} (official)',
                           )
                         : tr(
                             '${target.label}（本地转换）',
-                            '${target.label} (local conversion)',
+                            '${target.label} (converted)',
                           ),
                     displayPath: _pathLabelFor(hub, target),
                     directoryPath: _directoryFor(hub, target),
@@ -271,38 +317,36 @@ class FolderResourceSyncCard extends StatelessWidget {
     );
   }
 
+  String? get _targetSummary => switch (resource) {
+    AgentResourceKind.skill => tr('7 目标', '7 targets'),
+    AgentResourceKind.rule => tr('6 目标', '6 targets'),
+    AgentResourceKind.command => 'OpenCode',
+    AgentResourceKind.hook => 'Codex',
+  };
+
   String? get _convertHint => switch (resource) {
     AgentResourceKind.skill => tr(
       '一键转换：以本机 Cursor 为源镜像并转换为目标格式'
           '（Codex：生成 openai.yaml；OpenCode：改写 SKILL.md frontmatter；'
           'WorkBuddy / WorkBuddy AI：直接复制并保留目标端已有 Skill；'
-          'DeepSeek Harness：复制到 ~/.dsh/skills 并按需补全 kebab-case name 与 description；'
-          '豆包：复制到工作区 .user_skills 并补齐 name / description；'
-          'Antigravity：复制到 ~/.gemini/config/skills 并规范化 name 与 description）',
-      'One-click conversion: mirror the package, then convert it to the target format '
-          '(Codex: openai.yaml; OpenCode: SKILL.md frontmatter; '
-          'WorkBuddy / WorkBuddy AI: plain copy, existing Skills are kept; '
-          'DeepSeek Harness: copy into ~/.dsh/skills and fill kebab-case name plus description when missing; '
-          'Doubao: copy into the workspace .user_skills and add name / description; '
-          'Antigravity: copy into ~/.gemini/config/skills and normalize the kebab-case name plus description)',
+          'DeepSeek Harness：复制到 ~/.dsh/skills；豆包：复制到工作区 .user_skills；'
+          'Antigravity：复制到 ~/.gemini/config/skills）',
+      'One-click conversion: mirror the package, then convert it for Codex, OpenCode, '
+          'WorkBuddy / WorkBuddy AI, DeepSeek Harness, Doubao, and Antigravity.',
     ),
     AgentResourceKind.rule => tr(
-      '一键转换：从 Cursor 规则生成 Codex / OpenCode 的 AGENTS.md；'
-          'WorkBuddy / WorkBuddy AI 复制到 rules/cursor-sync/；'
-          'DeepSeek Harness 更新 ~/.dsh/AGENTS.md 托管段；'
-          'Antigravity 更新 ~/.gemini/GEMINI.md 托管段',
-      'One-click conversion: generate AGENTS.md for Codex / OpenCode from Cursor rules; '
-          'WorkBuddy / WorkBuddy AI get a copy under rules/cursor-sync/; '
-          'DeepSeek Harness updates the managed section of ~/.dsh/AGENTS.md; '
-          'Antigravity updates the managed section of ~/.gemini/GEMINI.md',
+      '一键转换：按规则作用域过滤 alwaysApply: false 后生成各端全局规则'
+          '（Codex / OpenCode AGENTS.md、WorkBuddy cursor-sync/、DeepSeek ~/.dsh/AGENTS.md、Antigravity ~/.gemini/GEMINI.md）',
+      'One-click conversion: skip alwaysApply: false rules and update Codex / OpenCode / '
+          'WorkBuddy / DeepSeek Harness / Antigravity.',
     ),
     AgentResourceKind.command => tr(
-      '一键转换：将 Cursor Command 镜像到 OpenCode commands/<name>.md（多余项会清理；Codex 暂无对等目录）',
-      'One-click conversion: mirror Cursor commands into OpenCode commands/<name>.md (extra commands are removed; Codex has no equivalent directory)',
+      '一键转换：将 Cursor Command 保留子目录镜像到 OpenCode commands/ 并补齐 frontmatter（多余项会清理）',
+      'One-click conversion: mirror Cursor commands into OpenCode commands/ with frontmatter.',
     ),
     AgentResourceKind.hook => tr(
-      '一键转换：从 Cursor hooks.json 与 hooks/ 生成 Codex hooks.json 与 hooks/（自动适配事件名与 matcher；OpenCode 暂无对等 hooks.json）',
-      'One-click conversion: generate Codex hooks.json and hooks/ from Cursor hooks.json and hooks/ (event names and matchers are adapted to Codex; OpenCode has no equivalent hooks.json)',
+      '一键转换：从 Cursor hooks.json 与 hooks/ 生成 Codex hooks.json 与 hooks/（自动跳过 Codex 不支持的 Glob Hook）',
+      'One-click conversion: generate Codex hooks.json and hooks/ from Cursor (skips Cursor-only Glob hooks).',
     ),
   };
 

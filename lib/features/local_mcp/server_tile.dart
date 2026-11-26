@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../common/app_locale.dart';
+import '../../common/app_theme.dart';
 import '../../controllers/hub_controller.dart';
 import '../../models/mcp_runtime_phase.dart';
 import '../../models/mcp_server_entry.dart';
@@ -51,129 +52,206 @@ class _ServerTileContent extends StatelessWidget {
     final transportLabel = server.transport == McpTransport.http
         ? 'HTTP'
         : 'stdio';
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dotColor = runtime.phase == McpRuntimePhase.error
+        ? scheme.error
+        : runtime.phase.isActive
+        ? AppTheme.success(context)
+        : scheme.onSurfaceVariant.withValues(alpha: 0.45);
+
+    final endpointOrCmd = server.transport == McpTransport.http
+        ? (server.url ?? tr('(未设置 URL)', '(URL not set)'))
+        : [
+            server.command ?? tr('(未设置命令)', '(command not set)'),
+            ...server.args,
+          ].join(' ');
 
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SwitchListTile(
-              title: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: dotColor,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              server.name,
+                              style: theme.textTheme.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          StatusBadge(label: runtime.kindLabel, tonal: true),
+                          const SizedBox(width: 6),
+                          StatusBadge(
+                            label: runtime.phaseBadgeLabel,
+                            active: runtime.phase.isActive,
+                            error: runtime.phase == McpRuntimePhase.error,
+                          ),
+                          if (server.shouldAutoStartByHub) ...[
+                            const SizedBox(width: 6),
+                            StatusBadge(label: tr('自动', 'Auto')),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isHub
+                            ? '$transportLabel · ${server.id} · ${snapshot.hubEndpointUrl}'
+                            : '$transportLabel · ${server.id}',
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: server.enabled,
+                  onChanged: (value) => hub.setEnabled(server.id, value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.subtleBg(context),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.hairline(context)),
+              ),
+              child: Row(
                 children: [
-                  Flexible(
+                  Icon(
+                    server.transport == McpTransport.http
+                        ? Icons.link
+                        : Icons.terminal,
+                    size: 15,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SelectableText(
+                      endpointOrCmd,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontFamily: 'Consolas',
+                        color: scheme.onSurface,
+                      ),
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (runtime.lastError != null &&
+                runtime.phase == McpRuntimePhase.error) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.error_outline, size: 15, color: scheme.error),
+                  const SizedBox(width: 6),
+                  Expanded(
                     child: Text(
-                      server.name,
+                      runtime.lastError!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (isHub && snapshot.hubHostError != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                snapshot.hubHostError!,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              ),
+            ],
+            if (server.notes != null) ...[
+              const SizedBox(height: 6),
+              Text(server.notes!, style: theme.textTheme.bodySmall),
+            ],
+            if (server.repoUrl != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    Icons.cloud_outlined,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      server.localPath == null
+                          ? server.repoUrl!
+                          : '${server.repoUrl!}  ·  ${server.localPath!}',
+                      style: theme.textTheme.labelSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  StatusBadge(label: runtime.kindLabel, tonal: true),
-                  const SizedBox(width: 6),
-                  StatusBadge(
-                    label: runtime.phaseBadgeLabel,
-                    active: runtime.phase.isActive,
-                  ),
-                  if (server.shouldAutoStartByHub) ...[
-                    const SizedBox(width: 6),
-                    StatusBadge(label: tr('自动', 'Auto')),
-                  ],
                 ],
               ),
-              subtitle: Text(
-                isHub
-                    ? '$transportLabel · ${server.id} · ${snapshot.hubEndpointUrl}'
-                    : '$transportLabel · ${server.id}',
-              ),
-              value: server.enabled,
-              onChanged: (value) => hub.setEnabled(server.id, value),
-            ),
-            if (runtime.lastError != null &&
-                runtime.phase == McpRuntimePhase.error)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.error_outline, size: 20),
-                title: Text(runtime.lastError!),
-              ),
-            if (server.notes != null)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.info_outline, size: 20),
-                title: Text(server.notes!),
-              ),
-            if (server.repoUrl != null)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.cloud_outlined, size: 20),
-                title: Text(
-                  server.repoUrl!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: server.localPath == null
-                    ? null
-                    : Text(
-                        server.localPath!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            ],
+            if (runtime.canStart ||
+                runtime.canStop ||
+                runtime.canUpdate ||
+                !isHub) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 4,
+                  children: [
+                    if (runtime.canStart)
+                      TextButton.icon(
+                        onPressed: () => hub.startServer(server.id),
+                        icon: const Icon(Icons.play_arrow, size: 16),
+                        label: Text(tr('启动', 'Start')),
                       ),
-              ),
-            if (server.transport == McpTransport.http)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.link, size: 20),
-                title: Text(server.url ?? tr('(未设置 URL)', '(URL not set)')),
-                subtitle: isHub && snapshot.hubHostError != null
-                    ? Text(snapshot.hubHostError!)
-                    : null,
-              )
-            else
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.terminal, size: 20),
-                title: Text(
-                  [
-                    server.command ?? tr('(未设置命令)', '(command not set)'),
-                    ...server.args,
-                  ].join(' '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                    if (runtime.canStop)
+                      TextButton.icon(
+                        onPressed: () => hub.stopServer(server.id),
+                        icon: const Icon(Icons.stop, size: 16),
+                        label: Text(tr('停止', 'Stop')),
+                      ),
+                    if (runtime.canUpdate)
+                      TextButton.icon(
+                        onPressed: () => _update(context, hub, server),
+                        icon: const Icon(Icons.cloud_download_outlined, size: 16),
+                        label: Text(tr('更新', 'Update')),
+                      ),
+                    if (!isHub)
+                      TextButton.icon(
+                        onPressed: () => _remove(context, hub, server),
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        label: Text(tr('移除', 'Remove')),
+                      ),
+                  ],
                 ),
               ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                spacing: 4,
-                children: [
-                  if (runtime.canStart)
-                    TextButton.icon(
-                      onPressed: () => hub.startServer(server.id),
-                      icon: const Icon(Icons.play_arrow),
-                      label: Text(tr('启动', 'Start')),
-                    ),
-                  if (runtime.canStop)
-                    TextButton.icon(
-                      onPressed: () => hub.stopServer(server.id),
-                      icon: const Icon(Icons.stop),
-                      label: Text(tr('停止', 'Stop')),
-                    ),
-                  if (runtime.canUpdate)
-                    TextButton.icon(
-                      onPressed: () => _update(context, hub, server),
-                      icon: const Icon(Icons.cloud_download_outlined),
-                      label: Text(tr('更新', 'Update')),
-                    ),
-                  if (!isHub)
-                    TextButton.icon(
-                      onPressed: () => _remove(context, hub, server),
-                      icon: const Icon(Icons.delete_outline),
-                      label: Text(tr('移除', 'Remove')),
-                    ),
-                ],
-              ),
-            ),
+            ],
           ],
         ),
       ),

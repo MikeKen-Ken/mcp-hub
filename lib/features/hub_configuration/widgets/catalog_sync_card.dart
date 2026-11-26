@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../common/agent_platforms.dart';
 import '../../../common/app_locale.dart';
+import '../../../common/app_theme.dart';
 import '../../../common/package_time.dart';
 import '../../../controllers/hub_controller.dart';
 import '../../../features/sync_status/sync_status.dart';
@@ -35,6 +36,12 @@ class CatalogSyncCard extends StatelessWidget {
     final supported = hub.isDesktopSupported;
     final webDavReady = hub.isWebDavReady;
     final busy = hub.isSyncBusy;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final cloudStyle = OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 30),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    );
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -46,7 +53,22 @@ class CatalogSyncCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const CircleAvatar(child: Icon(Icons.hub_outlined)),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.hub_outlined,
+                    size: 18,
+                    color: scheme.primary,
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -56,8 +78,8 @@ class CatalogSyncCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              'MCP',
-                              style: Theme.of(context).textTheme.titleMedium,
+                              tr('MCP 清单', 'MCP Catalog'),
+                              style: theme.textTheme.titleMedium,
                             ),
                           ),
                           CursorCountChip(
@@ -97,38 +119,13 @@ class CatalogSyncCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                FilledButton.tonalIcon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () async {
-                          final confirmed = await confirmCatalogReplace(
-                            context,
-                            loadRemoteUploadedAt:
-                                hub.peekRemoteCatalogUploadedAt,
-                          );
-                          if (!confirmed || !context.mounted) return;
-                          await _run(context, hub, hub.pullWebDavNow);
-                        },
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  label: Text(tr('下载', 'Download')),
-                ),
-                OutlinedButton.icon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () async {
-                          final confirmed = await confirmCatalogMerge(context);
-                          if (!confirmed || !context.mounted) return;
-                          await _run(context, hub, hub.mergeWebDavNow);
-                        },
-                  icon: const Icon(Icons.merge_outlined),
-                  label: Text(tr('合并', 'Merge')),
-                ),
-                FilledButton.tonalIcon(
+                FilledButton.icon(
                   onPressed: !supported || busy
                       ? null
                       : () async {
@@ -144,39 +141,94 @@ class CatalogSyncCard extends StatelessWidget {
                             ok: result.ok,
                           );
                         },
-                  icon: const Icon(Icons.install_desktop_outlined),
+                  icon: const Icon(Icons.install_desktop_outlined, size: 16),
                   label: Text(tr('写入客户端', 'Write to Clients')),
                 ),
                 OutlinedButton.icon(
-                  onPressed: !supported || !webDavReady || busy
-                      ? null
-                      : () async {
-                          final confirmed = await confirmRemoteOverwrite(
-                            context,
-                            scope: tr('MCP 清单', 'Catalog'),
-                          );
-                          if (!confirmed || !context.mounted) return;
-                          await _run(context, hub, hub.pushWebDavNow);
-                        },
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  label: Text(tr('上传', 'Upload')),
+                  onPressed: onOpenMcpSettings,
+                  icon: const Icon(Icons.tune_outlined, size: 16),
+                  label: Text(tr('管理 MCP 服务', 'Manage MCP Servers')),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.subtleBg(context),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.hairline(context)),
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    tr('云端：', 'Cloud:'),
+                    style: theme.textTheme.labelSmall,
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () async {
+                            final confirmed = await confirmCatalogReplace(
+                              context,
+                              loadRemoteUploadedAt:
+                                  hub.peekRemoteCatalogUploadedAt,
+                            );
+                            if (!confirmed || !context.mounted) return;
+                            await _run(context, hub, hub.pullWebDavNow);
+                          },
+                    icon: const Icon(Icons.cloud_download_outlined, size: 15),
+                    label: Text(tr('下载', 'Download')),
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () async {
+                            final confirmed = await confirmCatalogMerge(
+                              context,
+                            );
+                            if (!confirmed || !context.mounted) return;
+                            await _run(context, hub, hub.mergeWebDavNow);
+                          },
+                    icon: const Icon(Icons.merge_outlined, size: 15),
+                    label: Text(tr('合并', 'Merge')),
+                  ),
+                  OutlinedButton.icon(
+                    style: cloudStyle,
+                    onPressed: !supported || !webDavReady || busy
+                        ? null
+                        : () async {
+                            final confirmed = await confirmRemoteOverwrite(
+                              context,
+                              scope: tr('MCP 清单', 'Catalog'),
+                            );
+                            if (!confirmed || !context.mounted) return;
+                            await _run(context, hub, hub.pushWebDavNow);
+                          },
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 15),
+                    label: Text(tr('上传', 'Upload')),
+                  ),
+                ],
+              ),
             ),
             OpStatusBar(
               progress: hub.isWebDavSyncing ? hub.webDavSync.progress : null,
               errorMessage: busy ? null : hub.webDavSync.lastError,
             ),
-            const Divider(height: 24),
-            FilledButton.tonalIcon(
-              onPressed: onOpenMcpSettings,
-              icon: const Icon(Icons.tune_outlined),
-              label: Text(tr('打开 MCP 设置', 'Open MCP Settings')),
-            ),
+            const SizedBox(height: 8),
+            const Divider(),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: Text(tr('查看配置目录', 'View Configuration Directories')),
+              childrenPadding: const EdgeInsets.only(bottom: 6),
+              title: Text(
+                tr('查看配置目录', 'View Configuration Directories'),
+                style: theme.textTheme.labelLarge,
+              ),
               children: [
                 for (final platform in AgentPlatforms.mcpConfigurable)
                   DirectoryPathRow(

@@ -33,22 +33,38 @@ class DirectoryPathRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: SelectableText(
-            '$label: ${displayPath ?? tr('(不可用)', '(unavailable)')}',
-            style: Theme.of(context).textTheme.labelSmall,
+    final scheme = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 34),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 152,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurface,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-        IconButton(
-          tooltip: tr('打开 $label 目录', 'Open $label directory'),
-          onPressed: enabled && directoryPath != null
-              ? () => _open(context)
-              : null,
-          icon: const Icon(Icons.folder_open_outlined),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              displayPath ?? tr('(不可用)', '(unavailable)'),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+          IconButton(
+            tooltip: tr('打开 $label 目录', 'Open $label directory'),
+            visualDensity: VisualDensity.compact,
+            onPressed: enabled && directoryPath != null
+                ? () => _open(context)
+                : null,
+            icon: const Icon(Icons.folder_open_outlined, size: 17),
+          ),
+        ],
+      ),
     );
   }
 }

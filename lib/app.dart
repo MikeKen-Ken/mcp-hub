@@ -4,87 +4,10 @@ import 'package:provider/provider.dart';
 
 import 'app_brand.dart';
 import 'common/app_locale.dart';
+import 'common/app_theme.dart';
+import 'common/app_theme_mode.dart';
 import 'controllers/hub_controller.dart';
 import 'screens/home_screen.dart';
-
-ThemeData _buildTheme(Brightness brightness, Color seed) {
-  final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-  final base = ThemeData(
-    colorScheme: scheme,
-    useMaterial3: true,
-    brightness: brightness,
-    // Noto Sans SC keeps the stroke density of small Simplified Chinese labels
-    // more even than the Windows fallback font. It also contains Latin glyphs,
-    // so mixed labels do not switch font halfway through a line.
-    fontFamily: 'Noto Sans SC',
-    fontFamilyFallback: const <String>[
-      'Microsoft YaHei UI',
-      'Microsoft YaHei',
-      'Segoe UI',
-      'sans-serif',
-    ],
-  );
-
-  // Use the real regular face throughout. Size still provides hierarchy.
-  final textTheme = base.textTheme.copyWith(
-    displayLarge: base.textTheme.displayLarge?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    displayMedium: base.textTheme.displayMedium?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    displaySmall: base.textTheme.displaySmall?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    headlineLarge: base.textTheme.headlineLarge?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    headlineMedium: base.textTheme.headlineMedium?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    headlineSmall: base.textTheme.headlineSmall?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    titleLarge: base.textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    titleMedium: base.textTheme.titleMedium?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    titleSmall: base.textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    bodyLarge: base.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w400),
-    bodyMedium: base.textTheme.bodyMedium?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    bodySmall: base.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w400),
-    labelLarge: base.textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    labelMedium: base.textTheme.labelMedium?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-    labelSmall: base.textTheme.labelSmall?.copyWith(
-      fontWeight: FontWeight.w400,
-    ),
-  );
-
-  return base.copyWith(
-    textTheme: textTheme,
-    primaryTextTheme: textTheme,
-    appBarTheme: AppBarTheme(
-      titleTextStyle: textTheme.titleLarge?.copyWith(color: scheme.onSurface),
-      toolbarTextStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
-    ),
-    listTileTheme: ListTileThemeData(
-      titleTextStyle: textTheme.titleMedium,
-      subtitleTextStyle: textTheme.bodyMedium?.copyWith(
-        color: scheme.onSurfaceVariant,
-      ),
-    ),
-  );
-}
 
 class McpHubApp extends StatefulWidget {
   const McpHubApp({super.key});
@@ -99,15 +22,16 @@ class _McpHubAppState extends State<McpHubApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<AppLanguage>(
-      valueListenable: AppLocale.notifier,
-      builder: (context, _, _) => MaterialApp(
+    return ListenableBuilder(
+      listenable: Listenable.merge([AppLocale.notifier, AppThemeMode.notifier]),
+      builder: (context, _) => MaterialApp(
         navigatorKey: _navigatorKey,
         navigatorObservers: [_routeObserver],
         title: AppBrand.displayName,
         debugShowCheckedModeBanner: false,
-        theme: _buildTheme(Brightness.light, const Color(0xFF0F766E)),
-        darkTheme: _buildTheme(Brightness.dark, const Color(0xFF2DD4BF)),
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: AppThemeMode.current.themeMode,
         shortcuts: <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.escape): _EscapeIntent(),
         },
@@ -162,6 +86,7 @@ class _HubNavigatorObserver extends NavigatorObserver {
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppLocale.load();
+  await AppThemeMode.load();
   final hub = HubController();
   runApp(ChangeNotifierProvider.value(value: hub, child: const McpHubApp()));
   await hub.load();

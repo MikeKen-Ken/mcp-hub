@@ -9,7 +9,9 @@ import '../webdav/webdav_config.dart';
 import '../widgets/hub_notice/hub_notice.dart';
 
 class WebDavSettingsScreen extends StatefulWidget {
-  const WebDavSettingsScreen({super.key});
+  const WebDavSettingsScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<WebDavSettingsScreen> createState() => _WebDavSettingsScreenState();
@@ -112,22 +114,30 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
           : tr('已保存', 'Saved'),
       ok: true,
     );
-    Navigator.pop(context);
+    if (!widget.embedded) {
+      Navigator.pop(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('WebDAV 下载/上传', 'WebDAV Download/Upload'))),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          children: [
+    final formBody = Form(
+      key: _formKey,
+      child: ListView(
+        shrinkWrap: widget.embedded,
+        physics: widget.embedded ? const NeverScrollableScrollPhysics() : null,
+        padding: widget.embedded
+            ? EdgeInsets.zero
+            : const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          if (!widget.embedded) ...[
             Card(
               clipBehavior: Clip.antiAlias,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     const Icon(Icons.translate_outlined),
@@ -186,6 +196,7 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
+          ],
             Card(
               child: SwitchListTile(
                 title: Text(tr('启用 WebDAV 下载/上传', 'Enable WebDAV Download/Upload')),
@@ -377,7 +388,12 @@ class _WebDavSettingsScreenState extends State<WebDavSettingsScreen> {
             ),
           ],
         ),
-      ),
+      );
+
+    if (widget.embedded) return formBody;
+    return Scaffold(
+      appBar: AppBar(title: Text(tr('WebDAV 下载/上传', 'WebDAV Download/Upload'))),
+      body: formBody,
     );
   }
 }

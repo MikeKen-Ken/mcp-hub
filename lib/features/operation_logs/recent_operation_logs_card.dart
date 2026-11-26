@@ -10,7 +10,17 @@ import 'operation_logs_screen.dart';
 
 /// 首页底部的「最近操作日志」概览卡片，快速查看最近同步/上传/下载/转换结果。
 class RecentOperationLogsCard extends StatelessWidget {
-  const RecentOperationLogsCard({super.key});
+  const RecentOperationLogsCard({super.key, this.onViewAll});
+
+  final VoidCallback? onViewAll;
+
+  void _openAll(BuildContext context) {
+    if (onViewAll != null) {
+      onViewAll!();
+      return;
+    }
+    pushAppPage<void>(context, const OperationLogsScreen());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,10 +51,7 @@ class RecentOperationLogsCard extends StatelessWidget {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () => pushAppPage<void>(
-                    context,
-                    const OperationLogsScreen(),
-                  ),
+                  onPressed: () => _openAll(context),
                   icon: const Icon(Icons.open_in_new, size: 16),
                   label: Text(tr('查看全部', 'View all')),
                 ),
@@ -69,10 +76,7 @@ class RecentOperationLogsCard extends StatelessWidget {
                 if (i > 0) const Divider(height: 12),
                 _RecentLogRow(
                   entry: recent[i],
-                  onTap: () => pushAppPage<void>(
-                    context,
-                    const OperationLogsScreen(),
-                  ),
+                  onTap: () => _openAll(context),
                 ),
               ],
           ],

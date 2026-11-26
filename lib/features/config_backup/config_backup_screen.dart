@@ -12,7 +12,9 @@ import 'auto_config_backup_service.dart';
 
 /// 配置备份：导出 zip / 从 zip 恢复。
 class ConfigBackupScreen extends StatefulWidget {
-  const ConfigBackupScreen({super.key});
+  const ConfigBackupScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<ConfigBackupScreen> createState() => _ConfigBackupScreenState();
@@ -258,11 +260,11 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
     final supported = hub.isDesktopSupported;
     final automatic = hub.autoConfigBackup;
 
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('配置备份', 'Configuration Backup'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    final content = ListView(
+      shrinkWrap: widget.embedded,
+      physics: widget.embedded ? const NeverScrollableScrollPhysics() : null,
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.all(16),
+      children: [
           Text(
             tr(
               '定期把本地 MCP 清单与 Agent 配置（Skill / Command / Rule / Hook）导出为 zip，'
@@ -479,7 +481,12 @@ class _ConfigBackupScreenState extends State<ConfigBackupScreen> {
             style: Theme.of(context).textTheme.labelSmall,
           ),
         ],
-      ),
+      );
+
+    if (widget.embedded) return content;
+    return Scaffold(
+      appBar: AppBar(title: Text(tr('配置备份', 'Configuration Backup'))),
+      body: content,
     );
   }
 }
