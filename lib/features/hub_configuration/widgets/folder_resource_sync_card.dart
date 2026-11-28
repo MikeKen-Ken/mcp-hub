@@ -13,6 +13,7 @@ import '../../../widgets/hub_notice/hub_notice.dart';
 import '../../../widgets/op_status/op_status.dart';
 import '../../../widgets/sync_confirm/sync_confirm.dart';
 import 'directory_path_row.dart';
+import 'orphan_skills_cleanup_dialog.dart';
 import 'sync_status_pill.dart';
 
 class FolderResourceSyncCard extends StatelessWidget {
@@ -168,6 +169,14 @@ class FolderResourceSyncCard extends StatelessWidget {
                           ),
                     icon: const Icon(Icons.transform_outlined, size: 16),
                     label: Text(tr('转换', 'Convert')),
+                  ),
+                if (resource == AgentResourceKind.skill)
+                  OutlinedButton.icon(
+                    onPressed: !supported || busy
+                        ? null
+                        : () => showOrphanSkillsCleanupDialog(context),
+                    icon: const Icon(Icons.cleaning_services_outlined, size: 16),
+                    label: Text(tr('清理多余项', 'Clean extras')),
                   ),
               ],
             ),

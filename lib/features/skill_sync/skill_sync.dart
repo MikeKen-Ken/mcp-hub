@@ -8,6 +8,7 @@ export 'convert/cursor_to_codex_hooks_converter.dart';
 export 'convert/cursor_to_codex_skill_converter.dart';
 export 'convert/skill_md_document.dart';
 export 'cursor_hooks_bundle.dart';
+export 'orphan_skills_cleaner.dart';
 export 'skill_folder_copy.dart';
 export 'skill_sync_result.dart';
 export 'skill_sync_service.dart';
