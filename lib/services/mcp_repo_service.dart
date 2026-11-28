@@ -213,7 +213,7 @@ class McpRepoService {
     }
 
     try {
-      await dir.delete(recursive: true);
+      await deleteDirectoryResilient(dir);
       return McpRepoCloneResult(
         ok: true,
         localPath: normalizedPath,
@@ -226,5 +226,37 @@ class McpRepoService {
         message: tr('删除本地目录失败：$error', 'Failed to delete local directory: $error'),
       );
     }
+  }
+
+  /// 健壮删除目录：在 Windows 上处理 Git 只读文件与进程刚退出后的短暂句柄锁。
+  static Future<void> deleteDirectoryResilient(Directory dir) async {
+    const retryDelays = [
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 400),
+      Duration(milliseconds: 800),
+    ];
+
+    for (var attempt = 0; ; attempt++) {
+      if (!await dir.exists()) return;
+      try {
+        await dir.delete(recursive: true);
+        return;
+      } on FileSystemException {
+        if (attempt >= retryDelays.length) rethrow;
+        if (Platform.isWindows) {
+          await _clearWindowsReadOnlyAttributes(dir.path);
+        }
+        await Future<void>.delayed(retryDelays[attempt]);
+      }
+    }
+  }
+
+  static Future<void> _clearWindowsReadOnlyAttributes(String dirPath) async {
+    try {
+      await Process.run('attrib', ['-R', '-S', '-H', '/S', '/D', p.join(dirPath, '*')]);
+    } catch (_) {}
+    try {
+      await Process.run('attrib', ['-R', '-S', '-H', dirPath]);
+    } catch (_) {}
   }
 }
