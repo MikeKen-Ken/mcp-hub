@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
 import 'cursor_rule_markdown.dart';
+import 'managed_skills_manifest.dart';
 import 'skill_md_document.dart';
 
 /// Skill 转换结果。
@@ -13,6 +14,7 @@ class DeepSeekSkillsConvertResult {
     required this.copiedFiles,
     required this.deletedEntries,
     required this.rewrittenSkills,
+    this.removedPackages = 0,
     this.errors = const [],
   });
 
@@ -20,6 +22,7 @@ class DeepSeekSkillsConvertResult {
   final int copiedFiles;
   final int deletedEntries;
   final int rewrittenSkills;
+  final int removedPackages;
   final List<String> errors;
 }
 
@@ -27,14 +30,19 @@ class DeepSeekSkillsConvertResult {
 ///
 /// Skill 仍是 `SKILL.md` 包。Harness 要求 frontmatter 的 `name` 为 kebab-case
 /// 且带 `description`，缺了会被忽略，所以只在不满足时改写 `SKILL.md`。
-/// 目标目录里 Cursor 没有的 Skill 会保留。
+/// 通过 `.mcp-hub-managed.json` 追踪由 Hub 写入的包：从 Cursor 删除或改名
+/// 的旧托管包会自动清理，目标目录中原先非 Hub 管理的 Skill 保持保留。
 ///
 /// Rule 写入 `AGENTS.md` 的标记段。标记以外的文字保持不动。
 class CursorToDeepSeekConverter {
-  const CursorToDeepSeekConverter({this.folderCopy = const SkillFolderCopy()});
+  const CursorToDeepSeekConverter({
+    this.folderCopy = const SkillFolderCopy(),
+    this.managedManifest = const ManagedSkillsManifest(),
+  });
 
   static const rulesBegin = '<!-- mcp-hub:cursor-rules:begin -->';
   static const rulesEnd = '<!-- mcp-hub:cursor-rules:end -->';
+  static const managedScope = 'deepseek-skills';
 
   static final _skillName = RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$');
   static const _legacyKeys = {
@@ -44,6 +52,7 @@ class CursorToDeepSeekConverter {
   };
 
   final SkillFolderCopy folderCopy;
+  final ManagedSkillsManifest managedManifest;
 
   Future<DeepSeekSkillsConvertResult> convertSkills({
     required String sourceDir,
@@ -65,6 +74,8 @@ class CursorToDeepSeekConverter {
     var deletedEntries = 0;
     var rewrittenSkills = 0;
     final errors = <String>[];
+    final writtenNames = <String>{};
+    final failedNames = <String>{};
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
@@ -79,18 +90,27 @@ class CursorToDeepSeekConverter {
         if (await _ensureSkillFrontmatter(p.join(targetDir, name))) {
           rewrittenSkills += 1;
         }
+        writtenNames.add(name);
         packages += 1;
         copiedFiles += mirrored.copiedFiles;
         deletedEntries += mirrored.deletedEntries;
       } catch (error) {
+        failedNames.add(name);
         errors.add('$name: $error');
       }
     }
+    final removedPackages = await managedManifest.syncAndPrune(
+      targetDir: targetDir,
+      scope: managedScope,
+      currentManagedNames: writtenNames,
+      failedNames: failedNames,
+    );
     return DeepSeekSkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
       rewrittenSkills: rewrittenSkills,
+      removedPackages: removedPackages,
       errors: errors,
     );
   }

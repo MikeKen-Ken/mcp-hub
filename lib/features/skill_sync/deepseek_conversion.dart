@@ -80,6 +80,12 @@ class DeepSeekConversion {
             '；已补全 ${result.rewrittenSkills} 个 Skill 的 frontmatter',
             '; rewrote frontmatter on ${result.rewrittenSkills} Skills so DeepSeek Harness will load them',
           );
+    final removedHint = result.removedPackages == 0
+        ? ''
+        : tr(
+            '；已清理 ${result.removedPackages} 个已移除的旧 Skill',
+            '; removed ${result.removedPackages} stale managed Skills',
+          );
     final errorHint = result.errors.isEmpty
         ? ''
         : tr(
@@ -91,16 +97,18 @@ class DeepSeekConversion {
       target: SkillTarget.deepSeekHarness,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
-      message: result.packages == 0 && result.errors.isEmpty
+      message: result.packages == 0 &&
+              result.removedPackages == 0 &&
+              result.errors.isEmpty
           ? tr(
               'Cursor Skill 目录为空，未转换任何包 → $destination',
               'Cursor Skill directory is empty, nothing converted → $destination',
             )
           : tr(
               '已从 Cursor 复制 ${result.packages} 个 Skill 到 DeepSeek Harness'
-                  '（${result.copiedFiles} 个文件；保留目标端原有 Skill$rewriteHint$errorHint）→ $destination',
+                  '（${result.copiedFiles} 个文件；保留目标端非托管 Skill$rewriteHint$removedHint$errorHint）→ $destination',
               'Copied ${result.packages} Skills from Cursor to DeepSeek Harness '
-                  '(${result.copiedFiles} files; existing DeepSeek Harness Skills not in Cursor are kept$rewriteHint$errorHint) → $destination',
+                  '(${result.copiedFiles} files; unmanaged DeepSeek Harness Skills are kept$rewriteHint$removedHint$errorHint) → $destination',
             ),
     );
   }

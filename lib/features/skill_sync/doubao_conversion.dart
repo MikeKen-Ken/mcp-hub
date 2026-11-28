@@ -76,6 +76,12 @@ class DoubaoConversion {
             '，已规范化 ${result.rewrittenSkills} 个 SKILL.md frontmatter',
             ', normalized ${result.rewrittenSkills} SKILL.md frontmatter',
           );
+    final removedHint = result.removedPackages == 0
+        ? ''
+        : tr(
+            '，已清理 ${result.removedPackages} 个已移除的旧 Skill',
+            ', removed ${result.removedPackages} stale managed Skills',
+          );
     final errorHint = result.errors.isEmpty
         ? ''
         : tr(
@@ -87,16 +93,18 @@ class DoubaoConversion {
       target: target,
       deployedFiles: result.copiedFiles,
       packageCount: result.packages,
-      message: result.packages == 0 && result.errors.isEmpty
+      message: result.packages == 0 &&
+              result.removedPackages == 0 &&
+              result.errors.isEmpty
           ? tr(
               'Cursor Skill 目录为空，未转换任何包 → $destination',
               'Cursor Skill directory is empty, nothing converted → $destination',
             )
           : tr(
               '已从 Cursor 转换 ${result.packages} 个 Skill 到豆包'
-                  '（${result.copiedFiles} 个文件$rewriteHint；保留目标端原有 Skill$errorHint）→ $destination',
+                  '（${result.copiedFiles} 个文件$rewriteHint$removedHint；保留目标端非托管 Skill$errorHint）→ $destination',
               'Converted ${result.packages} Skills from Cursor to Doubao '
-                  '(${result.copiedFiles} files$rewriteHint; existing Doubao Skills not in Cursor are kept$errorHint) → $destination',
+                  '(${result.copiedFiles} files$rewriteHint$removedHint; unmanaged Doubao Skills are kept$errorHint) → $destination',
             ),
     );
   }

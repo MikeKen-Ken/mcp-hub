@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
+import 'managed_skills_manifest.dart';
 
 /// Skill 转换结果。
 class WorkBuddySkillsConvertResult {
@@ -10,30 +11,36 @@ class WorkBuddySkillsConvertResult {
     required this.packages,
     required this.copiedFiles,
     required this.deletedEntries,
+    this.removedPackages = 0,
     this.errors = const [],
   });
 
   final int packages;
   final int copiedFiles;
   final int deletedEntries;
+  final int removedPackages;
   final List<String> errors;
 }
 
 /// 将 Cursor 的 Skill、Rule 写入 WorkBuddy / WorkBuddy AI 的用户级目录。
 ///
 /// WorkBuddy 沿用标准 `SKILL.md` 包布局，因此 Skill 只做整包复制。
-/// WorkBuddy 的 Skill 目录还存放内置与市场安装的 Skill，所以**不会**删除
-/// Cursor 中不存在的包。Rule 写入专属子目录 [managedRulesFolder]，
-/// 只在该子目录内做镜像，不触碰用户自己写在 `rules/` 下的文件。
+/// 通过 `.mcp-hub-managed.json` 追踪由 Hub 写入的 Skill：从 Cursor 删除或
+/// 改名的旧托管包会自动清理，同时保留 WorkBuddy 内置与市场安装的 Skill。
+/// Rule 写入专属子目录 [managedRulesFolder]，只在该子目录内做镜像，不触碰
+/// 用户自己写在 `rules/` 下的文件。
 class CursorToWorkBuddyConverter {
   const CursorToWorkBuddyConverter({
     this.folderCopy = const SkillFolderCopy(),
+    this.managedManifest = const ManagedSkillsManifest(),
   });
 
   /// `rules/` 下由 Hub 独占管理的子目录名。
   static const managedRulesFolder = 'cursor-sync';
+  static const managedScope = 'workbuddy-skills';
 
   final SkillFolderCopy folderCopy;
+  final ManagedSkillsManifest managedManifest;
 
   Future<WorkBuddySkillsConvertResult> convertSkills({
     required String sourceDir,
@@ -53,6 +60,8 @@ class CursorToWorkBuddyConverter {
     var copiedFiles = 0;
     var deletedEntries = 0;
     final errors = <String>[];
+    final writtenNames = <String>{};
+    final failedNames = <String>{};
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
@@ -64,17 +73,26 @@ class CursorToWorkBuddyConverter {
           sourceDir: entity.path,
           targetDir: p.join(targetDir, name),
         );
+        writtenNames.add(name);
         packages += 1;
         copiedFiles += mirrored.copiedFiles;
         deletedEntries += mirrored.deletedEntries;
       } catch (error) {
+        failedNames.add(name);
         errors.add('$name: $error');
       }
     }
+    final removedPackages = await managedManifest.syncAndPrune(
+      targetDir: targetDir,
+      scope: managedScope,
+      currentManagedNames: writtenNames,
+      failedNames: failedNames,
+    );
     return WorkBuddySkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
+      removedPackages: removedPackages,
       errors: errors,
     );
   }

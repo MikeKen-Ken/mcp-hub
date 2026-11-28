@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../skill_folder_copy.dart';
+import 'managed_skills_manifest.dart';
 import 'skill_md_document.dart';
 import 'standard_skill_frontmatter.dart';
 
@@ -13,6 +14,7 @@ class DoubaoSkillsConvertResult {
     required this.copiedFiles,
     required this.deletedEntries,
     required this.rewrittenSkills,
+    this.removedPackages = 0,
     this.errors = const [],
   });
 
@@ -20,6 +22,7 @@ class DoubaoSkillsConvertResult {
   final int copiedFiles;
   final int deletedEntries;
   final int rewrittenSkills;
+  final int removedPackages;
   final List<String> errors;
 }
 
@@ -29,16 +32,21 @@ class DoubaoSkillsConvertResult {
 /// 配置），因此只转换 Skill。豆包要求 `SKILL.md` 开头带 YAML 的
 /// `name` 与 `description`；缺失或不合规范时只改写 frontmatter。
 ///
-/// 该目录也可能存放用户从技能中心安装的 Skill，因此不删除 Cursor 中不存在
-/// 的包；包内仍按 Cursor 全量镜像。
+/// 通过 `.mcp-hub-managed.json` 追踪由 Hub 写入的包：从 Cursor 删除或改名
+/// 的旧托管包会自动清理，目标端从技能中心安装的 Skill 保持不动；包内按
+/// Cursor 全量镜像。
 class CursorToDoubaoConverter {
   const CursorToDoubaoConverter({
     this.folderCopy = const SkillFolderCopy(),
     this.frontmatter = const StandardSkillFrontmatter(),
+    this.managedManifest = const ManagedSkillsManifest(),
   });
+
+  static const managedScope = 'doubao-skills';
 
   final SkillFolderCopy folderCopy;
   final StandardSkillFrontmatter frontmatter;
+  final ManagedSkillsManifest managedManifest;
 
   Future<DoubaoSkillsConvertResult> convertSkills({
     required String sourceDir,
@@ -60,12 +68,15 @@ class CursorToDoubaoConverter {
     var deletedEntries = 0;
     var rewrittenSkills = 0;
     final errors = <String>[];
+    final writtenNames = <String>{};
+    final failedNames = <String>{};
     await for (final entity in source.list(followLinks: false)) {
       if (entity is! Directory || p.basename(entity.path).startsWith('.')) {
         continue;
       }
       if (!await File(p.join(entity.path, 'SKILL.md')).exists()) continue;
       final sourceName = p.basename(entity.path);
+      String? resolvedName;
       try {
         final doc = await SkillMdDocument.parseFile(
           p.join(entity.path, 'SKILL.md'),
@@ -74,6 +85,7 @@ class CursorToDoubaoConverter {
           sourceName,
           doc.name,
         );
+        resolvedName = name;
         final packageDir = p.join(targetDir, name);
         final mirrored = await folderCopy.mirrorContents(
           sourceDir: entity.path,
@@ -82,18 +94,28 @@ class CursorToDoubaoConverter {
         if (await frontmatter.ensure(packageDir: packageDir, name: name)) {
           rewrittenSkills += 1;
         }
+        writtenNames.add(name);
         packages += 1;
         copiedFiles += mirrored.copiedFiles;
         deletedEntries += mirrored.deletedEntries;
       } catch (error) {
+        failedNames.add(sourceName);
+        if (resolvedName != null) failedNames.add(resolvedName);
         errors.add('$sourceName: $error');
       }
     }
+    final removedPackages = await managedManifest.syncAndPrune(
+      targetDir: targetDir,
+      scope: managedScope,
+      currentManagedNames: writtenNames,
+      failedNames: failedNames,
+    );
     return DoubaoSkillsConvertResult(
       packages: packages,
       copiedFiles: copiedFiles,
       deletedEntries: deletedEntries,
       rewrittenSkills: rewrittenSkills,
+      removedPackages: removedPackages,
       errors: errors,
     );
   }
